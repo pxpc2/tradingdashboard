@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createChart, LineSeries, UTCTimestamp } from "lightweight-charts";
+import {
+  createChart,
+  LineSeries,
+  UTCTimestamp,
+  ISeriesApi,
+  SeriesType,
+} from "lightweight-charts";
 
 type StraddleSnapshot = {
   id: string;
@@ -21,6 +27,7 @@ type Props = {
 
 export default function StraddleChart({ data }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -57,6 +64,8 @@ export default function StraddleChart({ data }: Props) {
       lastValueVisible: true,
     });
 
+    seriesRef.current = series;
+
     const points = data
       .map((snapshot) => ({
         time: Math.floor(
@@ -83,6 +92,19 @@ export default function StraddleChart({ data }: Props) {
       chart.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (!seriesRef.current || data.length === 0) return;
+
+    const lastPoint = {
+      time: Math.floor(
+        new Date(data[data.length - 1].created_at).getTime() / 1000
+      ) as UTCTimestamp,
+      value: data[data.length - 1].straddle_mid,
+    };
+
+    seriesRef.current.update(lastPoint);
+  }, [data]);
 
   return (
     <div ref={containerRef} className="w-full rounded-sm overflow-hidden" />

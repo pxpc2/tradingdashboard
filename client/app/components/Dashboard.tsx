@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabase";
 import StraddleChart from "./StraddleChart";
 
 type StraddleSnapshot = {
@@ -24,6 +25,29 @@ type Tab = (typeof TABS)[number];
 
 export default function Dashboard({ initialStraddleData }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("Straddle");
+  const [straddleData, setStraddleData] =
+    useState<StraddleSnapshot[]>(initialStraddleData);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("straddle_snapshots")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "straddle_snapshots",
+        },
+        (payload) => {
+          setStraddleData((prev) => [...prev, payload.new as StraddleSnapshot]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-6">
@@ -57,9 +81,7 @@ export default function Dashboard({ initialStraddleData }: Props) {
 
       {/* Tab content */}
       <div>
-        {activeTab === "Straddle" && (
-          <StraddleView data={initialStraddleData} />
-        )}
+        {activeTab === "Straddle" && <StraddleView data={straddleData} />}
         {activeTab === "SML Fly" && <FlyView type="SML" />}
         {activeTab === "SAL Fly" && <FlyView type="SAL" />}
       </div>
