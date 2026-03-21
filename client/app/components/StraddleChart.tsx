@@ -85,6 +85,6 @@ export default function StraddleChart({ data }: Props) {
   }, []);
 
   return (
-    <div ref={containerRef} className="w-full rounded-xl overflow-hidden" />
+    <div ref={containerRef} className="w-full rounded-sm overflow-hidden" />
   );
 }

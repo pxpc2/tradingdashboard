@@ -29,12 +29,12 @@ export default function Dashboard({ initialStraddleData }: Props) {
     <div className="max-w-7xl mx-auto px-6 py-6">
       {/* Top bar */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex gap-1 bg-[#111111] rounded-lg p-1">
+        <div className="flex gap-1 rounded-sm bg-[#111111]  p-1">
           {TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2 rounded-md text-sm font-medium transition-colors ${
+              className={`px-5 py-2 rounded-sm text-sm font-medium transition-colors ${
                 activeTab === tab
                   ? "bg-[#1f1f1f] text-white"
                   : "text-[#444444] hover:text-[#888888]"
@@ -100,7 +100,7 @@ function StraddleView({ data }: { data: StraddleSnapshot[] }) {
 
 function FlyView({ type }: { type: "SML" | "SAL" }) {
   return (
-    <div className="bg-[#1A1A1A] rounded-xl p-4 h-96 flex items-center justify-center text-gray-500">
+    <div className="bg-[#1A1A1A] rounded-sm p-4 h-96 flex items-center justify-center text-gray-500">
       {type} P&L Chart
     </div>
   );
