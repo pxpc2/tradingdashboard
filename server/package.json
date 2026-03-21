@@ -1,0 +1,18 @@
+{
+  "name": "ttapitest",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.99.3",
+    "@tastytrade/api": "^7.0.1",
+    "dotenv": "^17.3.1",
+    "node-fetch": "^3.3.2"
+  }
+}
