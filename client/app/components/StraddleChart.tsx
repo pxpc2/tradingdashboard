@@ -51,7 +51,7 @@ export default function StraddleChart({ data }: Props) {
     });
 
     const series = chart.addSeries(LineSeries, {
-      color: "#3b82f6",
+      color: "#A8A8A8",
       lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: true,

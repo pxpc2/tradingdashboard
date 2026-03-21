@@ -34,10 +34,10 @@ export default function Dashboard({ initialStraddleData }: Props) {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2 rounded-sm text-sm font-medium transition-colors ${
+              className={`px-5 py-2 rounded-sm  text-sm font-medium transition-colors ${
                 activeTab === tab
                   ? "bg-[#1f1f1f] text-white"
-                  : "text-[#444444] hover:text-[#888888]"
+                  : "text-[#444444] hover:cursor-pointer hover:text-[#888888]"
               }`}
             >
               {tab}
