@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import StraddleChart from "./StraddleChart";
 
 type StraddleSnapshot = {
   id: string;
@@ -92,9 +93,7 @@ function StraddleView({ data }: { data: StraddleSnapshot[] }) {
       </div>
 
       {/* Chart placeholder */}
-      <div className="bg-[#1A1A1A] rounded-xl p-4 h-96 flex items-center justify-center text-gray-500">
-        {data.length} snapshots
-      </div>
+      <StraddleChart data={data} />
     </div>
   );
 }
