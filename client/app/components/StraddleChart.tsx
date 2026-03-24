@@ -48,10 +48,28 @@ export default function StraddleChart({ data }: Props) {
       rightPriceScale: {
         borderColor: "#1f1f1f",
       },
+      localization: {
+        timeFormatter: (time: number) => {
+          return new Date(time * 1000).toLocaleTimeString("en-US", {
+            timeZone: "America/Chicago",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+        },
+      },
       timeScale: {
         borderColor: "#1f1f1f",
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: (time: number) => {
+          return new Date(time * 1000).toLocaleTimeString("en-US", {
+            timeZone: "America/Chicago",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+          });
+        },
       },
       width: containerRef.current.clientWidth,
       height: 400,
@@ -69,12 +87,12 @@ export default function StraddleChart({ data }: Props) {
     const points = data
       .map((snapshot) => ({
         time: Math.floor(
-          new Date(snapshot.created_at).getTime() / 1000
+          new Date(snapshot.created_at).getTime() / 1000,
         ) as UTCTimestamp,
         value: snapshot.straddle_mid,
       }))
       .filter(
-        (point, index, arr) => index === 0 || point.time > arr[index - 1].time
+        (point, index, arr) => index === 0 || point.time > arr[index - 1].time,
       );
 
     series.setData(points);
@@ -98,7 +116,7 @@ export default function StraddleChart({ data }: Props) {
 
     const lastPoint = {
       time: Math.floor(
-        new Date(data[data.length - 1].created_at).getTime() / 1000
+        new Date(data[data.length - 1].created_at).getTime() / 1000,
       ) as UTCTimestamp,
       value: data[data.length - 1].straddle_mid,
     };
