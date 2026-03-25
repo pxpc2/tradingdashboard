@@ -84,20 +84,6 @@ export default function StraddleChart({ data }: Props) {
 
     seriesRef.current = series;
 
-    const points = data
-      .map((snapshot) => ({
-        time: Math.floor(
-          new Date(snapshot.created_at).getTime() / 1000,
-        ) as UTCTimestamp,
-        value: snapshot.straddle_mid,
-      }))
-      .filter(
-        (point, index, arr) => index === 0 || point.time > arr[index - 1].time,
-      );
-
-    series.setData(points);
-    chart.timeScale().fitContent();
-
     const handleResize = () => {
       if (containerRef.current) {
         chart.applyOptions({ width: containerRef.current.clientWidth });
@@ -111,17 +97,22 @@ export default function StraddleChart({ data }: Props) {
     };
   }, []);
 
+  // Runs whenever data changes — handles both date switches and realtime appends
   useEffect(() => {
-    if (!seriesRef.current || data.length === 0) return;
+    if (!seriesRef.current) return;
 
-    const lastPoint = {
-      time: Math.floor(
-        new Date(data[data.length - 1].created_at).getTime() / 1000,
-      ) as UTCTimestamp,
-      value: data[data.length - 1].straddle_mid,
-    };
+    const points = data
+      .map((snapshot) => ({
+        time: Math.floor(
+          new Date(snapshot.created_at).getTime() / 1000,
+        ) as UTCTimestamp,
+        value: snapshot.straddle_mid,
+      }))
+      .filter(
+        (point, index, arr) => index === 0 || point.time > arr[index - 1].time,
+      );
 
-    seriesRef.current.update(lastPoint);
+    seriesRef.current.setData(points);
   }, [data]);
 
   return (

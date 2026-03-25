@@ -27,8 +27,38 @@ export default function Dashboard({ initialStraddleData }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("Straddle");
   const [straddleData, setStraddleData] =
     useState<StraddleSnapshot[]>(initialStraddleData);
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
+  );
 
+  // Refetch when date changes
   useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      const { data } = await supabase
+        .from("straddle_snapshots")
+        .select("*")
+        .gte("created_at", `${selectedDate}T00:00:00`)
+        .lt("created_at", `${selectedDate}T23:59:59`)
+        .order("created_at", { ascending: true });
+
+      if (!cancelled && data) setStraddleData(data);
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate]);
+
+  // Realtime subscription — only append if viewing today
+  useEffect(() => {
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/New_York",
+    });
+
     const channel = supabase
       .channel("straddle_snapshots")
       .on(
@@ -39,26 +69,31 @@ export default function Dashboard({ initialStraddleData }: Props) {
           table: "straddle_snapshots",
         },
         (payload) => {
-          setStraddleData((prev) => [...prev, payload.new as StraddleSnapshot]);
-        }
+          if (selectedDate === today) {
+            setStraddleData((prev) => [
+              ...prev,
+              payload.new as StraddleSnapshot,
+            ]);
+          }
+        },
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [selectedDate]);
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-6">
       {/* Top bar */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex gap-1 rounded-sm bg-[#111111]  p-1">
+        <div className="flex gap-1 rounded-sm bg-[#111111] p-1">
           {TABS.map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2 rounded-sm  text-sm font-medium transition-colors ${
+              className={`px-5 py-2 rounded-sm text-sm font-medium transition-colors ${
                 activeTab === tab
                   ? "bg-[#1f1f1f] text-white"
                   : "text-[#444444] hover:cursor-pointer hover:text-[#888888]"
@@ -68,6 +103,12 @@ export default function Dashboard({ initialStraddleData }: Props) {
             </button>
           ))}
         </div>
+        <input
+          type="date"
+          value={selectedDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          className="bg-[#111111] text-[#444444] border border-[#1f1f1f] rounded-sm px-2 py-1 text-sm"
+        />
         <span className="text-sm text-gray-400">
           {new Date().toLocaleDateString("en-US", {
             timeZone: "America/Chicago",
@@ -94,7 +135,6 @@ function StraddleView({ data }: { data: StraddleSnapshot[] }) {
 
   return (
     <div>
-      {/* Key metrics */}
       <div className="flex items-baseline gap-8 mb-6">
         <div>
           <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
@@ -113,8 +153,6 @@ function StraddleView({ data }: { data: StraddleSnapshot[] }) {
           </span>
         </div>
       </div>
-
-      {/* Chart placeholder */}
       <StraddleChart data={data} />
     </div>
   );
