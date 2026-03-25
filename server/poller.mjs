@@ -5,7 +5,7 @@ dotenv.config();
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_ANON_KEY
+  process.env.SUPABASE_ANON_KEY,
 );
 
 const client = new TastytradeClient({
@@ -35,7 +35,7 @@ function withTimeout(promise, ms, label) {
   return Promise.race([
     promise,
     new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout: ${label}`)), ms)
+      setTimeout(() => reject(new Error(`Timeout: ${label}`)), ms),
     ),
   ]);
 }
@@ -47,7 +47,7 @@ async function runCycle() {
     const today = getTodayET();
 
     const todayOptions = options.filter(
-      (o) => o["expiration-date"] === today && o["root-symbol"] === "SPXW"
+      (o) => o["expiration-date"] === today && o["root-symbol"] === "SPXW",
     );
 
     if (todayOptions.length === 0) {
@@ -59,38 +59,41 @@ async function runCycle() {
       ...new Set(todayOptions.map((o) => parseFloat(o["strike-price"]))),
     ].sort((a, b) => a - b);
 
-    await client.quoteStreamer.connect();
-
+    // Get SPX quote
     const { atmCall, atmPut, spxMid } = await withTimeout(
       new Promise((resolve) => {
-        client.quoteStreamer.addEventListener((events) => {
+        const spxListener = (events) => {
           const spxQuote = events.find(
-            (e) => e.eventSymbol === "SPX" && e.eventType === "Quote"
+            (e) => e.eventSymbol === "SPX" && e.eventType === "Quote",
           );
           if (spxQuote) {
+            client.quoteStreamer.removeEventListener(spxListener);
+            client.quoteStreamer.unsubscribe(["SPX"]);
             const spxMid = (spxQuote.bidPrice + spxQuote.askPrice) / 2;
             const atmStrike = strikes.reduce((prev, curr) =>
-              Math.abs(curr - spxMid) < Math.abs(prev - spxMid) ? curr : prev
+              Math.abs(curr - spxMid) < Math.abs(prev - spxMid) ? curr : prev,
             );
             const atmCall = todayOptions.find(
               (o) =>
                 parseFloat(o["strike-price"]) === atmStrike &&
-                o["option-type"] === "C"
+                o["option-type"] === "C",
             );
             const atmPut = todayOptions.find(
               (o) =>
                 parseFloat(o["strike-price"]) === atmStrike &&
-                o["option-type"] === "P"
+                o["option-type"] === "P",
             );
             resolve({ atmCall, atmPut, spxMid });
           }
-        });
+        };
+        client.quoteStreamer.addEventListener(spxListener);
         client.quoteStreamer.subscribe(["SPX"]);
       }),
       15000,
-      "SPX quote"
+      "SPX quote",
     );
 
+    // Get straddle quotes
     const straddleSymbols = [
       atmCall["streamer-symbol"],
       atmPut["streamer-symbol"],
@@ -99,7 +102,7 @@ async function runCycle() {
 
     await withTimeout(
       new Promise((resolve) => {
-        client.quoteStreamer.addEventListener((events) => {
+        const straddleListener = (events) => {
           events.forEach((e) => {
             if (
               straddleSymbols.includes(e.eventSymbol) &&
@@ -108,15 +111,18 @@ async function runCycle() {
               quotes[e.eventSymbol] = e;
             }
           });
-          if (Object.keys(quotes).length === 2) resolve();
-        });
+          if (Object.keys(quotes).length === 2) {
+            client.quoteStreamer.removeEventListener(straddleListener);
+            client.quoteStreamer.unsubscribe(straddleSymbols);
+            resolve();
+          }
+        };
+        client.quoteStreamer.addEventListener(straddleListener);
         client.quoteStreamer.subscribe(straddleSymbols);
       }),
       15000,
-      "straddle quotes"
+      "straddle quotes",
     );
-
-    await client.quoteStreamer.disconnect();
 
     const callMid =
       (quotes[straddleSymbols[0]].bidPrice +
@@ -140,23 +146,18 @@ async function runCycle() {
         straddle_mid: straddleMid,
       }),
       10000,
-      "Supabase insert"
+      "Supabase insert",
     );
 
     if (error) {
       console.error(`[${nowCT()}] Supabase error:`, error.message);
     } else {
       console.log(
-        `[${nowCT()}] SPX ref: ${spxMid.toFixed(
-          2
-        )} | ATM strike: ${atmStrike} | Straddle: ${straddleMid.toFixed(2)}`
+        `[${nowCT()}] SPX ref: ${spxMid.toFixed(2)} | ATM strike: ${atmStrike} | Straddle: ${straddleMid.toFixed(2)}`,
       );
     }
   } catch (err) {
     console.error(`[${nowCT()}] Cycle error:`, err.message);
-    try {
-      await client.quoteStreamer.disconnect();
-    } catch {}
   }
 }
 
@@ -165,4 +166,16 @@ async function runAndScheduleNext() {
   setTimeout(runAndScheduleNext, 60 * 1000);
 }
 
+// Connect once at startup, run cycles, disconnect on exit
+console.log(`[${nowCT()}] Starting poller...`);
+await client.quoteStreamer.connect();
+console.log(`[${nowCT()}] DXLink connected.`);
+
 runAndScheduleNext();
+
+// Graceful shutdown on Ctrl+C
+process.on("SIGINT", async () => {
+  console.log(`\n[${nowCT()}] Shutting down...`);
+  await client.quoteStreamer.disconnect();
+  process.exit(0);
+});
