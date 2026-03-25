@@ -122,7 +122,7 @@ export default function Dashboard({ initialStraddleData }: Props) {
 
       {/* Tab content */}
       <div>
-        {activeTab === "Straddle" && <StraddleView data={straddleData} />}
+        {activeTab === "Straddle" && <StraddleView data={straddleData} selectedDate={selectedDate} />}
         {activeTab === "SML Fly" && <FlyView type="SML" />}
         {activeTab === "SAL Fly" && <FlyView type="SAL" />}
       </div>
@@ -130,7 +130,7 @@ export default function Dashboard({ initialStraddleData }: Props) {
   );
 }
 
-function StraddleView({ data }: { data: StraddleSnapshot[] }) {
+function StraddleView({ data, selectedDate  }: { data: StraddleSnapshot[], selectedDate: string }) {
   const latest = data[data.length - 1];
 
   return (
@@ -153,7 +153,7 @@ function StraddleView({ data }: { data: StraddleSnapshot[] }) {
           </span>
         </div>
       </div>
-      <StraddleChart data={data} />
+      <StraddleChart data={data} selectedDate={selectedDate} />
     </div>
   );
 }

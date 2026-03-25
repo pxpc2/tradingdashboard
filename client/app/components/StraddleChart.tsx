@@ -7,6 +7,7 @@ import {
   UTCTimestamp,
   ISeriesApi,
   SeriesType,
+  IChartApi,
 } from "lightweight-charts";
 
 type StraddleSnapshot = {
@@ -23,11 +24,13 @@ type StraddleSnapshot = {
 
 type Props = {
   data: StraddleSnapshot[];
+  selectedDate: string
 };
 
-export default function StraddleChart({ data }: Props) {
+export default function StraddleChart({ data, selectedDate }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
+  const chartRef = useRef<IChartApi | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -83,6 +86,7 @@ export default function StraddleChart({ data }: Props) {
     });
 
     seriesRef.current = series;
+    chartRef.current = chart;
 
     const handleResize = () => {
       if (containerRef.current) {
@@ -97,9 +101,8 @@ export default function StraddleChart({ data }: Props) {
     };
   }, []);
 
-  // Runs whenever data changes — handles both date switches and realtime appends
   useEffect(() => {
-    if (!seriesRef.current) return;
+    if (!seriesRef.current || !chartRef.current) return;
 
     const points = data
       .map((snapshot) => ({
@@ -113,7 +116,23 @@ export default function StraddleChart({ data }: Props) {
       );
 
     seriesRef.current.setData(points);
-  }, [data]);
+
+    // Always show full trading day 8:30 to 15:00 CT (UTC-5 during DST)
+    const todayET = new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/New_York",
+    });
+    const marketOpen = Math.floor(
+      new Date(`${selectedDate}T13:30:00Z`).getTime() / 1000
+    ) as UTCTimestamp; // 8:30 CT
+    const marketClose = Math.floor(
+      new Date(`${selectedDate}T20:00:00Z`).getTime() / 1000
+    ) as UTCTimestamp; // 15:00 CT
+
+    chartRef.current.timeScale().setVisibleRange({
+      from: marketOpen,
+      to: marketClose,
+    });
+  }, [data, selectedDate]);
 
   return (
     <div ref={containerRef} className="w-full rounded-sm overflow-hidden" />
