@@ -24,7 +24,7 @@ type StraddleSnapshot = {
 
 type Props = {
   data: StraddleSnapshot[];
-  selectedDate: string
+  selectedDate: string;
 };
 
 export default function StraddleChart({ data, selectedDate }: Props) {
@@ -117,21 +117,21 @@ export default function StraddleChart({ data, selectedDate }: Props) {
 
     seriesRef.current.setData(points);
 
-    // Always show full trading day 8:30 to 15:00 CT (UTC-5 during DST)
-    const todayET = new Date().toLocaleDateString("en-CA", {
-      timeZone: "America/New_York",
-    });
     const marketOpen = Math.floor(
       new Date(`${selectedDate}T13:30:00Z`).getTime() / 1000
-    ) as UTCTimestamp; // 8:30 CT
+    ) as UTCTimestamp;
     const marketClose = Math.floor(
       new Date(`${selectedDate}T20:00:00Z`).getTime() / 1000
-    ) as UTCTimestamp; // 15:00 CT
+    ) as UTCTimestamp;
 
-    chartRef.current.timeScale().setVisibleRange({
-      from: marketOpen,
-      to: marketClose,
-    });
+    try {
+      chartRef.current.timeScale().setVisibleRange({
+        from: marketOpen,
+        to: marketClose,
+      });
+    } catch {
+      // chart not ready yet, skip
+    }
   }, [data, selectedDate]);
 
   return (
