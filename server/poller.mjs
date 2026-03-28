@@ -59,6 +59,7 @@ function isMarketHours() {
   return true;
 }
 
+let lastSkipLog = 0;
 async function runCycle() {
   if (!isMarketHours()) {
     const now = Date.now();
