@@ -33,11 +33,36 @@ type Props = {
 const TABS = ["Straddle", "SML Fly", "SAL Fly"] as const;
 type Tab = (typeof TABS)[number];
 
+const WIDTH_OPTIONS = [10, 15, 20, 25, 30];
+const WIDTH_COLORS: Record<number, string> = {
+  10: "#60a5fa",
+  15: "#a78bfa",
+  20: "#fb923c",
+  25: "#34d399",
+  30: "#f472b6",
+};
+
+function useIsTallMode() {
+  const [isTall, setIsTall] = useState(false);
+
+  useEffect(() => {
+    function check() {
+      setIsTall(window.innerHeight >= 800);
+    }
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  return isTall;
+}
+
 export default function Dashboard({
   initialStraddleData,
   initialSmlSession,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("Straddle");
+  const [activeFlyTab, setActiveFlyTab] = useState<"SML" | "SAL">("SML");
   const [straddleData, setStraddleData] =
     useState<StraddleSnapshot[]>(initialStraddleData);
   const [smlSession, setSmlSession] = useState<RtmSession | null>(
@@ -46,6 +71,7 @@ export default function Dashboard({
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
   );
+  const isTall = useIsTallMode();
 
   useEffect(() => {
     let cancelled = false;
@@ -111,22 +137,43 @@ export default function Dashboard({
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-6">
+      {/* Top bar */}
       <div className="flex items-center justify-between mb-6">
-        <div className="flex gap-1 rounded-sm bg-[#111111] p-1">
-          {TABS.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-5 py-2 rounded-sm text-sm font-medium transition-colors ${
-                activeTab === tab
-                  ? "bg-[#1f1f1f] text-white"
-                  : "text-[#444444] hover:cursor-pointer hover:text-[#888888]"
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
+        {isTall ? (
+          <div className="flex gap-1 rounded-sm bg-[#111111] p-1">
+            {(["SML Fly", "SAL Fly"] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() =>
+                  setActiveFlyTab(tab === "SML Fly" ? "SML" : "SAL")
+                }
+                className={`px-5 py-2 rounded-sm text-sm font-medium transition-colors ${
+                  activeFlyTab === (tab === "SML Fly" ? "SML" : "SAL")
+                    ? "bg-[#1f1f1f] text-white"
+                    : "text-[#444444] hover:cursor-pointer hover:text-[#888888]"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="flex gap-1 rounded-sm bg-[#111111] p-1">
+            {TABS.map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-5 py-2 rounded-sm text-sm font-medium transition-colors ${
+                  activeTab === tab
+                    ? "bg-[#1f1f1f] text-white"
+                    : "text-[#444444] hover:cursor-pointer hover:text-[#888888]"
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+        )}
         <input
           type="date"
           value={selectedDate}
@@ -144,19 +191,43 @@ export default function Dashboard({
         </span>
       </div>
 
-      <div>
-        {activeTab === "Straddle" && (
+      {/* Content */}
+      {isTall ? (
+        <div className="flex flex-col gap-4">
+          <div className="bg-[#111111] rounded-sm p-4">
+            <SmlFlyView
+              session={smlSession}
+              onSessionCreated={setSmlSession}
+              selectedDate={selectedDate}
+              type={activeFlyTab}
+            />
+          </div>
+          <div className="border-t border-[#1a1a1a]" />
           <StraddleView data={straddleData} selectedDate={selectedDate} />
-        )}
-        {activeTab === "SML Fly" && (
-          <SmlFlyView
-            session={smlSession}
-            onSessionCreated={setSmlSession}
-            selectedDate={selectedDate}
-          />
-        )}
-        {activeTab === "SAL Fly" && <FlyView type="SAL" />}
-      </div>
+        </div>
+      ) : (
+        <div>
+          {activeTab === "Straddle" && (
+            <StraddleView data={straddleData} selectedDate={selectedDate} />
+          )}
+          {activeTab === "SML Fly" && (
+            <SmlFlyView
+              session={smlSession}
+              onSessionCreated={setSmlSession}
+              selectedDate={selectedDate}
+              type="SML"
+            />
+          )}
+          {activeTab === "SAL Fly" && (
+            <SmlFlyView
+              session={smlSession}
+              onSessionCreated={setSmlSession}
+              selectedDate={selectedDate}
+              type="SAL"
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -195,25 +266,19 @@ function StraddleView({
   );
 }
 
-const WIDTH_OPTIONS = [10, 15, 20, 25, 30];
-const WIDTH_COLORS: Record<number, string> = {
-  10: "#60a5fa",
-  15: "#a78bfa",
-  20: "#fb923c",
-  25: "#34d399",
-  30: "#f472b6",
-};
-
 function SmlFlyView({
   session,
   onSessionCreated,
+  selectedDate,
+  type,
 }: {
   session: RtmSession | null;
   onSessionCreated: (session: RtmSession) => void;
   selectedDate: string;
+  type: "SML" | "SAL";
 }) {
   const [strike, setStrike] = useState("");
-  const [type, setType] = useState<"call" | "put">("call");
+  const [optionType, setOptionType] = useState<"call" | "put">("call");
   const [selectedWidths, setSelectedWidths] = useState<number[]>([10, 15, 20]);
   const [activeWidth, setActiveWidth] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -225,13 +290,22 @@ function SmlFlyView({
     if (!strike || selectedWidths.length === 0) return;
     setSubmitting(true);
 
+    const insertData =
+      type === "SML"
+        ? {
+            sml_ref: parseFloat(strike),
+            widths: selectedWidths,
+            type: optionType,
+          }
+        : {
+            sal_ref: parseFloat(strike),
+            widths: selectedWidths,
+            type: optionType,
+          };
+
     const { data, error } = await supabase
       .from("rtm_sessions")
-      .insert({
-        sml_ref: parseFloat(strike),
-        widths: selectedWidths,
-        type: type,
-      })
+      .insert(insertData)
       .select()
       .single();
 
@@ -248,19 +322,22 @@ function SmlFlyView({
     );
   }
 
-  if (!session) {
+  const sessionRef = type === "SML" ? session?.sml_ref : session?.sal_ref;
+  const hasSession = sessionRef != null;
+
+  if (!hasSession) {
     return (
       <div className="flex flex-col gap-5 max-w-sm">
         <div className="flex flex-col gap-2">
           <span className="text-xs text-[#444] uppercase tracking-wide">
-            SML strike
+            {type} strike
           </span>
           <input
             type="number"
             value={strike}
             onChange={(e) => setStrike(e.target.value)}
             placeholder="6620"
-            className="bg-[#111111] border border-[#1f1f1f] rounded-sm px-3 py-2 text-sm text-white w-full"
+            className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-sm px-3 py-2 text-sm text-white w-full"
           />
         </div>
 
@@ -268,13 +345,13 @@ function SmlFlyView({
           <span className="text-xs text-[#444] uppercase tracking-wide">
             Type
           </span>
-          <div className="flex gap-1 bg-[#111111] rounded-sm p-1 w-fit">
+          <div className="flex gap-1 bg-[#0a0a0a] rounded-sm p-1 w-fit">
             {(["call", "put"] as const).map((t) => (
               <button
                 key={t}
-                onClick={() => setType(t)}
+                onClick={() => setOptionType(t)}
                 className={`px-4 py-1.5 rounded-sm text-sm font-medium transition-colors ${
-                  type === t
+                  optionType === t
                     ? "bg-[#1f1f1f] text-white"
                     : "text-[#444444] hover:text-[#888888]"
                 }`}
@@ -317,15 +394,15 @@ function SmlFlyView({
     );
   }
 
-  const smlStrike = session.sml_ref ?? 0;
-  const sessionType = session.type ?? "call";
+  const smlStrike = sessionRef ?? 0;
+  const sessionType = session?.type ?? "call";
 
   return (
     <div>
       <div className="flex items-center gap-6 mb-4">
         <div>
           <span className="text-xs text-[#444] uppercase tracking-wide mr-2">
-            SML
+            {type}
           </span>
           <span className="text-base font-medium">
             {smlStrike}
@@ -342,7 +419,7 @@ function SmlFlyView({
         </div>
       </div>
 
-      <div className="flex gap-1 bg-[#111111] rounded-sm p-1 w-fit mb-4">
+      <div className="flex gap-1 bg-[#0a0a0a] rounded-sm p-1 w-fit mb-4">
         {widths.map((w) => (
           <button
             key={w}
@@ -363,7 +440,7 @@ function SmlFlyView({
           key={w}
           style={{ display: effectiveActiveWidth === w ? "block" : "none" }}
         >
-          <div className="bg-[#111111] rounded-sm p-4">
+          <div className="bg-[#0a0a0a] rounded-sm p-4">
             <div className="flex items-baseline justify-between mb-4">
               <div>
                 <div className="text-xs text-[#444] uppercase tracking-wide mb-1">
@@ -382,11 +459,11 @@ function SmlFlyView({
               className="w-full rounded-sm flex items-center justify-center text-[#333] text-sm"
               style={{
                 height: 300,
-                background: "#0f0f0f",
+                background: "#111111",
                 borderLeft: `2px solid ${WIDTH_COLORS[w] ?? "#888"}`,
               }}
             >
-              SML data
+              Chart data coming soon
             </div>
           </div>
         </div>
