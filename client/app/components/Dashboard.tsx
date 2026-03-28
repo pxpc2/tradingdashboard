@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import StraddleChart from "./StraddleChart";
 
@@ -16,34 +16,60 @@ type StraddleSnapshot = {
   straddle_mid: number;
 };
 
+type RtmSession = {
+  id: string;
+  created_at: string;
+  sml_ref: number | null;
+  sal_ref: number | null;
+  widths: number[] | null;
+  type: string | null;
+};
+
 type Props = {
   initialStraddleData: StraddleSnapshot[];
+  initialSmlSession: RtmSession | null;
 };
 
 const TABS = ["Straddle", "SML Fly", "SAL Fly"] as const;
 type Tab = (typeof TABS)[number];
 
-export default function Dashboard({ initialStraddleData }: Props) {
+export default function Dashboard({
+  initialStraddleData,
+  initialSmlSession,
+}: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("Straddle");
   const [straddleData, setStraddleData] =
     useState<StraddleSnapshot[]>(initialStraddleData);
+  const [smlSession, setSmlSession] = useState<RtmSession | null>(
+    initialSmlSession,
+  );
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
   );
 
-  // Refetch when date changes
   useEffect(() => {
     let cancelled = false;
 
     async function load() {
-      const { data } = await supabase
+      const { data: straddleData } = await supabase
         .from("straddle_snapshots")
         .select("*")
         .gte("created_at", `${selectedDate}T00:00:00`)
         .lt("created_at", `${selectedDate}T23:59:59`)
         .order("created_at", { ascending: true });
 
-      if (!cancelled && data) setStraddleData(data);
+      const { data: sessions } = await supabase
+        .from("rtm_sessions")
+        .select("*")
+        .gte("created_at", `${selectedDate}T00:00:00`)
+        .lt("created_at", `${selectedDate}T23:59:59`)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (!cancelled) {
+        if (straddleData) setStraddleData(straddleData);
+        setSmlSession(sessions?.[0] ?? null);
+      }
     }
 
     load();
@@ -53,7 +79,6 @@ export default function Dashboard({ initialStraddleData }: Props) {
     };
   }, [selectedDate]);
 
-  // Realtime subscription — only append if viewing today
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/New_York",
@@ -86,7 +111,6 @@ export default function Dashboard({ initialStraddleData }: Props) {
 
   return (
     <div className="max-w-7xl mx-auto px-6 py-6">
-      {/* Top bar */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex gap-1 rounded-sm bg-[#111111] p-1">
           {TABS.map((tab) => (
@@ -120,17 +144,30 @@ export default function Dashboard({ initialStraddleData }: Props) {
         </span>
       </div>
 
-      {/* Tab content */}
       <div>
-        {activeTab === "Straddle" && <StraddleView data={straddleData} selectedDate={selectedDate} />}
-        {activeTab === "SML Fly" && <FlyView type="SML" />}
+        {activeTab === "Straddle" && (
+          <StraddleView data={straddleData} selectedDate={selectedDate} />
+        )}
+        {activeTab === "SML Fly" && (
+          <SmlFlyView
+            session={smlSession}
+            onSessionCreated={setSmlSession}
+            selectedDate={selectedDate}
+          />
+        )}
         {activeTab === "SAL Fly" && <FlyView type="SAL" />}
       </div>
     </div>
   );
 }
 
-function StraddleView({ data, selectedDate  }: { data: StraddleSnapshot[], selectedDate: string }) {
+function StraddleView({
+  data,
+  selectedDate,
+}: {
+  data: StraddleSnapshot[];
+  selectedDate: string;
+}) {
   const latest = data[data.length - 1];
 
   return (
@@ -158,7 +195,207 @@ function StraddleView({ data, selectedDate  }: { data: StraddleSnapshot[], selec
   );
 }
 
-function FlyView({ type }: { type: "SML" | "SAL" }) {
+const WIDTH_OPTIONS = [10, 15, 20, 25, 30];
+const WIDTH_COLORS: Record<number, string> = {
+  10: "#60a5fa",
+  15: "#a78bfa",
+  20: "#fb923c",
+  25: "#34d399",
+  30: "#f472b6",
+};
+
+function SmlFlyView({
+  session,
+  onSessionCreated,
+}: {
+  session: RtmSession | null;
+  onSessionCreated: (session: RtmSession) => void;
+  selectedDate: string;
+}) {
+  const [strike, setStrike] = useState("");
+  const [type, setType] = useState<"call" | "put">("call");
+  const [selectedWidths, setSelectedWidths] = useState<number[]>([10, 15, 20]);
+  const [activeWidth, setActiveWidth] = useState<number | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const widths = session?.widths ?? [];
+  const effectiveActiveWidth = activeWidth ?? widths[0] ?? 10;
+
+  async function handleSubmit() {
+    if (!strike || selectedWidths.length === 0) return;
+    setSubmitting(true);
+
+    const { data, error } = await supabase
+      .from("rtm_sessions")
+      .insert({
+        sml_ref: parseFloat(strike),
+        widths: selectedWidths,
+        type: type,
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
+      setActiveWidth(null);
+      onSessionCreated(data as RtmSession);
+    }
+    setSubmitting(false);
+  }
+
+  function toggleWidth(w: number) {
+    setSelectedWidths((prev) =>
+      prev.includes(w) ? prev.filter((x) => x !== w) : [...prev, w],
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="flex flex-col gap-5 max-w-sm">
+        <div className="flex flex-col gap-2">
+          <span className="text-xs text-[#444] uppercase tracking-wide">
+            SML strike
+          </span>
+          <input
+            type="number"
+            value={strike}
+            onChange={(e) => setStrike(e.target.value)}
+            placeholder="6620"
+            className="bg-[#111111] border border-[#1f1f1f] rounded-sm px-3 py-2 text-sm text-white w-full"
+          />
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className="text-xs text-[#444] uppercase tracking-wide">
+            Type
+          </span>
+          <div className="flex gap-1 bg-[#111111] rounded-sm p-1 w-fit">
+            {(["call", "put"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                className={`px-4 py-1.5 rounded-sm text-sm font-medium transition-colors ${
+                  type === t
+                    ? "bg-[#1f1f1f] text-white"
+                    : "text-[#444444] hover:text-[#888888]"
+                }`}
+              >
+                {t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <span className="text-xs text-[#444] uppercase tracking-wide">
+            Widths to track
+          </span>
+          <div className="flex gap-2 flex-wrap">
+            {WIDTH_OPTIONS.map((w) => (
+              <button
+                key={w}
+                onClick={() => toggleWidth(w)}
+                className={`px-3 py-1.5 rounded-sm text-sm border transition-colors ${
+                  selectedWidths.includes(w)
+                    ? "bg-[#1f1f1f] text-white border-[#333]"
+                    : "bg-transparent text-[#444] border-[#1f1f1f] hover:text-[#888]"
+                }`}
+              >
+                {w}W
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || !strike || selectedWidths.length === 0}
+          className="bg-white text-black text-sm font-medium py-2 px-6 rounded-sm hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {submitting ? "Starting..." : "Start tracking"}
+        </button>
+      </div>
+    );
+  }
+
+  const smlStrike = session.sml_ref ?? 0;
+  const sessionType = session.type ?? "call";
+
+  return (
+    <div>
+      <div className="flex items-center gap-6 mb-4">
+        <div>
+          <span className="text-xs text-[#444] uppercase tracking-wide mr-2">
+            SML
+          </span>
+          <span className="text-base font-medium">
+            {smlStrike}
+            {sessionType === "call" ? "C" : "P"}
+          </span>
+        </div>
+        <div>
+          <span className="text-xs text-[#444] uppercase tracking-wide mr-2">
+            Tracking
+          </span>
+          <span className="text-sm text-[#888]">
+            {widths.map((w) => `${w}W`).join(" · ")}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex gap-1 bg-[#111111] rounded-sm p-1 w-fit mb-4">
+        {widths.map((w) => (
+          <button
+            key={w}
+            onClick={() => setActiveWidth(w)}
+            className={`px-4 py-1.5 rounded-sm text-sm font-medium transition-colors ${
+              effectiveActiveWidth === w
+                ? "bg-[#1f1f1f] text-white"
+                : "text-[#444444] hover:text-[#888888]"
+            }`}
+          >
+            {w}W
+          </button>
+        ))}
+      </div>
+
+      {widths.map((w) => (
+        <div
+          key={w}
+          style={{ display: effectiveActiveWidth === w ? "block" : "none" }}
+        >
+          <div className="bg-[#111111] rounded-sm p-4">
+            <div className="flex items-baseline justify-between mb-4">
+              <div>
+                <div className="text-xs text-[#444] uppercase tracking-wide mb-1">
+                  Current PnL
+                </div>
+                <div className="text-2xl font-medium text-[#888]">—</div>
+              </div>
+              <div className="text-xs text-[#444]">
+                {smlStrike - w}
+                {sessionType === "call" ? "C" : "P"} · {smlStrike}
+                {sessionType === "call" ? "C" : "P"} · {smlStrike + w}
+                {sessionType === "call" ? "C" : "P"}
+              </div>
+            </div>
+            <div
+              className="w-full rounded-sm flex items-center justify-center text-[#333] text-sm"
+              style={{
+                height: 300,
+                background: "#0f0f0f",
+                borderLeft: `2px solid ${WIDTH_COLORS[w] ?? "#888"}`,
+              }}
+            >
+              SML data
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FlyView({ type }: { type: "SAL" }) {
   return (
     <div className="bg-[#1A1A1A] rounded-sm p-4 h-96 flex items-center justify-center text-gray-500">
       {type} P&L Chart
