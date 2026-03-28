@@ -40,7 +40,30 @@ function withTimeout(promise, ms, label) {
   ]);
 }
 
+function isMarketHours() {
+  const now = new Date();
+  const day = now.toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+  });
+  const time = now.toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  if (["Sat", "Sun"].includes(day)) return false;
+  if (time < "09:30:00" || time >= "16:00:00") return false;
+  return true;
+}
+
 async function runCycle() {
+  if (!isMarketHours()) {
+    console.log(`[${nowCT()}] Outside market hours, skipping.`);
+    return;
+  }
   try {
     const chain = await client.instrumentsService.getOptionChain("%2FSPX");
     const options = Array.from(chain);

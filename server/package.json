@@ -1,9 +1,10 @@
 {
-  "name": "ttapitest",
+  "name": "vovonaccidashboard-server",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "poller.js",
   "scripts": {
+    "start": "node poller.mjs",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
