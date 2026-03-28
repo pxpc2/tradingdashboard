@@ -61,7 +61,12 @@ function isMarketHours() {
 
 async function runCycle() {
   if (!isMarketHours()) {
-    console.log(`[${nowCT()}] Outside market hours, skipping.`);
+    const now = Date.now();
+    if (now - lastSkipLog > 60 * 60 * 1000) {
+      // only log once per hour
+      console.log(`[${nowCT()}] Outside market hours, skipping.`);
+      lastSkipLog = now;
+    }
     return;
   }
   try {
