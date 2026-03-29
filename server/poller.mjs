@@ -65,7 +65,7 @@ async function runCycle() {
     const now = Date.now();
     if (now - lastSkipLog > 60 * 60 * 1000) {
       // only log once per hour
-      console.log(`[${nowCT()}] Outside market hours, skipping.`);
+      console.log(`[${nowCT()}] SPX fechado, tentaremos mais tarde.`);
       lastSkipLog = now;
     }
     return;
