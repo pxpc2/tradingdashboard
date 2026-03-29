@@ -342,15 +342,12 @@ function SmlFlyView({
         </div>
 
         <div className="flex flex-col gap-2">
-          <span className="text-xs text-[#444] uppercase tracking-wide">
-            Type
-          </span>
           <div className="flex gap-1 bg-[#0a0a0a] rounded-sm p-1 w-fit">
             {(["call", "put"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setOptionType(t)}
-                className={`px-4 py-1.5 rounded-sm text-sm font-medium transition-colors ${
+                className={`px-4 py-1.5 rounded-sm text-sm font-medium transition-colors hover:cursor-pointer ${
                   optionType === t
                     ? "bg-[#1f1f1f] text-white"
                     : "text-[#444444] hover:text-[#888888]"
@@ -364,14 +361,14 @@ function SmlFlyView({
 
         <div className="flex flex-col gap-2">
           <span className="text-xs text-[#444] uppercase tracking-wide">
-            Widths to track
+            WIDTHS p/ acompanhar:
           </span>
           <div className="flex gap-2 flex-wrap">
             {WIDTH_OPTIONS.map((w) => (
               <button
                 key={w}
                 onClick={() => toggleWidth(w)}
-                className={`px-3 py-1.5 rounded-sm text-sm border transition-colors ${
+                className={`px-3 py-1.5 rounded-sm text-sm border transition-colors hover:cursor-pointer ${
                   selectedWidths.includes(w)
                     ? "bg-[#1f1f1f] text-white border-[#333]"
                     : "bg-transparent text-[#444] border-[#1f1f1f] hover:text-[#888]"
@@ -386,9 +383,9 @@ function SmlFlyView({
         <button
           onClick={handleSubmit}
           disabled={submitting || !strike || selectedWidths.length === 0}
-          className="bg-white text-black text-sm font-medium py-2 px-6 rounded-sm hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          className="bg-white text-black text-sm font-medium py-2 px-6 rounded-sm hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:cursor-pointer"
         >
-          {submitting ? "Starting..." : "Start tracking"}
+          {submitting ? "Inicializando sessão..." : "Criar RTM session pro dia"}
         </button>
       </div>
     );
@@ -463,7 +460,7 @@ function SmlFlyView({
                 borderLeft: `2px solid ${WIDTH_COLORS[w] ?? "#888"}`,
               }}
             >
-              Chart data coming soon
+              em breve
             </div>
           </div>
         </div>
