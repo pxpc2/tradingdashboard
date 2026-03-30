@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import StraddleChart from "./StraddleChart";
+import FlyChart from "./FlyChart";
 
 type StraddleSnapshot = {
   id: string;
@@ -25,6 +26,16 @@ type RtmSession = {
   type: string | null;
 };
 
+type FlySnapshot = {
+  id: string;
+  created_at: string;
+  session_id: string;
+  width: number;
+  mid: number;
+  bid: number;
+  ask: number;
+};
+
 type Props = {
   initialStraddleData: StraddleSnapshot[];
   initialSmlSession: RtmSession | null;
@@ -36,7 +47,7 @@ type Tab = (typeof TABS)[number];
 const WIDTH_OPTIONS = [10, 15, 20, 25, 30];
 const WIDTH_COLORS: Record<number, string> = {
   10: "#60a5fa",
-  15: "#a78bfa",
+  15: "#9CA9FF",
   20: "#fb923c",
   25: "#34d399",
   30: "#f472b6",
@@ -68,6 +79,7 @@ export default function Dashboard({
   const [smlSession, setSmlSession] = useState<RtmSession | null>(
     initialSmlSession,
   );
+  const [flySnapshots, setFlySnapshots] = useState<FlySnapshot[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
   );
@@ -92,9 +104,22 @@ export default function Dashboard({
         .order("created_at", { ascending: false })
         .limit(1);
 
+      const session = sessions?.[0] ?? null;
+
+      let flyData: FlySnapshot[] = [];
+      if (session) {
+        const { data: snaps } = await supabase
+          .from("sml_fly_snapshots")
+          .select("*")
+          .eq("session_id", session.id)
+          .order("created_at", { ascending: true });
+        flyData = snaps ?? [];
+      }
+
       if (!cancelled) {
         if (straddleData) setStraddleData(straddleData);
-        setSmlSession(sessions?.[0] ?? null);
+        setSmlSession(session);
+        setFlySnapshots(flyData);
       }
     }
 
@@ -105,20 +130,17 @@ export default function Dashboard({
     };
   }, [selectedDate]);
 
+  // Realtime for straddle
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/New_York",
     });
 
     const channel = supabase
-      .channel("straddle_snapshots")
+      .channel("straddle_realtime")
       .on(
         "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "straddle_snapshots",
-        },
+        { event: "INSERT", schema: "public", table: "straddle_snapshots" },
         (payload) => {
           if (selectedDate === today) {
             setStraddleData((prev) => [
@@ -135,9 +157,32 @@ export default function Dashboard({
     };
   }, [selectedDate]);
 
+  // Realtime for fly snapshots
+  useEffect(() => {
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/New_York",
+    });
+
+    const channel = supabase
+      .channel("fly_realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "sml_fly_snapshots" },
+        (payload) => {
+          if (selectedDate === today) {
+            setFlySnapshots((prev) => [...prev, payload.new as FlySnapshot]);
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedDate]);
+
   return (
     <div className="max-w-7xl mx-auto px-6 py-6">
-      {/* Top bar */}
       <div className="flex items-center justify-between mb-6">
         {isTall ? (
           <div className="flex gap-1 rounded-sm bg-[#111111] p-1">
@@ -191,7 +236,6 @@ export default function Dashboard({
         </span>
       </div>
 
-      {/* Content */}
       {isTall ? (
         <div className="flex flex-col gap-4">
           <div className="bg-[#111111] rounded-sm p-4">
@@ -200,6 +244,7 @@ export default function Dashboard({
               onSessionCreated={setSmlSession}
               selectedDate={selectedDate}
               type={activeFlyTab}
+              flySnapshots={flySnapshots}
             />
           </div>
           <div className="border-t border-[#1a1a1a]" />
@@ -216,6 +261,7 @@ export default function Dashboard({
               onSessionCreated={setSmlSession}
               selectedDate={selectedDate}
               type="SML"
+              flySnapshots={flySnapshots}
             />
           )}
           {activeTab === "SAL Fly" && (
@@ -224,6 +270,7 @@ export default function Dashboard({
               onSessionCreated={setSmlSession}
               selectedDate={selectedDate}
               type="SAL"
+              flySnapshots={flySnapshots}
             />
           )}
         </div>
@@ -271,11 +318,13 @@ function SmlFlyView({
   onSessionCreated,
   selectedDate,
   type,
+  flySnapshots,
 }: {
   session: RtmSession | null;
   onSessionCreated: (session: RtmSession) => void;
   selectedDate: string;
   type: "SML" | "SAL";
+  flySnapshots: FlySnapshot[];
 }) {
   const [strike, setStrike] = useState("");
   const [optionType, setOptionType] = useState<"call" | "put">("call");
@@ -398,18 +447,12 @@ function SmlFlyView({
     <div>
       <div className="flex items-center gap-6 mb-4">
         <div>
-          <span className="text-xs text-[#444] uppercase tracking-wide mr-2">
-            {type}
-          </span>
           <span className="text-base font-medium">
             {smlStrike}
             {sessionType === "call" ? "C" : "P"}
           </span>
         </div>
         <div>
-          <span className="text-xs text-[#444] uppercase tracking-wide mr-2">
-            Tracking
-          </span>
           <span className="text-sm text-[#888]">
             {widths.map((w) => `${w}W`).join(" · ")}
           </span>
@@ -432,39 +475,77 @@ function SmlFlyView({
         ))}
       </div>
 
-      {widths.map((w) => (
-        <div
-          key={w}
-          style={{ display: effectiveActiveWidth === w ? "block" : "none" }}
-        >
-          <div className="bg-[#0a0a0a] rounded-sm p-4">
-            <div className="flex items-baseline justify-between mb-4">
-              <div>
-                <div className="text-xs text-[#444] uppercase tracking-wide mb-1">
-                  Current PnL
+      {widths.map((w) => {
+        const widthSnapshots = flySnapshots.filter((s) => s.width === w);
+        const latest = widthSnapshots[widthSnapshots.length - 1];
+        const entry = widthSnapshots[0];
+        const pnl = latest && entry ? latest.mid - entry.mid : null;
+        const color = WIDTH_COLORS[w] ?? "#888";
+
+        return (
+          <div
+            key={w}
+            style={{ display: effectiveActiveWidth === w ? "block" : "none" }}
+          >
+            <div className="bg-[#0a0a0a] rounded-sm p-4">
+              <div className="flex items-baseline justify-between mb-4">
+                <div className="flex items-baseline gap-8">
+                  <div>
+                    <div className="text-xs text-[#444] uppercase tracking-wide mb-1">
+                      PnL
+                    </div>
+                    <div
+                      className="text-2xl font-medium"
+                      style={{
+                        color:
+                          pnl === null
+                            ? "#888"
+                            : pnl >= 0
+                              ? "#4ade80"
+                              : "#f87171",
+                      }}
+                    >
+                      {pnl === null
+                        ? "—"
+                        : `${pnl >= 0 ? "+" : ""}$${(pnl * 100).toFixed(0)}`}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-[#444] uppercase tracking-wide mb-1">
+                      Entry mid
+                    </div>
+                    <div className="text-sm font-medium text-[#888]">
+                      {entry ? entry.mid.toFixed(2) : "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-[#444] uppercase tracking-wide mb-1">
+                      Bid / Mid / Ask
+                    </div>
+                    <div className="text-sm font-medium text-[#888]">
+                      {latest
+                        ? `${latest.bid.toFixed(2)} / ${latest.mid.toFixed(2)} / ${latest.ask.toFixed(2)}`
+                        : "— / — / —"}
+                    </div>
+                  </div>
                 </div>
-                <div className="text-2xl font-medium text-[#888]">—</div>
+                <div className="text-xs text-[#444]">
+                  {smlStrike - w}
+                  {sessionType === "call" ? "C" : "P"} · {smlStrike}
+                  {sessionType === "call" ? "C" : "P"} · {smlStrike + w}
+                  {sessionType === "call" ? "C" : "P"}
+                </div>
               </div>
-              <div className="text-xs text-[#444]">
-                {smlStrike - w}
-                {sessionType === "call" ? "C" : "P"} · {smlStrike}
-                {sessionType === "call" ? "C" : "P"} · {smlStrike + w}
-                {sessionType === "call" ? "C" : "P"}
-              </div>
-            </div>
-            <div
-              className="w-full rounded-sm flex items-center justify-center text-[#333] text-sm"
-              style={{
-                height: 300,
-                background: "#111111",
-                borderLeft: `2px solid ${WIDTH_COLORS[w] ?? "#888"}`,
-              }}
-            >
-              em breve
+              <FlyChart
+                data={widthSnapshots}
+                width={w}
+                color={color}
+                selectedDate={selectedDate}
+              />
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

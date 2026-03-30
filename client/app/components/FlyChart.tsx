@@ -3,31 +3,31 @@
 import { useEffect, useRef } from "react";
 import {
   createChart,
-  LineSeries,
+  AreaSeries,
   UTCTimestamp,
   ISeriesApi,
   SeriesType,
   IChartApi,
 } from "lightweight-charts";
 
-type StraddleSnapshot = {
+type FlySnapshot = {
   id: string;
   created_at: string;
-  spx_ref: number;
-  atm_strike: number;
-  call_bid: number;
-  call_ask: number;
-  put_bid: number;
-  put_ask: number;
-  straddle_mid: number;
+  session_id: string;
+  width: number;
+  mid: number;
+  bid: number;
+  ask: number;
 };
 
 type Props = {
-  data: StraddleSnapshot[];
+  data: FlySnapshot[];
+  width: number;
+  color: string;
   selectedDate: string;
 };
 
-export default function StraddleChart({ data, selectedDate }: Props) {
+export default function FlyChart({ data, width, color, selectedDate }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -75,12 +75,14 @@ export default function StraddleChart({ data, selectedDate }: Props) {
         },
       },
       width: containerRef.current.clientWidth,
-      height: 400,
+      height: 300,
     });
 
-    const series = chart.addSeries(LineSeries, {
-      color: "#DEDEDE",
-      lineWidth: 1,
+    const series = chart.addSeries(AreaSeries, {
+      lineColor: color,
+      topColor: `${color}33`,
+      bottomColor: `${color}00`,
+      lineWidth: 2,
       priceLineVisible: false,
       lastValueVisible: true,
     });
@@ -109,7 +111,7 @@ export default function StraddleChart({ data, selectedDate }: Props) {
         time: Math.floor(
           new Date(snapshot.created_at).getTime() / 1000,
         ) as UTCTimestamp,
-        value: snapshot.straddle_mid,
+        value: snapshot.mid,
       }))
       .filter(
         (point, index, arr) => index === 0 || point.time > arr[index - 1].time,
@@ -130,7 +132,7 @@ export default function StraddleChart({ data, selectedDate }: Props) {
         to: marketClose,
       });
     } catch {
-      // chart not ready yet, skip
+      // chart not ready yet
     }
   }, [data, selectedDate]);
 
