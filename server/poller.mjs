@@ -59,17 +59,45 @@ function isMarketHours() {
   return true;
 }
 
+async function getQuotes(symbols) {
+  const quotes = {};
+
+  await withTimeout(
+    new Promise((resolve) => {
+      const listener = (events) => {
+        events.forEach((e) => {
+          if (symbols.includes(e.eventSymbol) && e.eventType === "Quote") {
+            quotes[e.eventSymbol] = e;
+          }
+        });
+        if (Object.keys(quotes).length === symbols.length) {
+          client.quoteStreamer.removeEventListener(listener);
+          client.quoteStreamer.unsubscribe(symbols);
+          resolve();
+        }
+      };
+      client.quoteStreamer.addEventListener(listener);
+      client.quoteStreamer.subscribe(symbols);
+    }),
+    15000,
+    `quotes for ${symbols.join(",")}`,
+  );
+
+  return quotes;
+}
+
 let lastSkipLog = 0;
+
 async function runCycle() {
   if (!isMarketHours()) {
     const now = Date.now();
     if (now - lastSkipLog > 60 * 60 * 1000) {
-      // only log once per hour
       console.log(`[${nowCT()}] SPX fechado, tentaremos mais tarde.`);
       lastSkipLog = now;
     }
     return;
   }
+
   try {
     const chain = await client.instrumentsService.getOptionChain("%2FSPX");
     const options = Array.from(chain);
@@ -88,7 +116,17 @@ async function runCycle() {
       ...new Set(todayOptions.map((o) => parseFloat(o["strike-price"]))),
     ].sort((a, b) => a - b);
 
-    // Get SPX quote
+    // Helper to find streamer symbol for a given strike and option type
+    function getStreamerSymbol(strike, optType) {
+      const opt = todayOptions.find(
+        (o) =>
+          parseFloat(o["strike-price"]) === strike &&
+          o["option-type"] === optType.toUpperCase(),
+      );
+      return opt?.["streamer-symbol"] ?? null;
+    }
+
+    // Get SPX spot price
     const { atmCall, atmPut, spxMid } = await withTimeout(
       new Promise((resolve) => {
         const spxListener = (events) => {
@@ -127,63 +165,134 @@ async function runCycle() {
       atmCall["streamer-symbol"],
       atmPut["streamer-symbol"],
     ];
-    const quotes = {};
-
-    await withTimeout(
-      new Promise((resolve) => {
-        const straddleListener = (events) => {
-          events.forEach((e) => {
-            if (
-              straddleSymbols.includes(e.eventSymbol) &&
-              e.eventType === "Quote"
-            ) {
-              quotes[e.eventSymbol] = e;
-            }
-          });
-          if (Object.keys(quotes).length === 2) {
-            client.quoteStreamer.removeEventListener(straddleListener);
-            client.quoteStreamer.unsubscribe(straddleSymbols);
-            resolve();
-          }
-        };
-        client.quoteStreamer.addEventListener(straddleListener);
-        client.quoteStreamer.subscribe(straddleSymbols);
-      }),
-      15000,
-      "straddle quotes",
-    );
+    const straddleQuotes = await getQuotes(straddleSymbols);
 
     const callMid =
-      (quotes[straddleSymbols[0]].bidPrice +
-        quotes[straddleSymbols[0]].askPrice) /
+      (straddleQuotes[straddleSymbols[0]].bidPrice +
+        straddleQuotes[straddleSymbols[0]].askPrice) /
       2;
     const putMid =
-      (quotes[straddleSymbols[1]].bidPrice +
-        quotes[straddleSymbols[1]].askPrice) /
+      (straddleQuotes[straddleSymbols[1]].bidPrice +
+        straddleQuotes[straddleSymbols[1]].askPrice) /
       2;
     const straddleMid = callMid + putMid;
     const atmStrike = parseFloat(atmCall["strike-price"]);
 
-    const { error } = await withTimeout(
+    const { error: straddleError } = await withTimeout(
       supabase.from("straddle_snapshots").insert({
         spx_ref: spxMid,
         atm_strike: atmStrike,
-        call_bid: quotes[straddleSymbols[0]].bidPrice,
-        call_ask: quotes[straddleSymbols[0]].askPrice,
-        put_bid: quotes[straddleSymbols[1]].bidPrice,
-        put_ask: quotes[straddleSymbols[1]].askPrice,
+        call_bid: straddleQuotes[straddleSymbols[0]].bidPrice,
+        call_ask: straddleQuotes[straddleSymbols[0]].askPrice,
+        put_bid: straddleQuotes[straddleSymbols[1]].bidPrice,
+        put_ask: straddleQuotes[straddleSymbols[1]].askPrice,
         straddle_mid: straddleMid,
       }),
       10000,
-      "Supabase insert",
+      "straddle insert",
     );
 
-    if (error) {
-      console.error(`[${nowCT()}] Supabase error:`, error.message);
+    if (straddleError) {
+      console.error(
+        `[${nowCT()}] Straddle insert error:`,
+        straddleError.message,
+      );
     } else {
       console.log(
-        `[${nowCT()}] SPX ref: ${spxMid.toFixed(2)} | ATM strike: ${atmStrike} | Straddle: ${straddleMid.toFixed(2)}`,
+        `[${nowCT()}] SPX ref: ${spxMid.toFixed(2)} | ATM: ${atmStrike} | Straddle: ${straddleMid.toFixed(2)}`,
       );
+    }
+
+    // Check for active RTM session today
+    const { data: sessions } = await supabase
+      .from("rtm_sessions")
+      .select("*")
+      .gte("created_at", `${today}T00:00:00`)
+      .lt("created_at", `${today}T23:59:59`)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    const session = sessions?.[0] ?? null;
+
+    if (!session) return;
+
+    const smlStrike = session.sml_ref;
+    const sessionWidths = session.widths ?? [];
+    const optType = session.type === "put" ? "P" : "C";
+
+    if (!smlStrike || sessionWidths.length === 0) return;
+
+    // Collect all unique strikes needed across all widths
+    const flyStrikeSet = new Set();
+    for (const width of sessionWidths) {
+      flyStrikeSet.add(smlStrike - width);
+      flyStrikeSet.add(smlStrike);
+      flyStrikeSet.add(smlStrike + width);
+    }
+    const flyStrikes = [...flyStrikeSet];
+
+    // Get streamer symbols for all fly strikes
+    const flySymbols = flyStrikes
+      .map((s) => getStreamerSymbol(s, optType))
+      .filter(Boolean);
+
+    if (flySymbols.length === 0) {
+      console.log(`[${nowCT()}] No fly symbols found, skipping fly snapshots.`);
+      return;
+    }
+
+    // Fetch all fly quotes in one batch
+    const flyQuotes = await getQuotes(flySymbols);
+
+    // Helper to get mid/bid/ask for a given strike
+    function getFlyLegPrices(strike) {
+      const symbol = getStreamerSymbol(strike, optType);
+      const quote = flyQuotes[symbol];
+      if (!quote) return null;
+      return {
+        bid: quote.bidPrice,
+        ask: quote.askPrice,
+        mid: (quote.bidPrice + quote.askPrice) / 2,
+      };
+    }
+
+    // Compute and insert fly snapshot for each width
+    for (const width of sessionWidths) {
+      const lower = getFlyLegPrices(smlStrike - width);
+      const center = getFlyLegPrices(smlStrike);
+      const upper = getFlyLegPrices(smlStrike + width);
+
+      if (!lower || !center || !upper) {
+        console.log(`[${nowCT()}] Missing quotes for ${width}W fly, skipping.`);
+        continue;
+      }
+
+      const flyMid = lower.mid + upper.mid - 2 * center.mid;
+      const flyBid = lower.bid + upper.bid - 2 * center.ask;
+      const flyAsk = lower.ask + upper.ask - 2 * center.bid;
+
+      const { error: flyError } = await withTimeout(
+        supabase.from("sml_fly_snapshots").insert({
+          session_id: session.id,
+          width,
+          mid: flyMid,
+          bid: flyBid,
+          ask: flyAsk,
+        }),
+        10000,
+        `fly insert ${width}W`,
+      );
+
+      if (flyError) {
+        console.error(
+          `[${nowCT()}] Fly insert error (${width}W):`,
+          flyError.message,
+        );
+      } else {
+        console.log(
+          `[${nowCT()}] Fly ${width}W | bid: ${flyBid.toFixed(2)} | mid: ${flyMid.toFixed(2)} | ask: ${flyAsk.toFixed(2)}`,
+        );
+      }
     }
   } catch (err) {
     console.error(`[${nowCT()}] Cycle error:`, err.message);
@@ -195,14 +304,12 @@ async function runAndScheduleNext() {
   setTimeout(runAndScheduleNext, 60 * 1000);
 }
 
-// Connect once at startup, run cycles, disconnect on exit
 console.log(`[${nowCT()}] Starting poller...`);
 await client.quoteStreamer.connect();
 console.log(`[${nowCT()}] DXLink connected.`);
 
 runAndScheduleNext();
 
-// Graceful shutdown on Ctrl+C
 process.on("SIGINT", async () => {
   console.log(`\n[${nowCT()}] Shutting down...`);
   await client.quoteStreamer.disconnect();
