@@ -108,7 +108,9 @@ async function runCycle() {
     );
 
     if (todayOptions.length === 0) {
-      console.log(`[${nowCT()}] No SPXW options found for today, skipping.`);
+      console.log(
+        `[${nowCT()}] Nenhuma opção SPXW encontrada, tentaremos mais tarde.`,
+      );
       return;
     }
 
@@ -237,7 +239,9 @@ async function runCycle() {
       .filter(Boolean);
 
     if (flySymbols.length === 0) {
-      console.log(`[${nowCT()}] No fly symbols found, skipping fly snapshots.`);
+      console.log(
+        `[${nowCT()}] Nenhum 'fly symbol' encontrado, tentaremos mais tarde.`,
+      );
       return;
     }
 
@@ -263,7 +267,9 @@ async function runCycle() {
       const upper = getFlyLegPrices(smlStrike + width);
 
       if (!lower || !center || !upper) {
-        console.log(`[${nowCT()}] Missing quotes for ${width}W fly, skipping.`);
+        console.log(
+          `[${nowCT()}] Quotes para ${width}W fly não encontradas, tentaremos mais tarde.`,
+        );
         continue;
       }
 
@@ -304,14 +310,14 @@ async function runAndScheduleNext() {
   setTimeout(runAndScheduleNext, 60 * 1000);
 }
 
-console.log(`[${nowCT()}] Starting poller...`);
+console.log(`[${nowCT()}] Inicializando servidor...`);
 await client.quoteStreamer.connect();
-console.log(`[${nowCT()}] DXLink connected.`);
+console.log(`[${nowCT()}] DXLink conectado com sucesso.`);
 
 runAndScheduleNext();
 
 process.on("SIGINT", async () => {
-  console.log(`\n[${nowCT()}] Shutting down...`);
+  console.log(`\n[${nowCT()}] Desligando..`);
   await client.quoteStreamer.disconnect();
   process.exit(0);
 });
