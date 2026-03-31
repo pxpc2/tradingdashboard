@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
+import { FaTrashAlt } from "react-icons/fa";
 
 type Position = {
   id: string;
@@ -262,12 +263,12 @@ export default function PositionsView({ spxPrice }: { spxPrice: number }) {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <span className="text-xs text-[#444] uppercase tracking-wide">
+        <span className="text-xs text-gray-400 uppercase tracking-wide">
           Posições
         </span>
         <button
           onClick={() => setShowModal(true)}
-          className="text-xs text-[#444] border border-[#1f1f1f] rounded-sm px-3 py-1.5 hover:text-[#888] transition-colors hover:cursor-pointer"
+          className="text-xs text-gray-400 border border-[#1f1f1f] rounded-sm px-3 py-1.5 hover:border-gray-400 transition-colors hover:cursor-pointer"
         >
           + Adicionar posição
         </button>
@@ -340,9 +341,9 @@ export default function PositionsView({ spxPrice }: { spxPrice: number }) {
                         e.stopPropagation();
                         deletePosition(position.id);
                       }}
-                      className="text-xs text-[#444] hover:text-[#f87171] transition-colors"
+                      className="text-xs text-[#444] hover:text-[#f87171] hover:cursor-pointer transition-colors"
                     >
-                      ✕
+                      <FaTrashAlt />
                     </button>
                   </div>
                 </div>
