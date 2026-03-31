@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import StraddleChart from "./StraddleChart";
 import FlyChart from "./FlyChart";
+import SkewChart from "./SkewChart";
 import PositionsView from "./PositionsView";
 import LiveIndicator from "./LiveIndicator";
 
@@ -38,12 +39,24 @@ type FlySnapshot = {
   ask: number;
 };
 
+type SkewSnapshot = {
+  id: string;
+  created_at: string;
+  skew: number;
+  put_iv: number;
+  call_iv: number;
+  atm_iv: number;
+  expiration_date: string;
+  put_strike: number;
+  call_strike: number;
+};
+
 type Props = {
   initialStraddleData: StraddleSnapshot[];
   initialSmlSession: RtmSession | null;
 };
 
-const TABS = ["Straddle", "SML Fly", "Posições"] as const;
+const TABS = ["Straddle", "SML Fly", "Skew", "Posições"] as const;
 type Tab = (typeof TABS)[number];
 
 const WIDTH_OPTIONS = [10, 15, 20, 25, 30];
@@ -57,7 +70,6 @@ const WIDTH_COLORS: Record<number, string> = {
 
 function useIsTallMode() {
   const [isTall, setIsTall] = useState(false);
-
   useEffect(() => {
     function check() {
       setIsTall(window.innerHeight >= 800);
@@ -66,7 +78,6 @@ function useIsTallMode() {
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
-
   return isTall;
 }
 
@@ -81,6 +92,7 @@ export default function Dashboard({
     initialSmlSession,
   );
   const [flySnapshots, setFlySnapshots] = useState<FlySnapshot[]>([]);
+  const [skewSnapshots, setSkewSnapshots] = useState<SkewSnapshot[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
   );
@@ -94,7 +106,6 @@ export default function Dashboard({
 
   useEffect(() => {
     let cancelled = false;
-
     async function load() {
       const { data: straddleData } = await supabase
         .from("straddle_snapshots")
@@ -123,15 +134,21 @@ export default function Dashboard({
         flyData = snaps ?? [];
       }
 
+      const { data: skewData } = await supabase
+        .from("skew_snapshots")
+        .select("*")
+        .gte("created_at", `${selectedDate}T00:00:00`)
+        .lt("created_at", `${selectedDate}T23:59:59`)
+        .order("created_at", { ascending: true });
+
       if (!cancelled) {
         if (straddleData) setStraddleData(straddleData);
         setSmlSession(session);
         setFlySnapshots(flyData);
+        setSkewSnapshots(skewData ?? []);
       }
     }
-
     load();
-
     return () => {
       cancelled = true;
     };
@@ -141,23 +158,20 @@ export default function Dashboard({
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/New_York",
     });
-
     const channel = supabase
       .channel("straddle_realtime")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "straddle_snapshots" },
         (payload) => {
-          if (selectedDate === today) {
+          if (selectedDate === today)
             setStraddleData((prev) => [
               ...prev,
               payload.new as StraddleSnapshot,
             ]);
-          }
         },
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
     };
@@ -167,20 +181,37 @@ export default function Dashboard({
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/New_York",
     });
-
     const channel = supabase
       .channel("fly_realtime")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "sml_fly_snapshots" },
         (payload) => {
-          if (selectedDate === today) {
+          if (selectedDate === today)
             setFlySnapshots((prev) => [...prev, payload.new as FlySnapshot]);
-          }
         },
       )
       .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedDate]);
 
+  useEffect(() => {
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/New_York",
+    });
+    const channel = supabase
+      .channel("skew_realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "skew_snapshots" },
+        (payload) => {
+          if (selectedDate === today)
+            setSkewSnapshots((prev) => [...prev, payload.new as SkewSnapshot]);
+        },
+      )
+      .subscribe();
     return () => {
       supabase.removeChannel(channel);
     };
@@ -244,6 +275,8 @@ export default function Dashboard({
           <div className="border-t border-[#1a1a1a]" />
           <StraddleView data={straddleData} selectedDate={selectedDate} />
           <div className="border-t border-[#1a1a1a]" />
+          <SkewView data={skewSnapshots} selectedDate={selectedDate} />
+          <div className="border-t border-[#1a1a1a]" />
           <PositionsView spxPrice={latestSpx} />
         </div>
       ) : (
@@ -260,6 +293,9 @@ export default function Dashboard({
               isTall={false}
             />
           )}
+          {activeTab === "Skew" && (
+            <SkewView data={skewSnapshots} selectedDate={selectedDate} />
+          )}
           {activeTab === "Posições" && <PositionsView spxPrice={latestSpx} />}
         </div>
       )}
@@ -275,7 +311,6 @@ function StraddleView({
   selectedDate: string;
 }) {
   const latest = data[data.length - 1];
-
   return (
     <div>
       <div className="flex items-baseline gap-8 mb-6">
@@ -297,6 +332,74 @@ function StraddleView({
         </div>
       </div>
       <StraddleChart data={data} selectedDate={selectedDate} />
+    </div>
+  );
+}
+
+function SkewView({
+  data,
+  selectedDate,
+}: {
+  data: SkewSnapshot[];
+  selectedDate: string;
+}) {
+  const latest = data[data.length - 1];
+
+  const skewValues = data.map((s) => s.skew);
+  const minSkew = skewValues.length > 0 ? Math.min(...skewValues) : 0;
+  const maxSkew = skewValues.length > 0 ? Math.max(...skewValues) : 1;
+  const percentile =
+    latest && maxSkew !== minSkew
+      ? Math.round(((latest.skew - minSkew) / (maxSkew - minSkew)) * 100)
+      : null;
+
+  return (
+    <div>
+      <div className="flex items-baseline gap-8 mb-6">
+        <div>
+          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+            Skew
+          </span>
+          <span className="text-2xl font-medium">
+            {latest?.skew?.toFixed(4) ?? "—"}
+          </span>
+        </div>
+        <div>
+          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+            Put IV
+          </span>
+          <span className="text-2xl font-medium text-gray-400">
+            {latest ? `${(latest.put_iv * 100).toFixed(1)}%` : "—"}
+          </span>
+        </div>
+        <div>
+          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+            Call IV
+          </span>
+          <span className="text-2xl font-medium text-gray-400">
+            {latest ? `${(latest.call_iv * 100).toFixed(1)}%` : "—"}
+          </span>
+        </div>
+        <div>
+          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+            ATM IV
+          </span>
+          <span className="text-2xl font-medium text-gray-400">
+            {latest ? `${(latest.atm_iv * 100).toFixed(1)}%` : "—"}
+          </span>
+        </div>
+        {percentile !== null && (
+          <div>
+            <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+              Percentil
+            </span>
+            <span className="text-2xl font-medium text-gray-400">
+              {percentile}º
+            </span>
+          </div>
+        )}
+      </div>
+      <SkewChart data={data} selectedDate={selectedDate} />
     </div>
   );
 }
@@ -326,7 +429,6 @@ function SmlFlyView({
   async function handleSubmit() {
     if (!strike || selectedWidths.length === 0) return;
     setSubmitting(true);
-
     const { data, error } = await supabase
       .from("rtm_sessions")
       .insert({
@@ -336,7 +438,6 @@ function SmlFlyView({
       })
       .select()
       .single();
-
     if (!error && data) {
       setActiveWidth(null);
       onSessionCreated(data as RtmSession);
@@ -367,7 +468,6 @@ function SmlFlyView({
             className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-sm px-3 py-2 text-sm text-white w-full"
           />
         </div>
-
         <div className="flex flex-col gap-2">
           <div className="flex gap-1 bg-[#0a0a0a] rounded-sm p-1 w-fit">
             {(["call", "put"] as const).map((t) => (
@@ -385,7 +485,6 @@ function SmlFlyView({
             ))}
           </div>
         </div>
-
         <div className="flex flex-col gap-2">
           <span className="text-xs text-[#444] uppercase tracking-wide">
             Widths to track
@@ -406,7 +505,6 @@ function SmlFlyView({
             ))}
           </div>
         </div>
-
         <button
           onClick={handleSubmit}
           disabled={submitting || !strike || selectedWidths.length === 0}
@@ -423,7 +521,6 @@ function SmlFlyView({
 
   return (
     <div>
-      {/* Header — matches straddle style in tall mode */}
       <div className="flex items-baseline gap-8 mb-6">
         <div>
           <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
@@ -444,7 +541,6 @@ function SmlFlyView({
         </div>
       </div>
 
-      {/* Width tabs */}
       <div className="flex gap-1 bg-[#111111] rounded-sm p-1 w-fit mb-4">
         {widths.map((w) => (
           <button
@@ -473,7 +569,6 @@ function SmlFlyView({
             key={w}
             style={{ display: effectiveActiveWidth === w ? "block" : "none" }}
           >
-            {/* Metrics row — no background, no padding, matches straddle */}
             <div className="flex items-baseline justify-between mb-4">
               <div className="flex items-baseline gap-8">
                 <div>
