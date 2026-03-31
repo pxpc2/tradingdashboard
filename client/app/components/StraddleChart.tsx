@@ -8,6 +8,8 @@ import {
   ISeriesApi,
   SeriesType,
   IChartApi,
+  IPriceLine,
+  CrosshairMode,
 } from "lightweight-charts";
 
 type StraddleSnapshot = {
@@ -29,8 +31,11 @@ type Props = {
 
 export default function StraddleChart({ data, selectedDate }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
+  const straddleSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
+  const spxSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const upperLineRef = useRef<IPriceLine | null>(null);
+  const lowerLineRef = useRef<IPriceLine | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -45,11 +50,19 @@ export default function StraddleChart({ data, selectedDate }: Props) {
         horzLines: { color: "#1a1a1a" },
       },
       crosshair: {
+        mode: CrosshairMode.Magnet,
         vertLine: { color: "#333333" },
         horzLine: { color: "#333333" },
       },
-      rightPriceScale: {
+      leftPriceScale: {
+        visible: true,
         borderColor: "#1f1f1f",
+        textColor: "#444444",
+      },
+      rightPriceScale: {
+        visible: true,
+        borderColor: "#1f1f1f",
+        textColor: "#444444",
       },
       localization: {
         timeFormatter: (time: number) => {
@@ -78,14 +91,28 @@ export default function StraddleChart({ data, selectedDate }: Props) {
       height: 400,
     });
 
-    const series = chart.addSeries(LineSeries, {
+    // Straddle — right axis
+    const straddleSeries = chart.addSeries(LineSeries, {
       color: "#DEDEDE",
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,
+      priceScaleId: "right",
+      title: "Straddle",
     });
 
-    seriesRef.current = series;
+    // SPX — left axis
+    const spxSeries = chart.addSeries(LineSeries, {
+      color: "#555555",
+      lineWidth: 1,
+      priceLineVisible: false,
+      lastValueVisible: true,
+      priceScaleId: "left",
+      title: "SPX",
+    });
+
+    straddleSeriesRef.current = straddleSeries;
+    spxSeriesRef.current = spxSeries;
     chartRef.current = chart;
 
     const handleResize = () => {
@@ -102,9 +129,14 @@ export default function StraddleChart({ data, selectedDate }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!seriesRef.current || !chartRef.current) return;
+    if (
+      !straddleSeriesRef.current ||
+      !spxSeriesRef.current ||
+      !chartRef.current
+    )
+      return;
 
-    const points = data
+    const straddlePoints = data
       .map((snapshot) => ({
         time: Math.floor(
           new Date(snapshot.created_at).getTime() / 1000,
@@ -115,7 +147,59 @@ export default function StraddleChart({ data, selectedDate }: Props) {
         (point, index, arr) => index === 0 || point.time > arr[index - 1].time,
       );
 
-    seriesRef.current.setData(points);
+    const spxPoints = data
+      .map((snapshot) => ({
+        time: Math.floor(
+          new Date(snapshot.created_at).getTime() / 1000,
+        ) as UTCTimestamp,
+        value: snapshot.spx_ref,
+      }))
+      .filter(
+        (point, index, arr) => index === 0 || point.time > arr[index - 1].time,
+      );
+
+    straddleSeriesRef.current.setData(straddlePoints);
+    spxSeriesRef.current.setData(spxPoints);
+
+    // Remove existing expected move lines
+    if (upperLineRef.current) {
+      try {
+        spxSeriesRef.current.removePriceLine(upperLineRef.current);
+      } catch {}
+      upperLineRef.current = null;
+    }
+    if (lowerLineRef.current) {
+      try {
+        spxSeriesRef.current.removePriceLine(lowerLineRef.current);
+      } catch {}
+      lowerLineRef.current = null;
+    }
+
+    // Add opening expected move lines on SPX series (left axis)
+    if (data.length > 0) {
+      const openingStraddle = data[0].straddle_mid;
+      const openingStrike = data[0].atm_strike;
+      const upperExpectedMove = openingStrike + openingStraddle;
+      const lowerExpectedMove = openingStrike - openingStraddle;
+
+      upperLineRef.current = spxSeriesRef.current.createPriceLine({
+        price: upperExpectedMove,
+        color: "#4a2a2a",
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: `Opening EM High`,
+      });
+
+      lowerLineRef.current = spxSeriesRef.current.createPriceLine({
+        price: lowerExpectedMove,
+        color: "#4a2a2a",
+        lineWidth: 1,
+        lineStyle: 2,
+        axisLabelVisible: true,
+        title: `Opening EM Low`,
+      });
+    }
 
     const marketOpen = Math.floor(
       new Date(`${selectedDate}T13:30:00Z`).getTime() / 1000,
@@ -130,7 +214,7 @@ export default function StraddleChart({ data, selectedDate }: Props) {
         to: marketClose,
       });
     } catch {
-      // chart not ready yet, skip
+      // chart not ready yet
     }
   }, [data, selectedDate]);
 
