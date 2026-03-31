@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import StraddleChart from "./StraddleChart";
 import FlyChart from "./FlyChart";
+import PositionsView from "./PositionsView";
 
 type StraddleSnapshot = {
   id: string;
@@ -41,7 +42,7 @@ type Props = {
   initialSmlSession: RtmSession | null;
 };
 
-const TABS = ["Straddle", "SML Fly", "SAL Fly"] as const;
+const TABS = ["Straddle", "SML Fly", "Posições"] as const;
 type Tab = (typeof TABS)[number];
 
 const WIDTH_OPTIONS = [10, 15, 20, 25, 30];
@@ -73,7 +74,6 @@ export default function Dashboard({
   initialSmlSession,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("Straddle");
-  const [activeFlyTab, setActiveFlyTab] = useState<"SML" | "SAL">("SML");
   const [straddleData, setStraddleData] =
     useState<StraddleSnapshot[]>(initialStraddleData);
   const [smlSession, setSmlSession] = useState<RtmSession | null>(
@@ -84,6 +84,8 @@ export default function Dashboard({
     new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
   );
   const isTall = useIsTallMode();
+
+  const latestSpx = straddleData[straddleData.length - 1]?.spx_ref ?? 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -130,7 +132,6 @@ export default function Dashboard({
     };
   }, [selectedDate]);
 
-  // Realtime for straddle
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/New_York",
@@ -157,7 +158,6 @@ export default function Dashboard({
     };
   }, [selectedDate]);
 
-  // Realtime for fly snapshots
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/New_York",
@@ -184,25 +184,7 @@ export default function Dashboard({
   return (
     <div className="max-w-7xl mx-auto px-6 py-6">
       <div className="flex items-center justify-between mb-6">
-        {isTall ? (
-          <div className="flex gap-1 rounded-sm bg-[#111111] p-1">
-            {(["SML Fly", "SAL Fly"] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() =>
-                  setActiveFlyTab(tab === "SML Fly" ? "SML" : "SAL")
-                }
-                className={`px-5 py-2 rounded-sm text-sm font-medium transition-colors ${
-                  activeFlyTab === (tab === "SML Fly" ? "SML" : "SAL")
-                    ? "bg-[#1f1f1f] text-white"
-                    : "text-[#444444] hover:cursor-pointer hover:text-[#888888]"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        ) : (
+        {!isTall && (
           <div className="flex gap-1 rounded-sm bg-[#111111] p-1">
             {TABS.map((tab) => (
               <button
@@ -243,12 +225,13 @@ export default function Dashboard({
               session={smlSession}
               onSessionCreated={setSmlSession}
               selectedDate={selectedDate}
-              type={activeFlyTab}
               flySnapshots={flySnapshots}
             />
           </div>
           <div className="border-t border-[#1a1a1a]" />
           <StraddleView data={straddleData} selectedDate={selectedDate} />
+          <div className="border-t border-[#1a1a1a]" />
+          <PositionsView spxPrice={latestSpx} />
         </div>
       ) : (
         <div>
@@ -260,19 +243,10 @@ export default function Dashboard({
               session={smlSession}
               onSessionCreated={setSmlSession}
               selectedDate={selectedDate}
-              type="SML"
               flySnapshots={flySnapshots}
             />
           )}
-          {activeTab === "SAL Fly" && (
-            <SmlFlyView
-              session={smlSession}
-              onSessionCreated={setSmlSession}
-              selectedDate={selectedDate}
-              type="SAL"
-              flySnapshots={flySnapshots}
-            />
-          )}
+          {activeTab === "Posições" && <PositionsView spxPrice={latestSpx} />}
         </div>
       )}
     </div>
@@ -317,13 +291,11 @@ function SmlFlyView({
   session,
   onSessionCreated,
   selectedDate,
-  type,
   flySnapshots,
 }: {
   session: RtmSession | null;
   onSessionCreated: (session: RtmSession) => void;
   selectedDate: string;
-  type: "SML" | "SAL";
   flySnapshots: FlySnapshot[];
 }) {
   const [strike, setStrike] = useState("");
@@ -339,22 +311,13 @@ function SmlFlyView({
     if (!strike || selectedWidths.length === 0) return;
     setSubmitting(true);
 
-    const insertData =
-      type === "SML"
-        ? {
-            sml_ref: parseFloat(strike),
-            widths: selectedWidths,
-            type: optionType,
-          }
-        : {
-            sal_ref: parseFloat(strike),
-            widths: selectedWidths,
-            type: optionType,
-          };
-
     const { data, error } = await supabase
       .from("rtm_sessions")
-      .insert(insertData)
+      .insert({
+        sml_ref: parseFloat(strike),
+        widths: selectedWidths,
+        type: optionType,
+      })
       .select()
       .single();
 
@@ -371,15 +334,14 @@ function SmlFlyView({
     );
   }
 
-  const sessionRef = type === "SML" ? session?.sml_ref : session?.sal_ref;
-  const hasSession = sessionRef != null;
+  const hasSession = session?.sml_ref != null;
 
   if (!hasSession) {
     return (
       <div className="flex flex-col gap-5 max-w-sm">
         <div className="flex flex-col gap-2">
           <span className="text-xs text-[#444] uppercase tracking-wide">
-            {type} strike
+            SML strike
           </span>
           <input
             type="number"
@@ -410,7 +372,7 @@ function SmlFlyView({
 
         <div className="flex flex-col gap-2">
           <span className="text-xs text-[#444] uppercase tracking-wide">
-            WIDTHS p/ acompanhar:
+            Widths to track
           </span>
           <div className="flex gap-2 flex-wrap">
             {WIDTH_OPTIONS.map((w) => (
@@ -434,13 +396,13 @@ function SmlFlyView({
           disabled={submitting || !strike || selectedWidths.length === 0}
           className="bg-white text-black text-sm font-medium py-2 px-6 rounded-sm hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:cursor-pointer"
         >
-          {submitting ? "Inicializando sessão..." : "Criar RTM session pro dia"}
+          {submitting ? "Starting..." : "Start tracking"}
         </button>
       </div>
     );
   }
 
-  const smlStrike = sessionRef ?? 0;
+  const smlStrike = session.sml_ref ?? 0;
   const sessionType = session?.type ?? "call";
 
   return (
@@ -546,14 +508,6 @@ function SmlFlyView({
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function FlyView({ type }: { type: "SAL" }) {
-  return (
-    <div className="bg-[#1A1A1A] rounded-sm p-4 h-96 flex items-center justify-center text-gray-500">
-      {type} P&L Chart
     </div>
   );
 }

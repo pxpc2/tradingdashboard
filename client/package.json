@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.99.3",
+    "@tastytrade/api": "^7.0.1",
+    "black-scholes": "^1.1.0",
     "dotenv": "^17.3.1",
     "lightweight-charts": "^5.1.0",
     "next": "16.2.1",
