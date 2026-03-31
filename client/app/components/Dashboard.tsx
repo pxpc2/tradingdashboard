@@ -5,6 +5,7 @@ import { supabase } from "../lib/supabase";
 import StraddleChart from "./StraddleChart";
 import FlyChart from "./FlyChart";
 import PositionsView from "./PositionsView";
+import LiveIndicator from "./LiveIndicator";
 
 type StraddleSnapshot = {
   id: string;
@@ -86,6 +87,10 @@ export default function Dashboard({
   const isTall = useIsTallMode();
 
   const latestSpx = straddleData[straddleData.length - 1]?.spx_ref ?? 0;
+  const lastStraddleTime =
+    straddleData[straddleData.length - 1]?.created_at ?? null;
+  const lastFlyTime = flySnapshots[flySnapshots.length - 1]?.created_at ?? null;
+  const hasActiveSession = smlSession?.sml_ref != null;
 
   useEffect(() => {
     let cancelled = false;
@@ -207,27 +212,35 @@ export default function Dashboard({
           onChange={(e) => setSelectedDate(e.target.value)}
           className="bg-[#111111] text-[#444444] border border-[#1f1f1f] rounded-sm px-2 py-1 text-sm"
         />
-        <span className="text-sm text-gray-400">
-          {new Date().toLocaleDateString("en-US", {
-            timeZone: "America/Chicago",
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          })}
-        </span>
+        <div className="flex items-center gap-3">
+          <LiveIndicator
+            lastStraddleTime={lastStraddleTime}
+            lastFlyTime={lastFlyTime}
+            hasActiveSession={hasActiveSession}
+            lastQuoteTime={null}
+            hasActivePositions={false}
+          />
+          <span className="text-sm text-gray-400">
+            {new Date().toLocaleDateString("en-US", {
+              timeZone: "America/Chicago",
+              weekday: "short",
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </span>
+        </div>
       </div>
 
       {isTall ? (
         <div className="flex flex-col gap-4">
-          <div className="bg-[#111111] rounded-sm p-4">
-            <SmlFlyView
-              session={smlSession}
-              onSessionCreated={setSmlSession}
-              selectedDate={selectedDate}
-              flySnapshots={flySnapshots}
-            />
-          </div>
+          <SmlFlyView
+            session={smlSession}
+            onSessionCreated={setSmlSession}
+            selectedDate={selectedDate}
+            flySnapshots={flySnapshots}
+            isTall={true}
+          />
           <div className="border-t border-[#1a1a1a]" />
           <StraddleView data={straddleData} selectedDate={selectedDate} />
           <div className="border-t border-[#1a1a1a]" />
@@ -244,6 +257,7 @@ export default function Dashboard({
               onSessionCreated={setSmlSession}
               selectedDate={selectedDate}
               flySnapshots={flySnapshots}
+              isTall={false}
             />
           )}
           {activeTab === "Posições" && <PositionsView spxPrice={latestSpx} />}
@@ -292,11 +306,13 @@ function SmlFlyView({
   onSessionCreated,
   selectedDate,
   flySnapshots,
+  isTall,
 }: {
   session: RtmSession | null;
   onSessionCreated: (session: RtmSession) => void;
   selectedDate: string;
   flySnapshots: FlySnapshot[];
+  isTall: boolean;
 }) {
   const [strike, setStrike] = useState("");
   const [optionType, setOptionType] = useState<"call" | "put">("call");
@@ -396,7 +412,7 @@ function SmlFlyView({
           disabled={submitting || !strike || selectedWidths.length === 0}
           className="bg-white text-black text-sm font-medium py-2 px-6 rounded-sm hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:cursor-pointer"
         >
-          {submitting ? "Starting..." : "Start tracking"}
+          {submitting ? "Iniciando..." : "Iniciar tracking"}
         </button>
       </div>
     );
@@ -407,21 +423,29 @@ function SmlFlyView({
 
   return (
     <div>
-      <div className="flex items-center gap-6 mb-4">
+      {/* Header — matches straddle style in tall mode */}
+      <div className="flex items-baseline gap-8 mb-6">
         <div>
-          <span className="text-base font-medium">
+          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+            SML
+          </span>
+          <span className="text-2xl font-medium">
             {smlStrike}
             {sessionType === "call" ? "C" : "P"}
           </span>
         </div>
         <div>
-          <span className="text-sm text-[#888]">
+          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+            Widths
+          </span>
+          <span className="text-2xl font-medium text-gray-400">
             {widths.map((w) => `${w}W`).join(" · ")}
           </span>
         </div>
       </div>
 
-      <div className="flex gap-1 bg-[#0a0a0a] rounded-sm p-1 w-fit mb-4">
+      {/* Width tabs */}
+      <div className="flex gap-1 bg-[#111111] rounded-sm p-1 w-fit mb-4">
         {widths.map((w) => (
           <button
             key={w}
@@ -449,62 +473,61 @@ function SmlFlyView({
             key={w}
             style={{ display: effectiveActiveWidth === w ? "block" : "none" }}
           >
-            <div className="bg-[#0a0a0a] rounded-sm p-4">
-              <div className="flex items-baseline justify-between mb-4">
-                <div className="flex items-baseline gap-8">
-                  <div>
-                    <div className="text-xs text-[#444] uppercase tracking-wide mb-1">
-                      PnL
-                    </div>
-                    <div
-                      className="text-2xl font-medium"
-                      style={{
-                        color:
-                          pnl === null
-                            ? "#888"
-                            : pnl >= 0
-                              ? "#4ade80"
-                              : "#f87171",
-                      }}
-                    >
-                      {pnl === null
-                        ? "—"
-                        : `${pnl >= 0 ? "+" : ""}$${(pnl * 100).toFixed(0)}`}
-                    </div>
+            {/* Metrics row — no background, no padding, matches straddle */}
+            <div className="flex items-baseline justify-between mb-4">
+              <div className="flex items-baseline gap-8">
+                <div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
+                    PnL
                   </div>
-                  <div>
-                    <div className="text-xs text-[#444] uppercase tracking-wide mb-1">
-                      Entry mid
-                    </div>
-                    <div className="text-sm font-medium text-[#888]">
-                      {entry ? entry.mid.toFixed(2) : "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-[#444] uppercase tracking-wide mb-1">
-                      Bid / Mid / Ask
-                    </div>
-                    <div className="text-sm font-medium text-[#888]">
-                      {latest
-                        ? `${latest.bid.toFixed(2)} / ${latest.mid.toFixed(2)} / ${latest.ask.toFixed(2)}`
-                        : "— / — / —"}
-                    </div>
+                  <div
+                    className="text-2xl font-medium"
+                    style={{
+                      color:
+                        pnl === null
+                          ? "#888"
+                          : pnl >= 0
+                            ? "#4ade80"
+                            : "#f87171",
+                    }}
+                  >
+                    {pnl === null
+                      ? "—"
+                      : `${pnl >= 0 ? "+" : ""}$${(pnl * 100).toFixed(0)}`}
                   </div>
                 </div>
-                <div className="text-xs text-[#444]">
-                  {smlStrike - w}
-                  {sessionType === "call" ? "C" : "P"} · {smlStrike}
-                  {sessionType === "call" ? "C" : "P"} · {smlStrike + w}
-                  {sessionType === "call" ? "C" : "P"}
+                <div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
+                    Entrada
+                  </div>
+                  <div className="text-2xl font-medium text-gray-400">
+                    {entry ? entry.mid.toFixed(2) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
+                    Bid / Mid / Ask
+                  </div>
+                  <div className="text-2xl font-medium text-gray-400">
+                    {latest
+                      ? `${latest.bid.toFixed(2)} / ${latest.mid.toFixed(2)} / ${latest.ask.toFixed(2)}`
+                      : "— / — / —"}
+                  </div>
                 </div>
               </div>
-              <FlyChart
-                data={widthSnapshots}
-                width={w}
-                color={color}
-                selectedDate={selectedDate}
-              />
+              <div className="text-xs text-[#444]">
+                {smlStrike - w}
+                {sessionType === "call" ? "C" : "P"} · {smlStrike}
+                {sessionType === "call" ? "C" : "P"} · {smlStrike + w}
+                {sessionType === "call" ? "C" : "P"}
+              </div>
             </div>
+            <FlyChart
+              data={widthSnapshots}
+              width={w}
+              color={color}
+              selectedDate={selectedDate}
+            />
           </div>
         );
       })}
