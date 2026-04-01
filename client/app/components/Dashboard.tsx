@@ -103,6 +103,8 @@ export default function Dashboard({
     straddleData[straddleData.length - 1]?.created_at ?? null;
   const lastFlyTime = flySnapshots[flySnapshots.length - 1]?.created_at ?? null;
   const hasActiveSession = smlSession?.sml_ref != null;
+  const lastSkewTime =
+    skewSnapshots[skewSnapshots.length - 1]?.created_at ?? null;
 
   useEffect(() => {
     let cancelled = false;
@@ -250,6 +252,7 @@ export default function Dashboard({
             hasActiveSession={hasActiveSession}
             lastQuoteTime={null}
             hasActivePositions={false}
+            lastSkewTime={lastSkewTime}
           />
           <span className="text-sm text-gray-400">
             {new Date().toLocaleDateString("en-US", {

@@ -15,6 +15,7 @@ type Props = {
   hasActiveSession: boolean;
   lastQuoteTime: string | null;
   hasActivePositions: boolean;
+  lastSkewTime: string | null;
 };
 
 function isRecent(timestamp: string | null): boolean {
@@ -57,6 +58,7 @@ export default function LiveIndicator({
   hasActiveSession,
   lastQuoteTime,
   hasActivePositions,
+  lastSkewTime,
 }: Props) {
   const [showTooltip, setShowTooltip] = useState(false);
   const duringMarketHours = isMarketHours();
@@ -73,6 +75,12 @@ export default function LiveIndicator({
       live: hasActiveSession && isRecent(lastFlyTime),
       lastTime: lastFlyTime,
       inactive: !hasActiveSession,
+    },
+    {
+      label: "Skew",
+      live: isRecent(lastSkewTime),
+      lastTime: lastSkewTime,
+      inactive: !duringMarketHours,
     },
     {
       label: "Posições",
