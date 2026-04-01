@@ -225,8 +225,8 @@ export default function PositionsView({ spxPrice }: { spxPrice: number }) {
 
   function computePositionSummary(position: Position) {
     const posLegs = legs[position.id] ?? [];
-    let totalEntryValue = 0;
-    let totalCurrentValue = 0;
+    let totalEntryValue = 0,
+      totalCurrentValue = 0;
     let totalDelta = 0,
       totalGamma = 0,
       totalTheta = 0,
@@ -456,9 +456,29 @@ export default function PositionsView({ spxPrice }: { spxPrice: number }) {
         <AddPositionModal
           onClose={() => setShowModal(false)}
           onCreated={(pos, posLegs) => {
-            setPositions((prev) => [pos, ...prev]);
-            setLegs((prev) => ({ ...prev, [pos.id]: posLegs }));
+            const newPositions = [pos, ...positions];
+            const newLegs = { ...legs, [pos.id]: posLegs };
+
+            // Update state
+            setPositions(newPositions);
+            setLegs(newLegs);
+
+            // Update refs immediately so fetchQuotes uses fresh data
+            positionsRef.current = newPositions;
+            legsRef.current = newLegs;
+
             setShowModal(false);
+
+            // Fetch quotes immediately for the new position only
+            (async () => {
+              const symbols = [
+                ...new Set(posLegs.map((l) => l.streamer_symbol)),
+              ];
+              const fetchedQuotes = await fetchQuotesForSymbols(symbols);
+              if (Object.keys(fetchedQuotes).length > 0) {
+                setQuotes((prev) => ({ ...prev, ...fetchedQuotes }));
+              }
+            })();
           }}
         />
       )}
@@ -505,7 +525,6 @@ function AddPositionModal({
     setLegForms((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], [field]: value };
-
       if (["expiration_date", "strike", "opt_type"].includes(field)) {
         const leg = next[index];
         const exp = leg.expiration_date;
