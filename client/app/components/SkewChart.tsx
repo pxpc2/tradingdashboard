@@ -75,7 +75,7 @@ export default function SkewChart({ data, selectedDate }: Props) {
         },
       },
       width: containerRef.current.clientWidth,
-      height: 200,
+      height: 400,
     });
 
     const series = chart.addSeries(AreaSeries, {

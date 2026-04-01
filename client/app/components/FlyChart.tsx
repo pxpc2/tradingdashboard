@@ -75,7 +75,7 @@ export default function FlyChart({ data, width, color, selectedDate }: Props) {
         },
       },
       width: containerRef.current.clientWidth,
-      height: 300,
+      height: 400,
     });
 
     const series = chart.addSeries(AreaSeries, {
