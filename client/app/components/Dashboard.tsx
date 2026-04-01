@@ -570,7 +570,12 @@ function SmlFlyView({
         return (
           <div
             key={w}
-            style={{ display: effectiveActiveWidth === w ? "block" : "none" }}
+            style={{
+              display: effectiveActiveWidth === w ? "block" : "block",
+              visibility: effectiveActiveWidth === w ? "visible" : "hidden",
+              height: effectiveActiveWidth === w ? "auto" : "0",
+              overflow: "hidden",
+            }}
           >
             <div className="flex items-baseline justify-between mb-4">
               <div className="flex items-baseline gap-8">
