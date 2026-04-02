@@ -541,26 +541,6 @@ function SmlFlyView({
 
   return (
     <div>
-      <div className="flex items-baseline gap-8 mb-6">
-        <div>
-          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
-            SML
-          </span>
-          <span className="text-2xl font-medium">
-            {smlStrike}
-            {sessionType === "call" ? "C" : "P"}
-          </span>
-        </div>
-        <div>
-          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
-            Widths
-          </span>
-          <span className="text-2xl font-medium text-gray-400">
-            {widths.map((w) => `${w}W`).join(" · ")}
-          </span>
-        </div>
-      </div>
-
       <div className="flex gap-1 bg-[#111111] rounded-sm p-1 w-fit mb-4">
         {widths.map((w) => (
           <button
