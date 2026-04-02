@@ -315,6 +315,20 @@ function StraddleView({
 }) {
   const latest = data[data.length - 1];
   const opening = data[0];
+  const [pdh, setPdh] = useState<number | null>(null);
+  const [pdl, setPdl] = useState<number | null>(null);
+
+  useEffect(() => {
+    async function fetchPdhl() {
+      try {
+        const res = await fetch("/api/pdhl");
+        const data = await res.json();
+        if (data.pdh) setPdh(data.pdh);
+        if (data.pdl) setPdl(data.pdl);
+      } catch {}
+    }
+    fetchPdhl();
+  }, [selectedDate]);
 
   const impliedMovePct =
     opening && opening.spx_ref > 0
@@ -351,7 +365,12 @@ function StraddleView({
           </div>
         )}
       </div>
-      <StraddleChart data={data} selectedDate={selectedDate} />
+      <StraddleChart
+        data={data}
+        selectedDate={selectedDate}
+        pdh={pdh}
+        pdl={pdl}
+      />
     </div>
   );
 }

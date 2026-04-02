@@ -27,15 +27,19 @@ type StraddleSnapshot = {
 type Props = {
   data: StraddleSnapshot[];
   selectedDate: string;
+  pdh?: number | null;
+  pdl?: number | null;
 };
 
-export default function StraddleChart({ data, selectedDate }: Props) {
+export default function StraddleChart({ data, selectedDate, pdh, pdl }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const straddleSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const spxSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const upperLineRef = useRef<IPriceLine | null>(null);
   const lowerLineRef = useRef<IPriceLine | null>(null);
+  const pdhLineRef = useRef<IPriceLine | null>(null);
+  const pdlLineRef = useRef<IPriceLine | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -91,7 +95,6 @@ export default function StraddleChart({ data, selectedDate }: Props) {
       height: 400,
     });
 
-    // Straddle — right axis
     const straddleSeries = chart.addSeries(LineSeries, {
       color: "#DEDEDE",
       lineWidth: 1,
@@ -101,7 +104,6 @@ export default function StraddleChart({ data, selectedDate }: Props) {
       title: "Straddle",
     });
 
-    // SPX — left axis
     const spxSeries = chart.addSeries(LineSeries, {
       color: "#555555",
       lineWidth: 1,
@@ -128,6 +130,7 @@ export default function StraddleChart({ data, selectedDate }: Props) {
     };
   }, []);
 
+  // Update data and expected move lines
   useEffect(() => {
     if (
       !straddleSeriesRef.current ||
@@ -161,7 +164,7 @@ export default function StraddleChart({ data, selectedDate }: Props) {
     straddleSeriesRef.current.setData(straddlePoints);
     spxSeriesRef.current.setData(spxPoints);
 
-    // Remove existing expected move lines
+    // Remove and re-add expected move lines
     if (upperLineRef.current) {
       try {
         spxSeriesRef.current.removePriceLine(upperLineRef.current);
@@ -175,29 +178,26 @@ export default function StraddleChart({ data, selectedDate }: Props) {
       lowerLineRef.current = null;
     }
 
-    // Add opening expected move lines on SPX series (left axis)
     if (data.length > 0) {
       const openingStraddle = data[0].straddle_mid;
       const openingStrike = data[0].atm_strike;
-      const upperExpectedMove = openingStrike + openingStraddle;
-      const lowerExpectedMove = openingStrike - openingStraddle;
 
       upperLineRef.current = spxSeriesRef.current.createPriceLine({
-        price: upperExpectedMove,
+        price: openingStrike + openingStraddle,
         color: "#4a2a2a",
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
-        title: `Implied High`,
+        title: "Implied High",
       });
 
       lowerLineRef.current = spxSeriesRef.current.createPriceLine({
-        price: lowerExpectedMove,
+        price: openingStrike - openingStraddle,
         color: "#4a2a2a",
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
-        title: `Implied Low`,
+        title: "Implied Low",
       });
     }
 
@@ -209,14 +209,51 @@ export default function StraddleChart({ data, selectedDate }: Props) {
     ) as UTCTimestamp;
 
     try {
-      chartRef.current.timeScale().setVisibleRange({
-        from: marketOpen,
-        to: marketClose,
-      });
-    } catch {
-      // chart not ready yet
-    }
+      chartRef.current
+        .timeScale()
+        .setVisibleRange({ from: marketOpen, to: marketClose });
+    } catch {}
   }, [data, selectedDate]);
+
+  // PDH/PDL lines — separate effect so they update independently
+  useEffect(() => {
+    if (!spxSeriesRef.current) return;
+
+    if (pdhLineRef.current) {
+      try {
+        spxSeriesRef.current.removePriceLine(pdhLineRef.current);
+      } catch {}
+      pdhLineRef.current = null;
+    }
+    if (pdlLineRef.current) {
+      try {
+        spxSeriesRef.current.removePriceLine(pdlLineRef.current);
+      } catch {}
+      pdlLineRef.current = null;
+    }
+
+    if (pdh) {
+      pdhLineRef.current = spxSeriesRef.current.createPriceLine({
+        price: pdh,
+        color: "#111111",
+        lineWidth: 1,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: "PDH",
+      });
+    }
+
+    if (pdl) {
+      pdlLineRef.current = spxSeriesRef.current.createPriceLine({
+        price: pdl,
+        color: "#111111",
+        lineWidth: 1,
+        lineStyle: 0,
+        axisLabelVisible: true,
+        title: "PDL",
+      });
+    }
+  }, [pdh, pdl]);
 
   return (
     <div ref={containerRef} className="w-full rounded-sm overflow-hidden" />
