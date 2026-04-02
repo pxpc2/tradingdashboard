@@ -66,6 +66,7 @@ function isMarketHours() {
 }
 
 let openCycleFiredDate = null;
+let skewCycleCount = 0;
 
 function shouldFireOpenCycle() {
   const day = getETDay();
@@ -205,7 +206,6 @@ function invertIV(S, K, T, r, marketPrice, isCall) {
   return iv;
 }
 
-// Find strike closest to target delta given vol surface estimate
 function findDeltaStrike(strikes, S, T, r, targetDelta, isCall, sigmaEstimate) {
   let bestStrike = null;
   let bestDiff = Infinity;
@@ -220,7 +220,6 @@ function findDeltaStrike(strikes, S, T, r, targetDelta, isCall, sigmaEstimate) {
   return bestStrike;
 }
 
-// Find expiry closest to target days out
 function findTargetExpiry(allOptions, targetDays) {
   const today = new Date();
   const expirations = [...new Set(allOptions.map((o) => o["expiration-date"]))];
@@ -238,12 +237,22 @@ function findTargetExpiry(allOptions, targetDays) {
   return bestExpiry;
 }
 
-async function computeAndStoreSkew(allOptions, spxMid, atmIV) {
+function isValidQuote(q) {
+  if (!q) return false;
+  if (q.bidPrice <= 0) return false;
+  if (q.askPrice <= q.bidPrice) return false;
+  // Reject if spread is more than 50% of mid — too wide, likely stale
+  const mid = (q.bidPrice + q.askPrice) / 2;
+  const spread = q.askPrice - q.bidPrice;
+  if (spread / mid > 0.5) return false;
+  return true;
+}
+
+async function computeAndStoreSkew(allOptions, spxMid) {
   try {
     const R = 0.05;
     const TARGET_DAYS = 30;
 
-    // Find the expiry closest to 30 days out
     const targetExpiry = findTargetExpiry(allOptions, TARGET_DAYS);
     if (!targetExpiry) {
       console.log(`[${nowCT()}] Skew: nenhum vencimento encontrado.`);
@@ -257,7 +266,6 @@ async function computeAndStoreSkew(allOptions, spxMid, atmIV) {
       0.001,
     );
 
-    // Get all strikes for target expiry (both C and P)
     const expiryOptions = allOptions.filter(
       (o) => o["expiration-date"] === targetExpiry,
     );
@@ -272,40 +280,6 @@ async function computeAndStoreSkew(allOptions, spxMid, atmIV) {
       return;
     }
 
-    // Use ATM IV as vol estimate for delta finding
-    // If atmIV not available yet, use a reasonable default
-    const sigmaEstimate = atmIV > 0 ? atmIV : 0.15;
-
-    // Find 25-delta put strike (below spot, target delta = -0.25)
-    const putStrikes = strikes.filter((k) => k < spxMid);
-    const put25Strike = findDeltaStrike(
-      putStrikes,
-      spxMid,
-      T,
-      R,
-      -0.25,
-      false,
-      sigmaEstimate,
-    );
-
-    // Find 25-delta call strike (above spot, target delta = +0.25)
-    const callStrikes = strikes.filter((k) => k > spxMid);
-    const call25Strike = findDeltaStrike(
-      callStrikes,
-      spxMid,
-      T,
-      R,
-      0.25,
-      true,
-      sigmaEstimate,
-    );
-
-    if (!put25Strike || !call25Strike) {
-      console.log(`[${nowCT()}] Skew: strikes 25-delta não encontrados.`);
-      return;
-    }
-
-    // Get streamer symbols for 25d put and call
     function getSkewSymbol(strike, optType) {
       const opt = expiryOptions.find(
         (o) =>
@@ -315,52 +289,32 @@ async function computeAndStoreSkew(allOptions, spxMid, atmIV) {
       return opt?.["streamer-symbol"] ?? null;
     }
 
-    const put25Symbol = getSkewSymbol(put25Strike, "P");
-    const call25Symbol = getSkewSymbol(call25Strike, "C");
-
-    if (!put25Symbol || !call25Symbol) {
-      console.log(`[${nowCT()}] Skew: símbolos não encontrados.`);
-      return;
-    }
-
-    // Also get ATM strike for this expiry for ATM IV computation
+    // Step 1 — find ATM strike for this expiry and fetch its quotes first
     const atmStrikeForExpiry = strikes.reduce((prev, curr) =>
       Math.abs(curr - spxMid) < Math.abs(prev - spxMid) ? curr : prev,
     );
     const atmCallSymbol = getSkewSymbol(atmStrikeForExpiry, "C");
     const atmPutSymbol = getSkewSymbol(atmStrikeForExpiry, "P");
 
-    const symbolsToFetch = [
-      ...new Set(
-        [put25Symbol, call25Symbol, atmCallSymbol, atmPutSymbol].filter(
-          Boolean,
-        ),
-      ),
-    ];
-
-    // Fetch all quotes in one batch
-    const skewQuotes = await getQuotes(symbolsToFetch);
-
-    // Compute mids
-    function getMid(symbol) {
-      const q = skewQuotes[symbol];
-      if (!q) return null;
-      return (q.bidPrice + q.askPrice) / 2;
-    }
-
-    const put25Mid = getMid(put25Symbol);
-    const call25Mid = getMid(call25Symbol);
-    const atmCallMid = getMid(atmCallSymbol);
-    const atmPutMid = getMid(atmPutSymbol);
-
-    if (!put25Mid || !call25Mid || !atmCallMid || !atmPutMid) {
-      console.log(`[${nowCT()}] Skew: quotes insuficientes.`);
+    if (!atmCallSymbol || !atmPutSymbol) {
+      console.log(`[${nowCT()}] Skew: símbolos ATM não encontrados.`);
       return;
     }
 
-    // BSM invert to get IVs
-    const putIV = invertIV(spxMid, put25Strike, T, R, put25Mid, false);
-    const callIV = invertIV(spxMid, call25Strike, T, R, call25Mid, true);
+    // Fetch ATM quotes first to compute 30-day ATM IV as seed
+    const atmQuotes = await getQuotes([atmCallSymbol, atmPutSymbol]);
+
+    const atmCallQ = atmQuotes[atmCallSymbol];
+    const atmPutQ = atmQuotes[atmPutSymbol];
+
+    if (!isValidQuote(atmCallQ) || !isValidQuote(atmPutQ)) {
+      console.log(`[${nowCT()}] Skew: quotes ATM inválidas, abortando.`);
+      return;
+    }
+
+    const atmCallMid = (atmCallQ.bidPrice + atmCallQ.askPrice) / 2;
+    const atmPutMid = (atmPutQ.bidPrice + atmPutQ.askPrice) / 2;
+
     const atmCallIV = invertIV(
       spxMid,
       atmStrikeForExpiry,
@@ -379,8 +333,91 @@ async function computeAndStoreSkew(allOptions, spxMid, atmIV) {
     );
     const computedAtmIV = (atmCallIV + atmPutIV) / 2;
 
-    // Normalized skew
-    const skew = computedAtmIV > 0 ? (putIV - callIV) / computedAtmIV : 0;
+    if (computedAtmIV <= 0 || computedAtmIV > 2.0) {
+      console.log(
+        `[${nowCT()}] Skew: ATM IV inválida (${computedAtmIV.toFixed(4)}), abortando.`,
+      );
+      return;
+    }
+
+    // Step 2 — now use 30-day ATM IV as seed to find correct 25-delta strikes
+    const putStrikes = strikes.filter((k) => k < spxMid);
+    const callStrikes = strikes.filter((k) => k > spxMid);
+
+    const put25Strike = findDeltaStrike(
+      putStrikes,
+      spxMid,
+      T,
+      R,
+      -0.25,
+      false,
+      computedAtmIV,
+    );
+    const call25Strike = findDeltaStrike(
+      callStrikes,
+      spxMid,
+      T,
+      R,
+      0.25,
+      true,
+      computedAtmIV,
+    );
+
+    if (!put25Strike || !call25Strike) {
+      console.log(`[${nowCT()}] Skew: strikes 25-delta não encontrados.`);
+      return;
+    }
+
+    const put25Symbol = getSkewSymbol(put25Strike, "P");
+    const call25Symbol = getSkewSymbol(call25Strike, "C");
+
+    if (!put25Symbol || !call25Symbol) {
+      console.log(`[${nowCT()}] Skew: símbolos 25-delta não encontrados.`);
+      return;
+    }
+
+    // Step 3 — fetch 25-delta quotes
+    const wingQuotes = await getQuotes([put25Symbol, call25Symbol]);
+
+    const put25Q = wingQuotes[put25Symbol];
+    const call25Q = wingQuotes[call25Symbol];
+
+    // Validate wing quotes
+    if (!isValidQuote(put25Q) || !isValidQuote(call25Q)) {
+      console.log(`[${nowCT()}] Skew: quotes 25-delta inválidas, abortando.`);
+      return;
+    }
+
+    const put25Mid = (put25Q.bidPrice + put25Q.askPrice) / 2;
+    const call25Mid = (call25Q.bidPrice + call25Q.askPrice) / 2;
+
+    // Step 4 — invert IVs
+    const putIV = invertIV(spxMid, put25Strike, T, R, put25Mid, false);
+    const callIV = invertIV(spxMid, call25Strike, T, R, call25Mid, true);
+
+    // Step 5 — sanity check on final values
+    if (
+      putIV <= 0 ||
+      putIV > 1.5 ||
+      callIV <= 0 ||
+      callIV > 1.5 ||
+      computedAtmIV <= 0 ||
+      computedAtmIV > 1.5
+    ) {
+      console.log(
+        `[${nowCT()}] Skew: IVs fora do intervalo esperado — put: ${putIV.toFixed(4)}, call: ${callIV.toFixed(4)}, atm: ${computedAtmIV.toFixed(4)}. Descartando.`,
+      );
+      return;
+    }
+
+    const skew = (putIV - callIV) / computedAtmIV;
+
+    if (skew < 0 || skew > 2.0) {
+      console.log(
+        `[${nowCT()}] Skew: valor final fora do intervalo (${skew.toFixed(4)}). Descartando.`,
+      );
+      return;
+    }
 
     const { error } = await withTimeout(
       supabase.from("skew_snapshots").insert({
@@ -400,7 +437,7 @@ async function computeAndStoreSkew(allOptions, spxMid, atmIV) {
       console.error(`[${nowCT()}] Skew insert error:`, error.message);
     } else {
       console.log(
-        `[${nowCT()}] Skew: ${skew.toFixed(4)} | Put IV: ${(putIV * 100).toFixed(1)}% | Call IV: ${(callIV * 100).toFixed(1)}% | ATM IV: ${(computedAtmIV * 100).toFixed(1)}% | Expiry: ${targetExpiry}`,
+        `[${nowCT()}] Skew: ${skew.toFixed(4)} | Put IV: ${(putIV * 100).toFixed(1)}% | Call IV: ${(callIV * 100).toFixed(1)}% | ATM IV: ${(computedAtmIV * 100).toFixed(1)}% | Expiry: ${targetExpiry} | Strikes: ${put25Strike}P / ${call25Strike}C`,
       );
     }
   } catch (err) {
@@ -505,17 +542,6 @@ async function runCycle(isOpenCycle = false) {
       2;
     const straddleMid = callMid + putMid;
 
-    // Compute ATM IV from today's straddle for use in skew delta estimation
-    const T0dte = 1 / 365;
-    const atmIV = invertIV(
-      spxMid,
-      atmStrikePrice,
-      T0dte,
-      0.05,
-      straddleMid / 2,
-      true,
-    );
-
     const { error: straddleError } = await withTimeout(
       supabase.from("straddle_snapshots").insert({
         spx_ref: spxMid,
@@ -541,8 +567,11 @@ async function runCycle(isOpenCycle = false) {
       );
     }
 
-    // Compute and store skew using full options chain
-    await computeAndStoreSkew(options, spxMid, atmIV);
+    // Skew — throttled to every 5 cycles (~5 minutes)
+    skewCycleCount++;
+    if (skewCycleCount % 5 === 0) {
+      await computeAndStoreSkew(options, spxMid);
+    }
 
     // Check for active RTM session today
     const { data: sessions } = await supabase
@@ -641,6 +670,8 @@ async function runCycle(isOpenCycle = false) {
 async function runAndScheduleNext() {
   if (shouldFireOpenCycle()) {
     openCycleFiredDate = getTodayET();
+    // Reset skew counter on new day open
+    skewCycleCount = 0;
     console.log(`[${nowCT()}] 🔔 Disparando ciclo de abertura...`);
     await runCycle(true);
     setTimeout(runAndScheduleNext, 60 * 1000);
