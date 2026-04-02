@@ -319,6 +319,16 @@ function StraddleView({
   const [pdl, setPdl] = useState<number | null>(null);
 
   useEffect(() => {
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/New_York",
+    });
+  
+    if (selectedDate !== today) {
+      setPdh(null);
+      setPdl(null);
+      return;
+    }
+  
     async function fetchPdhl() {
       try {
         const res = await fetch("/api/pdhl");
