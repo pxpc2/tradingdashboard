@@ -82,7 +82,7 @@ export default function FlyChart({ data, width, color, selectedDate }: Props) {
       lineColor: color,
       topColor: `${color}33`,
       bottomColor: `${color}00`,
-      lineWidth: 2,
+      lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,
     });

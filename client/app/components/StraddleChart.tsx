@@ -10,6 +10,7 @@ import {
   IChartApi,
   IPriceLine,
   CrosshairMode,
+  AreaSeries,
 } from "lightweight-charts";
 
 type StraddleSnapshot = {
@@ -95,19 +96,21 @@ export default function StraddleChart({ data, selectedDate, pdh, pdl }: Props) {
       height: 400,
     });
 
-    const straddleSeries = chart.addSeries(LineSeries, {
-      color: "#DEDEDE",
+    const straddleSeries = chart.addSeries(AreaSeries, {
+      lineColor: "#9CA9FF",
+      topColor: "#9CA9FF33",
+      bottomColor: "#9CA9FF00",
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,
-      priceScaleId: "right",
       title: "Straddle",
     });
 
     const spxSeries = chart.addSeries(LineSeries, {
-      color: "#555555",
+      color: "#4D4D4D",
       lineWidth: 1,
-      priceLineVisible: false,
+      priceLineVisible: true,
+      priceLineStyle: 1,
       lastValueVisible: true,
       priceScaleId: "left",
       title: "SPX",
@@ -184,7 +187,7 @@ export default function StraddleChart({ data, selectedDate, pdh, pdl }: Props) {
 
       upperLineRef.current = spxSeriesRef.current.createPriceLine({
         price: openingStrike + openingStraddle,
-        color: "#4a2a2a",
+        color: "#006C70",
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
@@ -193,7 +196,7 @@ export default function StraddleChart({ data, selectedDate, pdh, pdl }: Props) {
 
       lowerLineRef.current = spxSeriesRef.current.createPriceLine({
         price: openingStrike - openingStraddle,
-        color: "#4a2a2a",
+        color: "#006C70",
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
@@ -235,9 +238,9 @@ export default function StraddleChart({ data, selectedDate, pdh, pdl }: Props) {
     if (pdh) {
       pdhLineRef.current = spxSeriesRef.current.createPriceLine({
         price: pdh,
-        color: "#111111",
+        color: "#265C4D",
         lineWidth: 1,
-        lineStyle: 0,
+        lineStyle: 2,
         axisLabelVisible: true,
         title: "PDH",
       });
@@ -246,9 +249,9 @@ export default function StraddleChart({ data, selectedDate, pdh, pdl }: Props) {
     if (pdl) {
       pdlLineRef.current = spxSeriesRef.current.createPriceLine({
         price: pdl,
-        color: "#111111",
+        color: "#265C4D",
         lineWidth: 1,
-        lineStyle: 0,
+        lineStyle: 2,
         axisLabelVisible: true,
         title: "PDL",
       });
