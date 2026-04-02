@@ -107,7 +107,7 @@ export default function StraddleChart({ data, selectedDate, pdh, pdl }: Props) {
     });
 
     const spxSeries = chart.addSeries(LineSeries, {
-      color: "#AD6800",
+      color: "#9E6306",
       lineWidth: 1,
       priceLineVisible: true,
       priceLineStyle: 1,
@@ -187,7 +187,7 @@ export default function StraddleChart({ data, selectedDate, pdh, pdl }: Props) {
 
       upperLineRef.current = spxSeriesRef.current.createPriceLine({
         price: openingStrike + openingStraddle,
-        color: "#006C70",
+        color: "#0A2670",
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
@@ -196,7 +196,7 @@ export default function StraddleChart({ data, selectedDate, pdh, pdl }: Props) {
 
       lowerLineRef.current = spxSeriesRef.current.createPriceLine({
         price: openingStrike - openingStraddle,
-        color: "#006C70",
+        color: "#0A2670",
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
