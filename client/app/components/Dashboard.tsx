@@ -405,18 +405,10 @@ function SkewView({
         </div>
         <div>
           <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
-            Put IV
-          </span>
-          <span className="text-2xl font-medium text-gray-400">
-            {latest ? `${(latest.put_iv * 100).toFixed(1)}%` : "—"}
-          </span>
-        </div>
-        <div>
-          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
             Call IV
           </span>
           <span className="text-2xl font-medium text-gray-400">
-            {latest ? `${(latest.call_iv * 100).toFixed(1)}%` : "—"}
+            {latest ? `${(latest.call_iv * 100).toFixed(1)}` : "—"}
           </span>
         </div>
         <div>
@@ -424,19 +416,17 @@ function SkewView({
             ATM IV
           </span>
           <span className="text-2xl font-medium text-gray-400">
-            {latest ? `${(latest.atm_iv * 100).toFixed(1)}%` : "—"}
+            {latest ? `${(latest.atm_iv * 100).toFixed(1)}` : "—"}
           </span>
         </div>
-        {percentile !== null && (
-          <div>
-            <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
-              Percentil
-            </span>
-            <span className="text-2xl font-medium text-gray-400">
-              {percentile}º
-            </span>
-          </div>
-        )}
+        <div>
+          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+            Put IV
+          </span>
+          <span className="text-2xl font-medium text-gray-400">
+            {latest ? `${(latest.put_iv * 100).toFixed(1)}` : "—"}
+          </span>
+        </div>
       </div>
       <SkewChart data={data} selectedDate={selectedDate} />
     </div>
@@ -597,26 +587,6 @@ function SmlFlyView({
               <div className="flex items-baseline gap-8">
                 <div>
                   <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
-                    PnL
-                  </div>
-                  <div
-                    className="text-2xl font-medium"
-                    style={{
-                      color:
-                        pnl === null
-                          ? "#888"
-                          : pnl >= 0
-                            ? "#4ade80"
-                            : "#f87171",
-                    }}
-                  >
-                    {pnl === null
-                      ? "—"
-                      : `${pnl >= 0 ? "+" : ""}$${(pnl * 100).toFixed(0)}`}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
                     Entrada
                   </div>
                   <div className="text-2xl font-medium text-gray-400">
@@ -631,6 +601,16 @@ function SmlFlyView({
                     {latest
                       ? `${latest.bid.toFixed(2)} / ${latest.mid.toFixed(2)} / ${latest.ask.toFixed(2)}`
                       : "— / — / —"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
+                    PnL
+                  </div>
+                  <div className="text-2xl font-medium text-gray-400">
+                    {pnl === null
+                      ? "—"
+                      : `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`}
                   </div>
                 </div>
               </div>
