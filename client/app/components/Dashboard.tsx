@@ -314,6 +314,13 @@ function StraddleView({
   selectedDate: string;
 }) {
   const latest = data[data.length - 1];
+  const opening = data[0];
+
+  const impliedMovePct =
+    opening && opening.spx_ref > 0
+      ? ((opening.straddle_mid / opening.spx_ref) * 100).toFixed(2)
+      : null;
+
   return (
     <div>
       <div className="flex items-baseline gap-8 mb-6">
@@ -321,7 +328,7 @@ function StraddleView({
           <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
             SPX
           </span>
-          <span className="text-2xl font-medium">
+          <span className="text-2xl font-medium text-gray-400">
             {latest?.spx_ref?.toFixed(2) ?? "—"}
           </span>
         </div>
@@ -329,10 +336,20 @@ function StraddleView({
           <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
             Straddle
           </span>
-          <span className="text-2xl font-medium">
+          <span className="text-2xl font-medium text-gray-400">
             {latest?.straddle_mid?.toFixed(2) ?? "—"}
           </span>
         </div>
+        {impliedMovePct && (
+          <div>
+            <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+              Implied Move
+            </span>
+            <span className="text-2xl font-medium text-gray-400">
+              ±{impliedMovePct}%
+            </span>
+          </div>
+        )}
       </div>
       <StraddleChart data={data} selectedDate={selectedDate} />
     </div>
@@ -363,7 +380,7 @@ function SkewView({
           <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
             Skew
           </span>
-          <span className="text-2xl font-medium">
+          <span className="text-2xl font-medium text-gray-400">
             {latest?.skew?.toFixed(4) ?? "—"}
           </span>
         </div>

@@ -188,7 +188,7 @@ export default function StraddleChart({ data, selectedDate }: Props) {
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
-        title: `Opening EM High`,
+        title: `Implied High`,
       });
 
       lowerLineRef.current = spxSeriesRef.current.createPriceLine({
@@ -197,7 +197,7 @@ export default function StraddleChart({ data, selectedDate }: Props) {
         lineWidth: 1,
         lineStyle: 2,
         axisLabelVisible: true,
-        title: `Opening EM Low`,
+        title: `Implied Low`,
       });
     }
 
