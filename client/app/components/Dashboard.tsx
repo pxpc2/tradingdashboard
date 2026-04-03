@@ -106,6 +106,12 @@ export default function Dashboard({
   const lastSkewTime =
     skewSnapshots[skewSnapshots.length - 1]?.created_at ?? null;
 
+  function handleEntryEdit(snapshotId: string, newMid: number) {
+    setFlySnapshots((prev) =>
+      prev.map((s) => (s.id === snapshotId ? { ...s, mid: newMid } : s)),
+    );
+  }
+
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -274,6 +280,7 @@ export default function Dashboard({
             selectedDate={selectedDate}
             flySnapshots={flySnapshots}
             isTall={true}
+            onEntryEdit={handleEntryEdit}
           />
           <div className="border-t border-[#1a1a1a]" />
           <StraddleView data={straddleData} selectedDate={selectedDate} />
@@ -294,6 +301,7 @@ export default function Dashboard({
               selectedDate={selectedDate}
               flySnapshots={flySnapshots}
               isTall={false}
+              onEntryEdit={handleEntryEdit}
             />
           )}
           {activeTab === "Skew" && (
@@ -322,13 +330,13 @@ function StraddleView({
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/New_York",
     });
-  
+
     if (selectedDate !== today) {
       setPdh(null);
       setPdl(null);
       return;
     }
-  
+
     async function fetchPdhl() {
       try {
         const res = await fetch("/api/pdhl");
@@ -449,18 +457,23 @@ function SmlFlyView({
   selectedDate,
   flySnapshots,
   isTall,
+  onEntryEdit,
 }: {
   session: RtmSession | null;
   onSessionCreated: (session: RtmSession) => void;
   selectedDate: string;
   flySnapshots: FlySnapshot[];
   isTall: boolean;
+  onEntryEdit: (snapshotId: string, newMid: number) => void;
 }) {
   const [strike, setStrike] = useState("");
   const [optionType, setOptionType] = useState<"call" | "put">("call");
   const [selectedWidths, setSelectedWidths] = useState<number[]>([10, 15, 20]);
   const [activeWidth, setActiveWidth] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState<string>("");
 
   const widths = session?.widths ?? [];
   const effectiveActiveWidth = activeWidth ?? widths[0] ?? 10;
@@ -488,6 +501,20 @@ function SmlFlyView({
     setSelectedWidths((prev) =>
       prev.includes(w) ? prev.filter((x) => x !== w) : [...prev, w],
     );
+  }
+
+  async function confirmEntryEdit(snapshotId: string) {
+    const newMid = parseFloat(editingValue);
+    if (isNaN(newMid) || newMid <= 0) {
+      setEditingId(null);
+      return;
+    }
+    await supabase
+      .from("sml_fly_snapshots")
+      .update({ mid: newMid })
+      .eq("id", snapshotId);
+    onEntryEdit(snapshotId, newMid);
+    setEditingId(null);
   }
 
   const hasSession = session?.sml_ref != null;
@@ -582,6 +609,7 @@ function SmlFlyView({
         const entry = widthSnapshots[0];
         const pnl = latest && entry ? latest.mid - entry.mid : null;
         const color = WIDTH_COLORS[w] ?? "#888";
+        const isEditing = !!entry && editingId === entry.id;
 
         return (
           <div
@@ -599,9 +627,33 @@ function SmlFlyView({
                   <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
                     Entrada
                   </div>
-                  <div className="text-2xl font-medium text-gray-400">
-                    {entry ? entry.mid.toFixed(2) : "—"}
-                  </div>
+                  {isEditing ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      autoFocus
+                      value={editingValue}
+                      onChange={(e) => setEditingValue(e.target.value)}
+                      onBlur={() => confirmEntryEdit(entry.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") confirmEntryEdit(entry.id);
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                      className="text-2xl font-medium text-gray-400 bg-transparent border-b border-[#444] outline-none w-24"
+                    />
+                  ) : (
+                    <div
+                      className="text-2xl font-medium text-gray-400 cursor-pointer hover:text-white transition-colors"
+                      title="Editar entry mid price"
+                      onClick={() => {
+                        if (!entry) return;
+                        setEditingId(entry.id);
+                        setEditingValue(entry.mid.toFixed(2));
+                      }}
+                    >
+                      {entry ? entry.mid.toFixed(2) : "—"}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
