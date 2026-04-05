@@ -8,6 +8,7 @@ export type StraddleSnapshot = {
   put_bid: number;
   put_ask: number;
   straddle_mid: number;
+  es_basis?: number | null;
 };
 
 export type RtmSession = {

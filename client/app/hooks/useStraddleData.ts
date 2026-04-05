@@ -53,5 +53,8 @@ export function useStraddleData(
     };
   }, [selectedDate]);
 
-  return { straddleData };
+  // es_basis lives on the first snapshot of the day (open cycle only)
+  const esBasis: number | null = straddleData[0]?.es_basis ?? null;
+
+  return { straddleData, esBasis };
 }

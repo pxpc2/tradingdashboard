@@ -156,6 +156,33 @@ async function getSpxQuoteMid() {
   );
 }
 
+// Fetch ES futures mid — used only at open cycle for basis calculation
+async function getEsMid() {
+  try {
+    return await withTimeout(
+      new Promise((resolve) => {
+        const listener = (events) => {
+          const esQuote = events.find(
+            (e) => e.eventSymbol === "/ES" && e.eventType === "Quote",
+          );
+          if (esQuote && esQuote.bidPrice > 0 && esQuote.askPrice > 0) {
+            client.quoteStreamer.removeEventListener(listener);
+            client.quoteStreamer.unsubscribe(["/ES"]);
+            resolve((esQuote.bidPrice + esQuote.askPrice) / 2);
+          }
+        };
+        client.quoteStreamer.addEventListener(listener);
+        client.quoteStreamer.subscribe(["/ES"]);
+      }),
+      10000,
+      "ES quote",
+    );
+  } catch (err) {
+    console.log(`[${nowCT()}] ES quote timeout/error — basis will be null.`);
+    return null;
+  }
+}
+
 // BSM helpers
 function normalCDF(x) {
   const a1 = 0.254829592,
@@ -241,7 +268,6 @@ function isValidQuote(q) {
   if (!q) return false;
   if (q.bidPrice <= 0) return false;
   if (q.askPrice <= q.bidPrice) return false;
-  // Reject if spread is more than 50% of mid — too wide, likely stale
   const mid = (q.bidPrice + q.askPrice) / 2;
   const spread = q.askPrice - q.bidPrice;
   if (spread / mid > 0.5) return false;
@@ -289,7 +315,6 @@ async function computeAndStoreSkew(allOptions, spxMid) {
       return opt?.["streamer-symbol"] ?? null;
     }
 
-    // Step 1 — find ATM strike for this expiry and fetch its quotes first
     const atmStrikeForExpiry = strikes.reduce((prev, curr) =>
       Math.abs(curr - spxMid) < Math.abs(prev - spxMid) ? curr : prev,
     );
@@ -301,9 +326,7 @@ async function computeAndStoreSkew(allOptions, spxMid) {
       return;
     }
 
-    // Fetch ATM quotes first to compute 30-day ATM IV as seed
     const atmQuotes = await getQuotes([atmCallSymbol, atmPutSymbol]);
-
     const atmCallQ = atmQuotes[atmCallSymbol];
     const atmPutQ = atmQuotes[atmPutSymbol];
 
@@ -340,7 +363,6 @@ async function computeAndStoreSkew(allOptions, spxMid) {
       return;
     }
 
-    // Step 2 — now use 30-day ATM IV as seed to find correct 25-delta strikes
     const putStrikes = strikes.filter((k) => k < spxMid);
     const callStrikes = strikes.filter((k) => k > spxMid);
 
@@ -376,13 +398,10 @@ async function computeAndStoreSkew(allOptions, spxMid) {
       return;
     }
 
-    // Step 3 — fetch 25-delta quotes
     const wingQuotes = await getQuotes([put25Symbol, call25Symbol]);
-
     const put25Q = wingQuotes[put25Symbol];
     const call25Q = wingQuotes[call25Symbol];
 
-    // Validate wing quotes
     if (!isValidQuote(put25Q) || !isValidQuote(call25Q)) {
       console.log(`[${nowCT()}] Skew: quotes 25-delta inválidas, abortando.`);
       return;
@@ -391,11 +410,9 @@ async function computeAndStoreSkew(allOptions, spxMid) {
     const put25Mid = (put25Q.bidPrice + put25Q.askPrice) / 2;
     const call25Mid = (call25Q.bidPrice + call25Q.askPrice) / 2;
 
-    // Step 4 — invert IVs
     const putIV = invertIV(spxMid, put25Strike, T, R, put25Mid, false);
     const callIV = invertIV(spxMid, call25Strike, T, R, call25Mid, true);
 
-    // Step 5 — sanity check on final values
     if (
       putIV <= 0 ||
       putIV > 1.5 ||
@@ -488,6 +505,7 @@ async function runCycle(isOpenCycle = false) {
 
     let spxMid;
     let atmStrikePrice;
+    let esBasis = null;
 
     if (isOpenCycle) {
       console.log(
@@ -501,6 +519,15 @@ async function runCycle(isOpenCycle = false) {
       console.log(
         `[${nowCT()}] SPX open price: ${openPrice?.toFixed(2)} | ATM strike: ${atmStrikePrice}`,
       );
+
+      // Fetch ES basis at open — fire and don't block if it fails
+      const esMid = await getEsMid();
+      if (esMid !== null && spxMid > 0) {
+        esBasis = parseFloat((esMid - spxMid).toFixed(2));
+        console.log(
+          `[${nowCT()}] ES mid: ${esMid.toFixed(2)} | SPX mid: ${spxMid.toFixed(2)} | Basis: ${esBasis}`,
+        );
+      }
     } else {
       spxMid = await getSpxQuoteMid();
       atmStrikePrice = strikes.reduce((prev, curr) =>
@@ -542,16 +569,20 @@ async function runCycle(isOpenCycle = false) {
       2;
     const straddleMid = callMid + putMid;
 
+    // Build insert payload — include es_basis only on open cycle
+    const straddlePayload = {
+      spx_ref: spxMid,
+      atm_strike: atmStrikePrice,
+      call_bid: straddleQuotes[straddleSymbols[0]].bidPrice,
+      call_ask: straddleQuotes[straddleSymbols[0]].askPrice,
+      put_bid: straddleQuotes[straddleSymbols[1]].bidPrice,
+      put_ask: straddleQuotes[straddleSymbols[1]].askPrice,
+      straddle_mid: straddleMid,
+      ...(isOpenCycle && esBasis !== null ? { es_basis: esBasis } : {}),
+    };
+
     const { error: straddleError } = await withTimeout(
-      supabase.from("straddle_snapshots").insert({
-        spx_ref: spxMid,
-        atm_strike: atmStrikePrice,
-        call_bid: straddleQuotes[straddleSymbols[0]].bidPrice,
-        call_ask: straddleQuotes[straddleSymbols[0]].askPrice,
-        put_bid: straddleQuotes[straddleSymbols[1]].bidPrice,
-        put_ask: straddleQuotes[straddleSymbols[1]].askPrice,
-        straddle_mid: straddleMid,
-      }),
+      supabase.from("straddle_snapshots").insert(straddlePayload),
       10000,
       "straddle insert",
     );
@@ -563,7 +594,7 @@ async function runCycle(isOpenCycle = false) {
       );
     } else {
       console.log(
-        `[${nowCT()}] ${isOpenCycle ? "🔔 ABERTURA | " : ""}SPX ref: ${spxMid.toFixed(2)} | ATM: ${atmStrikePrice} | Straddle: ${straddleMid.toFixed(2)}`,
+        `[${nowCT()}] ${isOpenCycle ? "🔔 ABERTURA | " : ""}SPX ref: ${spxMid.toFixed(2)} | ATM: ${atmStrikePrice} | Straddle: ${straddleMid.toFixed(2)}${esBasis !== null ? ` | ES basis: ${esBasis}` : ""}`,
       );
     }
 
@@ -670,7 +701,6 @@ async function runCycle(isOpenCycle = false) {
 async function runAndScheduleNext() {
   if (shouldFireOpenCycle()) {
     openCycleFiredDate = getTodayET();
-    // Reset skew counter on new day open
     skewCycleCount = 0;
     console.log(`[${nowCT()}] 🔔 Disparando ciclo de abertura...`);
     await runCycle(true);

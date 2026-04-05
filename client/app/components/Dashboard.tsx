@@ -6,6 +6,7 @@ import StraddleView from "./StraddleView";
 import SkewView from "./SkewView";
 import SmlFlyView from "./SmlFlyView";
 import PositionsView from "./PositionsView";
+import EsSpxConverter from "./Converter";
 import { useStraddleData } from "../hooks/useStraddleData";
 import { useFlyData } from "../hooks/useFlyData";
 import { useSkewData } from "../hooks/useSkewData";
@@ -42,7 +43,10 @@ export default function Dashboard({
   );
   const isTall = useIsTallMode();
 
-  const { straddleData } = useStraddleData(selectedDate, initialStraddleData);
+  const { straddleData, esBasis } = useStraddleData(
+    selectedDate,
+    initialStraddleData,
+  );
   const { smlSession, setSmlSession, flySnapshots, patchEntryMid } = useFlyData(
     selectedDate,
     initialSmlSession,
@@ -118,6 +122,8 @@ export default function Dashboard({
           <StraddleView data={straddleData} selectedDate={selectedDate} />
           <div className="border-t border-[#1a1a1a]" />
           <SkewView data={skewSnapshots} selectedDate={selectedDate} />
+          <div className="border-t border-[#1a1a1a]" />
+          <EsSpxConverter initialBasis={esBasis} />
           <div className="border-t border-[#1a1a1a]" />
           <PositionsView spxPrice={latestSpx} />
         </div>
