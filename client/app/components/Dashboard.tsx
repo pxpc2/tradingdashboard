@@ -2,11 +2,9 @@
 
 import { useState, useEffect } from "react";
 import LiveIndicator from "./LiveIndicator";
-import StraddleView from "./StraddleView";
-import SkewView from "./SkewView";
-import SmlFlyView from "./SmlFlyView";
-import PositionsView from "./PositionsView";
-import EsSpxConverter from "./Converter";
+import MktView from "./MktView";
+import VolView from "./VolView";
+import PosView from "./PosView";
 import { useStraddleData } from "../hooks/useStraddleData";
 import { useFlyData } from "../hooks/useFlyData";
 import { useSkewData } from "../hooks/useSkewData";
@@ -17,31 +15,17 @@ type Props = {
   initialSmlSession: RtmSession | null;
 };
 
-const TABS = ["Straddle", "SML Fly", "Skew", "Posições"] as const;
+const TABS = ["MKT", "VOL", "POS"] as const;
 type Tab = (typeof TABS)[number];
-
-function useIsTallMode() {
-  const [isTall, setIsTall] = useState(false);
-  useEffect(() => {
-    function check() {
-      setIsTall(window.innerHeight >= 800);
-    }
-    check();
-    window.addEventListener("resize", check);
-    return () => window.removeEventListener("resize", check);
-  }, []);
-  return isTall;
-}
 
 export default function Dashboard({
   initialStraddleData,
   initialSmlSession,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>("Straddle");
+  const [activeTab, setActiveTab] = useState<Tab>("MKT");
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
   );
-  const isTall = useIsTallMode();
 
   const { straddleData, esBasis } = useStraddleData(
     selectedDate,
@@ -64,23 +48,21 @@ export default function Dashboard({
   return (
     <div className="max-w-7xl mx-auto px-6 py-6">
       <div className="flex items-center justify-between mb-6">
-        {!isTall && (
-          <div className="flex gap-1 rounded-sm bg-[#111111] p-1">
-            {TABS.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-5 py-2 rounded-sm text-sm font-medium transition-colors ${
-                  activeTab === tab
-                    ? "bg-[#1f1f1f] text-white"
-                    : "text-[#444444] hover:cursor-pointer hover:text-[#888888]"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex gap-1 rounded-sm bg-[#111111] p-1">
+          {TABS.map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-5 py-2 rounded-sm text-sm font-medium transition-colors ${
+                activeTab === tab
+                  ? "bg-[#1f1f1f] text-white"
+                  : "text-[#444444] hover:cursor-pointer hover:text-[#888888]"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
         <input
           type="date"
           value={selectedDate}
@@ -108,45 +90,30 @@ export default function Dashboard({
         </div>
       </div>
 
-      {isTall ? (
-        <div className="flex flex-col gap-4">
-          <SmlFlyView
-            session={smlSession}
-            onSessionCreated={setSmlSession}
-            selectedDate={selectedDate}
-            flySnapshots={flySnapshots}
-            isTall={true}
-            onEntryEdit={patchEntryMid}
-          />
-          <div className="border-t border-[#1a1a1a]" />
-          <StraddleView data={straddleData} selectedDate={selectedDate} />
-          <div className="border-t border-[#1a1a1a]" />
-          <SkewView data={skewSnapshots} selectedDate={selectedDate} />
-          <div className="border-t border-[#1a1a1a]" />
-          <EsSpxConverter initialBasis={esBasis} />
-          <div className="border-t border-[#1a1a1a]" />
-          <PositionsView spxPrice={latestSpx} />
-        </div>
-      ) : (
-        <div>
-          {activeTab === "Straddle" && (
-            <StraddleView data={straddleData} selectedDate={selectedDate} />
-          )}
-          {activeTab === "SML Fly" && (
-            <SmlFlyView
-              session={smlSession}
-              onSessionCreated={setSmlSession}
-              selectedDate={selectedDate}
-              flySnapshots={flySnapshots}
-              isTall={false}
-              onEntryEdit={patchEntryMid}
-            />
-          )}
-          {activeTab === "Skew" && (
-            <SkewView data={skewSnapshots} selectedDate={selectedDate} />
-          )}
-          {activeTab === "Posições" && <PositionsView spxPrice={latestSpx} />}
-        </div>
+      {activeTab === "MKT" && (
+        <MktView
+          straddleData={straddleData}
+          skewSnapshots={skewSnapshots}
+          selectedDate={selectedDate}
+          esBasis={esBasis}
+        />
+      )}
+      {activeTab === "VOL" && (
+        <VolView
+          straddleData={straddleData}
+          skewSnapshots={skewSnapshots}
+          selectedDate={selectedDate}
+        />
+      )}
+      {activeTab === "POS" && (
+        <PosView
+          smlSession={smlSession}
+          onSessionCreated={setSmlSession}
+          flySnapshots={flySnapshots}
+          onEntryEdit={patchEntryMid}
+          selectedDate={selectedDate}
+          spxPrice={latestSpx}
+        />
       )}
     </div>
   );

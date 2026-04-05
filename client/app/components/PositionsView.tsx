@@ -262,13 +262,10 @@ export default function PositionsView({ spxPrice }: { spxPrice: number }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <span className="text-xs text-gray-400 uppercase tracking-wide">
-          Posições
-        </span>
+      <div className="flex items-center justify-end mb-4">
         <button
           onClick={() => setShowModal(true)}
-          className="text-xs text-gray-400 border border-[#1f1f1f] rounded-sm px-3 py-1.5 hover:border-gray-400 transition-colors hover:cursor-pointer"
+          className="text-xs text-gray-700 border border-[#1f1f1f] rounded-sm px-3 py-1.5 hover:border-gray-700 transition-colors hover:cursor-pointer"
         >
           + Adicionar posição
         </button>
