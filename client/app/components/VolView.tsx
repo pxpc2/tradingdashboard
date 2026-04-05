@@ -64,11 +64,14 @@ export default function VolView({
                 <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
                   Realized
                 </span>
-                <span className="text-2xl font-medium" style={{ color }}>
+                <span className="text-2xl font-medium text-gray-400">
                   {realizedPts.toFixed(1)}pts
                 </span>
                 {realizedPct && (
-                  <span className="text-lg font-medium ml-2" style={{ color }}>
+                  <span
+                    className="text-lg font-medium ml-1.5"
+                    style={{ color }}
+                  >
                     ({realizedPct}%)
                   </span>
                 )}

@@ -57,13 +57,20 @@ export default function MktView({
     fetchPdhl();
   }, [selectedDate]);
 
+  const currentMovePts =
+    opening && latest ? Math.abs(latest.spx_ref - opening.spx_ref) : null;
+
   const realizedMovePct =
-    opening && latest && opening.straddle_mid > 0
-      ? (
-          (Math.abs(latest.spx_ref - opening.spx_ref) / opening.straddle_mid) *
-          100
-        ).toFixed(0)
+    currentMovePts !== null && opening && opening.straddle_mid > 0
+      ? ((currentMovePts / opening.straddle_mid) * 100).toFixed(0)
       : null;
+
+  const realizedColor =
+    realizedMovePct && parseInt(realizedMovePct) >= 100
+      ? "#f87171"
+      : realizedMovePct && parseInt(realizedMovePct) >= 70
+        ? "#f59e0b"
+        : "#9ca3af";
 
   return (
     <div className="flex flex-col gap-6">
@@ -79,32 +86,41 @@ export default function MktView({
         </div>
         <div>
           <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
-            Straddle
+            Current Straddle
           </span>
           <span className="text-2xl font-medium text-gray-400">
             ${latest?.straddle_mid?.toFixed(2) ?? "—"}
           </span>
         </div>
-        {realizedMovePct && (
+        {opening && (
+          <div>
+            <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+              Implied Move
+            </span>
+            <span className="text-2xl font-medium text-gray-400">
+              ${opening.straddle_mid.toFixed(2)}
+            </span>
+          </div>
+        )}
+        {currentMovePts !== null && (
           <div>
             <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
               Realized
             </span>
-            <span
-              className="text-2xl font-medium"
-              style={{
-                color:
-                  parseInt(realizedMovePct) >= 80
-                    ? "#f87171"
-                    : parseInt(realizedMovePct) >= 50
-                      ? "#f59e0b"
-                      : "#9ca3af",
-              }}
-            >
-              {realizedMovePct}%
+            <span className="text-2xl font-medium text-gray-400">
+              {currentMovePts.toFixed(1)}pts
             </span>
+            {realizedMovePct && (
+              <span
+                className="ml-1.5 text-lg font-medium"
+                style={{ color: realizedColor }}
+              >
+                ({realizedMovePct}%)
+              </span>
+            )}
           </div>
         )}
+
         {latestSkew && (
           <div>
             <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
