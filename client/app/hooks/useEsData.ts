@@ -10,11 +10,24 @@ export function useEsData(selectedDate: string) {
   useEffect(() => {
     let cancelled = false;
     async function load() {
+      // Query a full 48-hour UTC window around the selected CT date
+      // CT is UTC-5 (CST) or UTC-6 (CDT — currently active)
+      // To capture all of a CT day we query from selectedDate-1 T06:00Z
+      // through selectedDate+1 T06:00Z (generous window, chart displays in CT)
+      const date = new Date(`${selectedDate}T00:00:00Z`);
+      const prevDay = new Date(date);
+      prevDay.setUTCDate(prevDay.getUTCDate() - 1);
+      const nextDay = new Date(date);
+      nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+
+      const from = `${prevDay.toISOString().slice(0, 10)}T06:00:00Z`;
+      const to = `${nextDay.toISOString().slice(0, 10)}T06:00:00Z`;
+
       const { data } = await supabase
         .from("es_snapshots")
         .select("*")
-        .gte("created_at", `${selectedDate}T00:00:00`)
-        .lt("created_at", `${selectedDate}T23:59:59`)
+        .gte("created_at", from)
+        .lt("created_at", to)
         .order("created_at", { ascending: true });
       if (!cancelled) setEsData(data ?? []);
     }
