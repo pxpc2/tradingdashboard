@@ -174,6 +174,14 @@ async function getEsMid() {
     return await withTimeout(
       new Promise((resolve) => {
         const listener = (events) => {
+          // Log ALL incoming events to see what symbols we're getting
+          events.forEach((e) => {
+            if (e.eventType === "Quote") {
+              console.log(
+                `[${nowCT()}] Quote received: ${e.eventSymbol} bid:${e.bidPrice} ask:${e.askPrice}`,
+              );
+            }
+          });
           const esQuote = events.find(
             (e) => e.eventSymbol === "/ES" && e.eventType === "Quote",
           );
@@ -478,6 +486,7 @@ async function runCycle(isOpenCycle = false) {
   // Always try to store ES if globex is open
   if (globexOpen) {
     try {
+      // Small delay on first cycle to let DXLink warm up
       const esMid = await getEsMid();
       if (esMid !== null) {
         const { error } = await withTimeout(
@@ -701,15 +710,13 @@ async function runCycle(isOpenCycle = false) {
       const flyAsk = lower.ask + upper.ask - 2 * center.bid;
 
       const { error: flyError } = await withTimeout(
-        supabase
-          .from("sml_fly_snapshots")
-          .insert({
-            session_id: session.id,
-            width,
-            mid: flyMid,
-            bid: flyBid,
-            ask: flyAsk,
-          }),
+        supabase.from("sml_fly_snapshots").insert({
+          session_id: session.id,
+          width,
+          mid: flyMid,
+          bid: flyBid,
+          ask: flyAsk,
+        }),
         10000,
         `fly insert ${width}W`,
       );
