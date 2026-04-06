@@ -2,7 +2,10 @@
 
 import { useState, useEffect } from "react";
 import SpxChart from "./SpxChart";
+import EsChart from "./EsChart";
 import EsSpxConverter from "./Converter";
+import { useLiveTick } from "../hooks/useLiveTick";
+import { useEsData } from "../hooks/useEsData";
 import { StraddleSnapshot, SkewSnapshot } from "../types";
 
 type Props = {
@@ -12,15 +15,7 @@ type Props = {
   esBasis: number | null;
 };
 
-function EsChartPlaceholder() {
-  return (
-    <div className="w-full h-[400px] rounded-sm bg-[#111111] flex items-center justify-center">
-      <span className="text-xs text-[#2a2a2a] uppercase tracking-widest">
-        ES chart — em breve
-      </span>
-    </div>
-  );
-}
+const LIVE_SYMBOLS = ["SPX", "/ES"];
 
 export default function MktView({
   straddleData,
@@ -34,6 +29,14 @@ export default function MktView({
 
   const [pdh, setPdh] = useState<number | null>(null);
   const [pdl, setPdl] = useState<number | null>(null);
+
+  const ticks = useLiveTick(LIVE_SYMBOLS);
+  const spxTick = ticks["SPX"] ?? null;
+  const esTick = ticks["/ES"] ?? null;
+
+  const { esData } = useEsData(selectedDate);
+
+  const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
 
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
@@ -58,7 +61,7 @@ export default function MktView({
   }, [selectedDate]);
 
   const currentMovePts =
-    opening && latest ? Math.abs(latest.spx_ref - opening.spx_ref) : null;
+    opening && liveSpx ? Math.abs(liveSpx - opening.spx_ref) : null;
 
   const realizedMovePct =
     currentMovePts !== null && opening && opening.straddle_mid > 0
@@ -72,6 +75,10 @@ export default function MktView({
         ? "#f59e0b"
         : "#9ca3af";
 
+  // ES PDH/PDL approximated from SPX levels + basis
+  const esPdh = pdh && esBasis !== null ? pdh + esBasis : null;
+  const esPdl = pdl && esBasis !== null ? pdl + esBasis : null;
+
   return (
     <div className="flex flex-col gap-6">
       {/* Metric strip */}
@@ -81,7 +88,7 @@ export default function MktView({
             SPX
           </span>
           <span className="text-2xl font-medium text-gray-400">
-            {latest?.spx_ref?.toFixed(2) ?? "—"}
+            {liveSpx?.toFixed(2) ?? "—"}
           </span>
         </div>
         <div>
@@ -120,7 +127,6 @@ export default function MktView({
             )}
           </div>
         )}
-
         {latestSkew && (
           <div>
             <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
@@ -143,6 +149,7 @@ export default function MktView({
           selectedDate={selectedDate}
           pdh={pdh}
           pdl={pdl}
+          currentPrice={spxTick?.mid ?? null}
         />
       </div>
 
@@ -153,7 +160,13 @@ export default function MktView({
         <div className="text-xs text-[#333] uppercase tracking-widest mb-3">
           ES
         </div>
-        <EsChartPlaceholder />
+        <EsChart
+          data={esData}
+          selectedDate={selectedDate}
+          currentPrice={esTick?.mid ?? null}
+          pdh={esPdh}
+          pdl={esPdl}
+        />
         <div className="mt-4">
           <EsSpxConverter initialBasis={esBasis} />
         </div>

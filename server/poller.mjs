@@ -65,6 +65,19 @@ function isMarketHours() {
   return true;
 }
 
+function isGlobexHours() {
+  const day = getETDay();
+  const time = getETTime();
+  // Closed all Saturday
+  if (day === "Sat") return false;
+  // Closed Sunday before 18:00 ET
+  if (day === "Sun" && time < "18:00:00") return false;
+  // Closed weekdays during 17:00–18:00 ET settlement break
+  if (!["Sat", "Sun"].includes(day) && time >= "17:00:00" && time < "18:00:00")
+    return false;
+  return true;
+}
+
 let openCycleFiredDate = null;
 let skewCycleCount = 0;
 
@@ -156,7 +169,6 @@ async function getSpxQuoteMid() {
   );
 }
 
-// Fetch ES futures mid — used only at open cycle for basis calculation
 async function getEsMid() {
   try {
     return await withTimeout(
@@ -178,7 +190,7 @@ async function getEsMid() {
       "ES quote",
     );
   } catch (err) {
-    console.log(`[${nowCT()}] ES quote timeout/error — basis will be null.`);
+    console.log(`[${nowCT()}] ES quote timeout/error — skipping.`);
     return null;
   }
 }
@@ -234,8 +246,8 @@ function invertIV(S, K, T, r, marketPrice, isCall) {
 }
 
 function findDeltaStrike(strikes, S, T, r, targetDelta, isCall, sigmaEstimate) {
-  let bestStrike = null;
-  let bestDiff = Infinity;
+  let bestStrike = null,
+    bestDiff = Infinity;
   for (const K of strikes) {
     const delta = bsmDelta(S, K, T, r, sigmaEstimate, isCall);
     const diff = Math.abs(Math.abs(delta) - Math.abs(targetDelta));
@@ -250,8 +262,8 @@ function findDeltaStrike(strikes, S, T, r, targetDelta, isCall, sigmaEstimate) {
 function findTargetExpiry(allOptions, targetDays) {
   const today = new Date();
   const expirations = [...new Set(allOptions.map((o) => o["expiration-date"]))];
-  let bestExpiry = null;
-  let bestDiff = Infinity;
+  let bestExpiry = null,
+    bestDiff = Infinity;
   for (const exp of expirations) {
     const expDate = new Date(exp);
     const days = (expDate - today) / (1000 * 60 * 60 * 24);
@@ -278,7 +290,6 @@ async function computeAndStoreSkew(allOptions, spxMid) {
   try {
     const R = 0.05;
     const TARGET_DAYS = 30;
-
     const targetExpiry = findTargetExpiry(allOptions, TARGET_DAYS);
     if (!targetExpiry) {
       console.log(`[${nowCT()}] Skew: nenhum vencimento encontrado.`);
@@ -337,7 +348,6 @@ async function computeAndStoreSkew(allOptions, spxMid) {
 
     const atmCallMid = (atmCallQ.bidPrice + atmCallQ.askPrice) / 2;
     const atmPutMid = (atmPutQ.bidPrice + atmPutQ.askPrice) / 2;
-
     const atmCallIV = invertIV(
       spxMid,
       atmStrikeForExpiry,
@@ -365,7 +375,6 @@ async function computeAndStoreSkew(allOptions, spxMid) {
 
     const putStrikes = strikes.filter((k) => k < spxMid);
     const callStrikes = strikes.filter((k) => k > spxMid);
-
     const put25Strike = findDeltaStrike(
       putStrikes,
       spxMid,
@@ -409,7 +418,6 @@ async function computeAndStoreSkew(allOptions, spxMid) {
 
     const put25Mid = (put25Q.bidPrice + put25Q.askPrice) / 2;
     const call25Mid = (call25Q.bidPrice + call25Q.askPrice) / 2;
-
     const putIV = invertIV(spxMid, put25Strike, T, R, put25Mid, false);
     const callIV = invertIV(spxMid, call25Strike, T, R, call25Mid, true);
 
@@ -422,13 +430,12 @@ async function computeAndStoreSkew(allOptions, spxMid) {
       computedAtmIV > 1.5
     ) {
       console.log(
-        `[${nowCT()}] Skew: IVs fora do intervalo esperado — put: ${putIV.toFixed(4)}, call: ${callIV.toFixed(4)}, atm: ${computedAtmIV.toFixed(4)}. Descartando.`,
+        `[${nowCT()}] Skew: IVs fora do intervalo esperado. Descartando.`,
       );
       return;
     }
 
     const skew = (putIV - callIV) / computedAtmIV;
-
     if (skew < 0 || skew > 2.0) {
       console.log(
         `[${nowCT()}] Skew: valor final fora do intervalo (${skew.toFixed(4)}). Descartando.`,
@@ -465,7 +472,32 @@ async function computeAndStoreSkew(allOptions, spxMid) {
 let lastSkipLog = 0;
 
 async function runCycle(isOpenCycle = false) {
-  if (!isMarketHours()) {
+  const globexOpen = isGlobexHours();
+  const marketOpen = isMarketHours();
+
+  // Always try to store ES if globex is open
+  if (globexOpen) {
+    try {
+      const esMid = await getEsMid();
+      if (esMid !== null) {
+        const { error } = await withTimeout(
+          supabase.from("es_snapshots").insert({ es_ref: esMid }),
+          10000,
+          "es insert",
+        );
+        if (error) {
+          console.error(`[${nowCT()}] ES insert error:`, error.message);
+        } else {
+          console.log(`[${nowCT()}] ES: ${esMid.toFixed(2)}`);
+        }
+      }
+    } catch (err) {
+      console.error(`[${nowCT()}] ES cycle error:`, err.message);
+    }
+  }
+
+  // SPX/options logic only during market hours
+  if (!marketOpen) {
     const now = Date.now();
     if (now - lastSkipLog > 60 * 60 * 1000) {
       console.log(`[${nowCT()}] SPX fechado, tentaremos mais tarde.`);
@@ -520,7 +552,7 @@ async function runCycle(isOpenCycle = false) {
         `[${nowCT()}] SPX open price: ${openPrice?.toFixed(2)} | ATM strike: ${atmStrikePrice}`,
       );
 
-      // Fetch ES basis at open — fire and don't block if it fails
+      // ES basis at open
       const esMid = await getEsMid();
       if (esMid !== null && spxMid > 0) {
         esBasis = parseFloat((esMid - spxMid).toFixed(2));
@@ -569,7 +601,6 @@ async function runCycle(isOpenCycle = false) {
       2;
     const straddleMid = callMid + putMid;
 
-    // Build insert payload — include es_basis only on open cycle
     const straddlePayload = {
       spx_ref: spxMid,
       atm_strike: atmStrikePrice,
@@ -598,13 +629,13 @@ async function runCycle(isOpenCycle = false) {
       );
     }
 
-    // Skew — throttled to every 5 cycles (~5 minutes)
+    // Skew — every 5 cycles
     skewCycleCount++;
     if (skewCycleCount % 5 === 0) {
       await computeAndStoreSkew(options, spxMid);
     }
 
-    // Check for active RTM session today
+    // SML Fly
     const { data: sessions } = await supabase
       .from("rtm_sessions")
       .select("*")
@@ -628,9 +659,8 @@ async function runCycle(isOpenCycle = false) {
       flyStrikeSet.add(smlStrike);
       flyStrikeSet.add(smlStrike + width);
     }
-    const flyStrikes = [...flyStrikeSet];
 
-    const flySymbols = flyStrikes
+    const flySymbols = [...flyStrikeSet]
       .map((s) => getStreamerSymbol(s, optType))
       .filter(Boolean);
 
@@ -671,13 +701,15 @@ async function runCycle(isOpenCycle = false) {
       const flyAsk = lower.ask + upper.ask - 2 * center.bid;
 
       const { error: flyError } = await withTimeout(
-        supabase.from("sml_fly_snapshots").insert({
-          session_id: session.id,
-          width,
-          mid: flyMid,
-          bid: flyBid,
-          ask: flyAsk,
-        }),
+        supabase
+          .from("sml_fly_snapshots")
+          .insert({
+            session_id: session.id,
+            width,
+            mid: flyMid,
+            bid: flyBid,
+            ask: flyAsk,
+          }),
         10000,
         `fly insert ${width}W`,
       );

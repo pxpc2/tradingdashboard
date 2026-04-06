@@ -41,3 +41,9 @@ export type SkewSnapshot = {
   put_strike: number;
   call_strike: number;
 };
+
+export type EsSnapshot = {
+  id: string;
+  created_at: string;
+  es_ref: number;
+};

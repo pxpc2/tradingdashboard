@@ -11,28 +11,26 @@ import {
   IPriceLine,
   CrosshairMode,
 } from "lightweight-charts";
-import { StraddleSnapshot } from "../types";
+import { EsSnapshot } from "../types";
 
 type Props = {
-  data: StraddleSnapshot[];
+  data: EsSnapshot[];
   selectedDate: string;
+  currentPrice?: number | null;
   pdh?: number | null;
   pdl?: number | null;
-  currentPrice?: number | null;
 };
 
-export default function SpxChart({
+export default function EsChart({
   data,
   selectedDate,
+  currentPrice,
   pdh,
   pdl,
-  currentPrice,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const upperLineRef = useRef<IPriceLine | null>(null);
-  const lowerLineRef = useRef<IPriceLine | null>(null);
   const pdhLineRef = useRef<IPriceLine | null>(null);
   const pdlLineRef = useRef<IPriceLine | null>(null);
 
@@ -89,7 +87,7 @@ export default function SpxChart({
       priceLineVisible: true,
       priceLineStyle: 1,
       lastValueVisible: true,
-      title: "SPX",
+      title: "ES",
     });
 
     seriesRef.current = series;
@@ -107,7 +105,7 @@ export default function SpxChart({
     };
   }, []);
 
-  // Data + implied move lines
+  // Historical data — show full day including overnight
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
 
@@ -116,59 +114,28 @@ export default function SpxChart({
         time: Math.floor(
           new Date(s.created_at).getTime() / 1000,
         ) as UTCTimestamp,
-        value: s.spx_ref,
+        value: s.es_ref,
       }))
       .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
 
     seriesRef.current.setData(points);
 
-    if (upperLineRef.current) {
-      try {
-        seriesRef.current.removePriceLine(upperLineRef.current);
-      } catch {}
-      upperLineRef.current = null;
-    }
-    if (lowerLineRef.current) {
-      try {
-        seriesRef.current.removePriceLine(lowerLineRef.current);
-      } catch {}
-      lowerLineRef.current = null;
-    }
-
-    if (data.length > 0) {
-      const openingStraddle = data[0].straddle_mid;
-      const openingStrike = data[0].atm_strike;
-
-      upperLineRef.current = seriesRef.current.createPriceLine({
-        price: openingStrike + openingStraddle,
-        color: "#265C4D",
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: true,
-        title: "Implied High",
-      });
-
-      lowerLineRef.current = seriesRef.current.createPriceLine({
-        price: openingStrike - openingStraddle,
-        color: "#265C4D",
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: true,
-        title: "Implied Low",
-      });
-    }
-
-    const marketOpen = Math.floor(
-      new Date(`${selectedDate}T13:30:00Z`).getTime() / 1000,
+    // Show full day — midnight to midnight CT
+    const dayStart = Math.floor(
+      new Date(`${selectedDate}T06:00:00Z`).getTime() / 1000,
     ) as UTCTimestamp;
-    const marketClose = Math.floor(
-      new Date(`${selectedDate}T20:00:00Z`).getTime() / 1000,
+    const dayEnd = Math.floor(
+      new Date(`${selectedDate}T22:00:00Z`).getTime() / 1000,
     ) as UTCTimestamp;
 
     try {
-      chartRef.current
-        .timeScale()
-        .setVisibleRange({ from: marketOpen, to: marketClose });
+      if (points.length > 0) {
+        chartRef.current.timeScale().fitContent();
+      } else {
+        chartRef.current
+          .timeScale()
+          .setVisibleRange({ from: dayStart, to: dayEnd });
+      }
     } catch {}
   }, [data, selectedDate]);
 
@@ -211,7 +178,7 @@ export default function SpxChart({
     }
   }, [pdh, pdl]);
 
-  // Live tick — extend line with current price
+  // Live tick
   useEffect(() => {
     if (!seriesRef.current || !currentPrice) return;
     const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
