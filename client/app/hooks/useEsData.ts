@@ -10,10 +10,6 @@ export function useEsData(selectedDate: string) {
   useEffect(() => {
     let cancelled = false;
     async function load() {
-      // Query a full 48-hour UTC window around the selected CT date
-      // CT is UTC-5 (CST) or UTC-6 (CDT — currently active)
-      // To capture all of a CT day we query from selectedDate-1 T06:00Z
-      // through selectedDate+1 T06:00Z (generous window, chart displays in CT)
       const date = new Date(`${selectedDate}T00:00:00Z`);
       const prevDay = new Date(date);
       prevDay.setUTCDate(prevDay.getUTCDate() - 1);
@@ -57,5 +53,7 @@ export function useEsData(selectedDate: string) {
     };
   }, [selectedDate]);
 
-  return { esData };
+  const lastEsTime = esData[esData.length - 1]?.created_at ?? null;
+
+  return { esData, lastEsTime };
 }

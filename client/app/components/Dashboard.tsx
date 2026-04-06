@@ -8,6 +8,7 @@ import PosView from "./PosView";
 import { useStraddleData } from "../hooks/useStraddleData";
 import { useFlyData } from "../hooks/useFlyData";
 import { useSkewData } from "../hooks/useSkewData";
+import { useEsData } from "../hooks/useEsData";
 import { StraddleSnapshot, RtmSession } from "../types";
 
 type Props = {
@@ -36,12 +37,11 @@ export default function Dashboard({
     initialSmlSession,
   );
   const { skewSnapshots } = useSkewData(selectedDate);
+  const { esData, lastEsTime } = useEsData(selectedDate);
 
   const latestSpx = straddleData[straddleData.length - 1]?.spx_ref ?? 0;
   const lastStraddleTime =
     straddleData[straddleData.length - 1]?.created_at ?? null;
-  const lastFlyTime = flySnapshots[flySnapshots.length - 1]?.created_at ?? null;
-  const hasActiveSession = smlSession?.sml_ref != null;
   const lastSkewTime =
     skewSnapshots[skewSnapshots.length - 1]?.created_at ?? null;
 
@@ -72,11 +72,10 @@ export default function Dashboard({
         <div className="flex items-center gap-3">
           <LiveIndicator
             lastStraddleTime={lastStraddleTime}
-            lastFlyTime={lastFlyTime}
-            hasActiveSession={hasActiveSession}
+            lastSkewTime={lastSkewTime}
+            lastEsTime={lastEsTime}
             lastQuoteTime={null}
             hasActivePositions={false}
-            lastSkewTime={lastSkewTime}
           />
           <span className="text-sm text-gray-400">
             {new Date().toLocaleDateString("en-US", {
@@ -96,6 +95,7 @@ export default function Dashboard({
           skewSnapshots={skewSnapshots}
           selectedDate={selectedDate}
           esBasis={esBasis}
+          esData={esData}
         />
       )}
       {activeTab === "VOL" && (

@@ -5,14 +5,13 @@ import SpxChart from "./SpxChart";
 import EsChart from "./EsChart";
 import EsSpxConverter from "./Converter";
 import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
-import { useEsData } from "../hooks/useEsData";
-import { StraddleSnapshot, SkewSnapshot } from "../types";
-
+import { StraddleSnapshot, SkewSnapshot, EsSnapshot } from "../types";
 type Props = {
   straddleData: StraddleSnapshot[];
   skewSnapshots: SkewSnapshot[];
   selectedDate: string;
   esBasis: number | null;
+  esData: EsSnapshot[]; // add this
 };
 
 const LIVE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL];
@@ -22,6 +21,7 @@ export default function MktView({
   skewSnapshots,
   selectedDate,
   esBasis,
+  esData,
 }: Props) {
   const latest = straddleData[straddleData.length - 1];
   const opening = straddleData[0];
@@ -33,8 +33,6 @@ export default function MktView({
   const ticks = useLiveTick(LIVE_SYMBOLS);
   const spxTick = ticks["SPX"] ?? null;
   const esTick = ticks[ES_STREAMER_SYMBOL] ?? null;
-
-  const { esData } = useEsData(selectedDate);
 
   const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
 

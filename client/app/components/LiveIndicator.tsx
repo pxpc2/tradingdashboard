@@ -2,26 +2,19 @@
 
 import { useState } from "react";
 
-type LiveStatus = {
-  label: string;
-  live: boolean;
-  lastTime: string | null;
-  inactive?: boolean;
-};
+type SourceStatus = "live" | "closed" | "error";
 
 type Props = {
   lastStraddleTime: string | null;
-  lastFlyTime: string | null;
-  hasActiveSession: boolean;
+  lastSkewTime: string | null;
+  lastEsTime: string | null;
   lastQuoteTime: string | null;
   hasActivePositions: boolean;
-  lastSkewTime: string | null;
 };
 
-function isRecent(timestamp: string | null): boolean {
+function isRecent(timestamp: string | null, windowMs = 90 * 1000): boolean {
   if (!timestamp) return false;
-  const diff = Date.now() - new Date(timestamp).getTime();
-  return diff < 90 * 1000;
+  return Date.now() - new Date(timestamp).getTime() < windowMs;
 }
 
 function formatTime(timestamp: string | null): string {
@@ -34,13 +27,12 @@ function formatTime(timestamp: string | null): string {
   });
 }
 
-function isMarketHours(): boolean {
-  const now = new Date();
-  const day = now.toLocaleDateString("en-US", {
+function isSpxOpen(): boolean {
+  const day = new Date().toLocaleDateString("en-US", {
     timeZone: "America/New_York",
     weekday: "short",
   });
-  const time = now.toLocaleTimeString("en-US", {
+  const time = new Date().toLocaleTimeString("en-US", {
     timeZone: "America/New_York",
     hour12: false,
     hour: "2-digit",
@@ -48,62 +40,118 @@ function isMarketHours(): boolean {
     second: "2-digit",
   });
   if (["Sat", "Sun"].includes(day)) return false;
-  if (time < "09:30:00" || time >= "16:00:00") return false;
+  return time >= "09:30:00" && time < "16:00:00";
+}
+
+function isEsOpen(): boolean {
+  const day = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+  });
+  const time = new Date().toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  if (day === "Sat") return false;
+  if (day === "Sun" && time < "18:00:00") return false;
+  if (!["Sat", "Sun"].includes(day) && time >= "17:00:00" && time < "18:00:00")
+    return false;
   return true;
+}
+
+function getSpxStatus(
+  lastStraddleTime: string | null,
+  lastSkewTime: string | null,
+): SourceStatus {
+  const spxOpen = isSpxOpen();
+  if (!spxOpen) return "closed";
+  // During RTH, both straddle and skew should have recent data
+  // Straddle every 1min (90s window), skew every 5min (360s window)
+  const straddleLive = isRecent(lastStraddleTime, 90 * 1000);
+  const skewLive = isRecent(lastSkewTime, 360 * 1000);
+  if (straddleLive && skewLive) return "live";
+  return "error";
+}
+
+function getEsStatus(lastEsTime: string | null): SourceStatus {
+  const esOpen = isEsOpen();
+  if (!esOpen) return "closed";
+  // ES every 1min
+  if (isRecent(lastEsTime, 90 * 1000)) return "live";
+  return "error";
+}
+
+function getVolStatus(
+  lastStraddleTime: string | null,
+  lastSkewTime: string | null,
+): SourceStatus {
+  const spxOpen = isSpxOpen();
+  if (!spxOpen) return "closed";
+  const straddleLive = isRecent(lastStraddleTime, 90 * 1000);
+  const skewLive = isRecent(lastSkewTime, 360 * 1000);
+  if (straddleLive && skewLive) return "live";
+  return "error";
+}
+
+function getPosStatus(
+  hasActivePositions: boolean,
+  lastQuoteTime: string | null,
+): SourceStatus {
+  if (!hasActivePositions) return "closed";
+  // Quotes refresh every 60s
+  if (isRecent(lastQuoteTime, 120 * 1000)) return "live";
+  return "error";
+}
+
+function statusColor(status: SourceStatus): string {
+  if (status === "live") return "#4ade80";
+  if (status === "error") return "#f87171";
+  return "#333333";
+}
+
+function statusLabel(status: SourceStatus, lastTime: string | null): string {
+  if (status === "live") return formatTime(lastTime);
+  if (status === "error") return "sem dados";
+  return "fechado";
 }
 
 export default function LiveIndicator({
   lastStraddleTime,
-  lastFlyTime,
-  hasActiveSession,
+  lastSkewTime,
+  lastEsTime,
   lastQuoteTime,
   hasActivePositions,
-  lastSkewTime,
 }: Props) {
   const [showTooltip, setShowTooltip] = useState(false);
-  const duringMarketHours = isMarketHours();
 
-  const statuses: LiveStatus[] = [
-    {
-      label: "Straddle",
-      live: isRecent(lastStraddleTime),
-      lastTime: lastStraddleTime,
-      inactive: !duringMarketHours,
-    },
-    {
-      label: "SML Fly",
-      live: hasActiveSession && isRecent(lastFlyTime),
-      lastTime: lastFlyTime,
-      inactive: !hasActiveSession,
-    },
-    {
-      label: "Skew",
-      live: isRecent(lastSkewTime),
-      lastTime: lastSkewTime,
-      inactive: !duringMarketHours,
-    },
-    {
-      label: "Posições",
-      live: hasActivePositions && isRecent(lastQuoteTime),
-      lastTime: lastQuoteTime,
-      inactive: !hasActivePositions,
-    },
+  const spxStatus = getSpxStatus(lastStraddleTime, lastSkewTime);
+  const esStatus = getEsStatus(lastEsTime);
+  const volStatus = getVolStatus(lastStraddleTime, lastSkewTime);
+  const posStatus = getPosStatus(hasActivePositions, lastQuoteTime);
+
+  const statuses = [
+    { label: "SPX", status: spxStatus, lastTime: lastStraddleTime },
+    { label: "ES", status: esStatus, lastTime: lastEsTime },
+    { label: "Volatilidade", status: volStatus, lastTime: lastSkewTime },
+    { label: "Posições", status: posStatus, lastTime: lastQuoteTime },
   ];
 
-  const activeSources = statuses.filter((s) => !s.inactive);
-  const allLive =
-    activeSources.length > 0 && activeSources.every((s) => s.live);
-  const someLive = activeSources.some((s) => s.live);
+  const hasError = statuses.some((s) => s.status === "error");
+  const spxOpen = isSpxOpen();
+  const esOpen = isEsOpen();
 
-  const dotColor = !duringMarketHours
-    ? "#333333"
-    : allLive
-      ? "#4ade80"
-      : someLive
-        ? "#f59e0b"
-        : "#f87171";
+  const dotColor = hasError
+    ? "#f87171"
+    : !spxOpen && !esOpen
+      ? "#333333"
+      : spxOpen
+        ? "#4ade80"
+        : "#fb923c"; // orange — ES open but SPX closed
 
-  const shouldPulse = duringMarketHours && allLive;
+  const shouldPulse = !hasError && (spxOpen || esOpen);
 
   return (
     <div
@@ -125,43 +173,34 @@ export default function LiveIndicator({
       </div>
 
       {showTooltip && (
-        <div className="absolute right-0 top-6 bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm p-3 z-50 min-w-48 shadow-lg">
+        <div className="absolute right-0 top-6 bg-[#1a1a1a] border border-[#2a2a2a] rounded-sm p-3 z-50 min-w-52 shadow-lg">
           <div className="flex flex-col gap-2">
-            {statuses.map((status) => (
+            {statuses.map((s) => (
               <div
-                key={status.label}
+                key={s.label}
                 className="flex items-center justify-between gap-4"
               >
                 <div className="flex items-center gap-2">
                   <div
                     className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                    style={{
-                      backgroundColor: status.inactive
-                        ? "#333"
-                        : status.live
-                          ? "#4ade80"
-                          : duringMarketHours
-                            ? "#f87171"
-                            : "#333",
-                    }}
+                    style={{ backgroundColor: statusColor(s.status) }}
                   />
-                  <span className="text-xs text-[#888]">{status.label}</span>
+                  <span className="text-xs text-[#888]">{s.label}</span>
                 </div>
                 <span className="text-xs text-[#444]">
-                  {status.inactive
-                    ? "inativo"
-                    : status.live
-                      ? formatTime(status.lastTime)
-                      : duringMarketHours
-                        ? "sem dados"
-                        : "fora do horário"}
+                  {statusLabel(s.status, s.lastTime)}
                 </span>
               </div>
             ))}
           </div>
-          {!duringMarketHours && (
+          {!spxOpen && !esOpen && (
             <div className="mt-2 pt-2 border-t border-[#2a2a2a] text-xs text-[#333]">
               mercado fechado
+            </div>
+          )}
+          {!spxOpen && esOpen && (
+            <div className="mt-2 pt-2 border-t border-[#2a2a2a] text-xs text-[#555]">
+              overnight aberto
             </div>
           )}
         </div>
