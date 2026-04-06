@@ -21,6 +21,8 @@ type Props = {
   currentPrice?: number | null;
   weeklyLevels?: PharmLevel[];
   dailyLevels?: PharmLevel[];
+  onh?: number | null;
+  onl?: number | null;
 };
 
 function isToday(selectedDate: string): boolean {
@@ -41,11 +43,15 @@ export default function EsChart({
   currentPrice,
   weeklyLevels = [],
   dailyLevels = [],
+  onh,
+  onl,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const pharmLinesRef = useRef<IPriceLine[]>([]);
+  const onhLineRef = useRef<IPriceLine | null>(null);
+  const onlLineRef = useRef<IPriceLine | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -149,7 +155,7 @@ export default function EsChart({
     } catch {}
   }, [data, selectedDate]);
 
-  // Pharm levels
+  // Pharm levels — only on today
   useEffect(() => {
     if (!seriesRef.current) return;
 
@@ -159,6 +165,8 @@ export default function EsChart({
       } catch {}
     }
     pharmLinesRef.current = [];
+
+    if (!isToday(selectedDate)) return;
 
     const allLevels = [
       ...weeklyLevels.map((l) => ({ ...l, source: "weekly" as const })),
@@ -194,7 +202,49 @@ export default function EsChart({
         pharmLinesRef.current.push(bottomLine);
       }
     }
-  }, [weeklyLevels, dailyLevels]);
+  }, [weeklyLevels, dailyLevels, selectedDate]);
+
+  // ONH/ONL — only on today during RTH
+  useEffect(() => {
+    if (!seriesRef.current) return;
+
+    if (onhLineRef.current) {
+      try {
+        seriesRef.current.removePriceLine(onhLineRef.current);
+      } catch {}
+      onhLineRef.current = null;
+    }
+    if (onlLineRef.current) {
+      try {
+        seriesRef.current.removePriceLine(onlLineRef.current);
+      } catch {}
+      onlLineRef.current = null;
+    }
+
+    if (!isToday(selectedDate)) return;
+
+    if (onh) {
+      onhLineRef.current = seriesRef.current.createPriceLine({
+        price: onh,
+        color: "#2a6b6b",
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: "ONH",
+      });
+    }
+
+    if (onl) {
+      onlLineRef.current = seriesRef.current.createPriceLine({
+        price: onl,
+        color: "#2a6b6b",
+        lineWidth: 1,
+        lineStyle: LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: "ONL",
+      });
+    }
+  }, [onh, onl, selectedDate]);
 
   // Live tick
   useEffect(() => {

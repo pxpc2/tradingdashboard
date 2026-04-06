@@ -18,6 +18,31 @@ type Props = {
 
 const LIVE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL];
 
+function isSpxOpen(): boolean {
+  const day = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+  });
+  const time = new Date().toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  if (["Sat", "Sun"].includes(day)) return false;
+  return time >= "09:30:00" && time < "16:00:00";
+}
+
+function isToday(selectedDate: string): boolean {
+  return (
+    selectedDate ===
+    new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/New_York",
+    })
+  );
+}
+
 export default function MktView({
   straddleData,
   skewSnapshots,
@@ -39,6 +64,27 @@ export default function MktView({
   const { weeklyLevels, dailyLevels } = usePharmLevels();
 
   const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
+
+  // Compute ONH/ONL from esData — only during RTH on today
+  const { onh, onl } = (() => {
+    if (!isToday(selectedDate) || !isSpxOpen()) return { onh: null, onl: null };
+
+    const rthOpen = new Date(`${selectedDate}T14:30:00Z`).getTime();
+    // Overnight = from 17:00 ET prev day (22:00 UTC) to 09:30 ET today (14:30 UTC)
+    const prevRthClose = rthOpen - 17.5 * 60 * 60 * 1000;
+
+    const overnightPoints = esData.filter((s) => {
+      const t = new Date(s.created_at).getTime();
+      return t >= prevRthClose && t < rthOpen;
+    });
+
+    if (overnightPoints.length === 0) return { onh: null, onl: null };
+
+    return {
+      onh: Math.max(...overnightPoints.map((s) => s.es_ref)),
+      onl: Math.min(...overnightPoints.map((s) => s.es_ref)),
+    };
+  })();
 
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
@@ -161,6 +207,8 @@ export default function MktView({
           currentPrice={esTick?.mid ?? null}
           weeklyLevels={weeklyLevels}
           dailyLevels={dailyLevels}
+          onh={onh}
+          onl={onl}
         />
         <div className="mt-4">
           <EsSpxConverter initialBasis={esBasis} />
