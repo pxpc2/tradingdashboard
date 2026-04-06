@@ -5,13 +5,15 @@ import SpxChart from "./SpxChart";
 import EsChart from "./EsChart";
 import EsSpxConverter from "./Converter";
 import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
+import { usePharmLevels } from "../hooks/usePharmLevels";
 import { StraddleSnapshot, SkewSnapshot, EsSnapshot } from "../types";
+
 type Props = {
   straddleData: StraddleSnapshot[];
   skewSnapshots: SkewSnapshot[];
   selectedDate: string;
   esBasis: number | null;
-  esData: EsSnapshot[]; // add this
+  esData: EsSnapshot[];
 };
 
 const LIVE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL];
@@ -33,6 +35,8 @@ export default function MktView({
   const ticks = useLiveTick(LIVE_SYMBOLS);
   const spxTick = ticks["SPX"] ?? null;
   const esTick = ticks[ES_STREAMER_SYMBOL] ?? null;
+
+  const { weeklyLevels, dailyLevels } = usePharmLevels();
 
   const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
 
@@ -73,10 +77,8 @@ export default function MktView({
         ? "#f59e0b"
         : "#9ca3af";
 
-
   return (
     <div className="flex flex-col gap-6">
-      {/* Metric strip */}
       <div className="flex items-baseline gap-8">
         <div>
           <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
@@ -134,7 +136,6 @@ export default function MktView({
         )}
       </div>
 
-      {/* SPX chart */}
       <div>
         <div className="text-xs text-[#333] uppercase tracking-widest mb-3">
           SPX
@@ -150,7 +151,6 @@ export default function MktView({
 
       <div className="border-t border-[#1a1a1a]" />
 
-      {/* ES chart + converter */}
       <div>
         <div className="text-xs text-[#333] uppercase tracking-widest mb-3">
           ES
@@ -159,6 +159,8 @@ export default function MktView({
           data={esData}
           selectedDate={selectedDate}
           currentPrice={esTick?.mid ?? null}
+          weeklyLevels={weeklyLevels}
+          dailyLevels={dailyLevels}
         />
         <div className="mt-4">
           <EsSpxConverter initialBasis={esBasis} />

@@ -8,14 +8,19 @@ import {
   ISeriesApi,
   SeriesType,
   IChartApi,
+  IPriceLine,
   CrosshairMode,
+  LineStyle,
 } from "lightweight-charts";
 import { EsSnapshot } from "../types";
+import { PharmLevel } from "../hooks/usePharmLevels";
 
 type Props = {
   data: EsSnapshot[];
   selectedDate: string;
   currentPrice?: number | null;
+  weeklyLevels?: PharmLevel[];
+  dailyLevels?: PharmLevel[];
 };
 
 function isToday(selectedDate: string): boolean {
@@ -27,10 +32,20 @@ function isToday(selectedDate: string): boolean {
   );
 }
 
-export default function EsChart({ data, selectedDate, currentPrice }: Props) {
+const WEEKLY = { color: "#3b4f7a", width: 2, style: LineStyle.Dashed };
+const DAILY = { color: "#444444", width: 2, style: LineStyle.Dashed };
+
+export default function EsChart({
+  data,
+  selectedDate,
+  currentPrice,
+  weeklyLevels = [],
+  dailyLevels = [],
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
+  const pharmLinesRef = useRef<IPriceLine[]>([]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -53,10 +68,7 @@ export default function EsChart({ data, selectedDate, currentPrice }: Props) {
         visible: true,
         borderColor: "#1f1f1f",
         textColor: "#444444",
-        scaleMargins: {
-          top: 0.1,
-          bottom: 0.1,
-        },
+        scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       localization: {
         timeFormatter: (time: number) =>
@@ -137,7 +149,54 @@ export default function EsChart({ data, selectedDate, currentPrice }: Props) {
     } catch {}
   }, [data, selectedDate]);
 
-  // Live tick — rounded to minute
+  // Pharm levels
+  useEffect(() => {
+    if (!seriesRef.current) return;
+
+    for (const line of pharmLinesRef.current) {
+      try {
+        seriesRef.current.removePriceLine(line);
+      } catch {}
+    }
+    pharmLinesRef.current = [];
+
+    const allLevels = [
+      ...weeklyLevels.map((l) => ({ ...l, source: "weekly" as const })),
+      ...dailyLevels.map((l) => ({ ...l, source: "daily" as const })),
+    ];
+
+    for (const level of allLevels) {
+      const style = level.source === "weekly" ? WEEKLY : DAILY;
+
+      const rangeStr =
+        level.low !== null ? `${level.low}-${level.high}` : `${level.high}`;
+      const title = level.label ? `${rangeStr} ${level.label}` : rangeStr;
+
+      const topLine = seriesRef.current.createPriceLine({
+        price: level.high,
+        color: style.color,
+        lineWidth: style.width as 1 | 2 | 3 | 4,
+        lineStyle: style.style,
+        axisLabelVisible: false,
+        title,
+      });
+      pharmLinesRef.current.push(topLine);
+
+      if (level.low !== null) {
+        const bottomLine = seriesRef.current.createPriceLine({
+          price: level.low,
+          color: style.color,
+          lineWidth: style.width as 1 | 2 | 3 | 4,
+          lineStyle: style.style,
+          axisLabelVisible: false,
+          title: "",
+        });
+        pharmLinesRef.current.push(bottomLine);
+      }
+    }
+  }, [weeklyLevels, dailyLevels]);
+
+  // Live tick
   useEffect(() => {
     if (!seriesRef.current || !currentPrice) return;
     if (!isToday(selectedDate)) return;
