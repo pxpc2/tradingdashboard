@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import LiveIndicator from "./LiveIndicator";
 import MktView from "./MktView";
 import VolView from "./VolView";
@@ -9,7 +9,9 @@ import { useStraddleData } from "../hooks/useStraddleData";
 import { useFlyData } from "../hooks/useFlyData";
 import { useSkewData } from "../hooks/useSkewData";
 import { useEsData } from "../hooks/useEsData";
+import { signOut } from "../login/actions";
 import { StraddleSnapshot, RtmSession } from "../types";
+import { LuLogOut } from "react-icons/lu";
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
@@ -86,6 +88,14 @@ export default function Dashboard({
               year: "numeric",
             })}
           </span>
+          <form action={signOut}>
+            <button
+              type="submit"
+              className="text-lg hover:text-[#555] transition-colors hover:cursor-pointer "
+            >
+              <LuLogOut />
+            </button>
+          </form>
         </div>
       </div>
 

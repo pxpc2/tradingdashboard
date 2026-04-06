@@ -1,4 +1,5 @@
 import { login } from "./actions";
+import SubmitButton from "./SubmitButton";
 
 export default async function LoginPage({
   searchParams,
@@ -13,7 +14,7 @@ export default async function LoginPage({
       <div className="w-full max-w-sm space-y-8">
         <div>
           <p className="mt-2 text-center text-sm text-[#444]">
-            nosso trading dashboard
+            trading dashboard
           </p>
         </div>
 
@@ -47,12 +48,7 @@ export default async function LoginPage({
             <p className="text-xs text-[#f87171]">email ou senha incorretos</p>
           )}
 
-          <button
-            type="submit"
-            className="flex w-full hover:cursor-pointer justify-center rounded-sm bg-white px-3 py-2 text-sm font-medium text-black hover:bg-gray-200 transition-colors"
-          >
-            login
-          </button>
+          <SubmitButton />
         </form>
       </div>
     </main>
