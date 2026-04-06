@@ -25,13 +25,23 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
+  // Refresh session — this is critical
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user && !request.nextUrl.pathname.startsWith("/login")) {
+  const isLoginPage = request.nextUrl.pathname.startsWith("/login");
+
+  if (!user && !isLoginPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    return NextResponse.redirect(url);
+  }
+
+  // If logged in and on login page, redirect to home
+  if (user && isLoginPage) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 
