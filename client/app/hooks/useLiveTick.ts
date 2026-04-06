@@ -8,6 +8,11 @@ type TickData = {
   mid: number;
 };
 
+// Front-month ES futures streamer symbol — update quarterly
+// Format: /ES{month}{2-digit-year}:XCME
+// H=Mar, M=Jun, U=Sep, Z=Dec — current: Jun 2026
+export const ES_STREAMER_SYMBOL = "/ESM26:XCME";
+
 function isSpxOpen(): boolean {
   const day = new Date().toLocaleDateString("en-US", {
     timeZone: "America/New_York",
@@ -36,10 +41,8 @@ function isEsOpen(): boolean {
     minute: "2-digit",
     second: "2-digit",
   });
-  // Closed Saturday all day and Sunday before 18:00 ET
   if (day === "Sat") return false;
   if (day === "Sun" && time < "18:00:00") return false;
-  // Closed weekdays 17:00–18:00 ET (daily settlement break)
   if (!["Sat", "Sun"].includes(day) && time >= "17:00:00" && time < "18:00:00")
     return false;
   return true;
@@ -53,10 +56,9 @@ export function useLiveTick(symbols: string[]) {
   useEffect(() => {
     if (symbols.length === 0) return;
 
-    // Filter to only symbols that are currently open
     const activeSymbols = symbols.filter((s) => {
       if (s === "SPX") return isSpxOpen();
-      if (s === "/ES") return isEsOpen();
+      if (s.startsWith("/ES")) return isEsOpen();
       return true;
     });
 

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import SpxChart from "./SpxChart";
 import EsChart from "./EsChart";
 import EsSpxConverter from "./Converter";
-import { useLiveTick } from "../hooks/useLiveTick";
+import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
 import { useEsData } from "../hooks/useEsData";
 import { StraddleSnapshot, SkewSnapshot } from "../types";
 
@@ -15,7 +15,7 @@ type Props = {
   esBasis: number | null;
 };
 
-const LIVE_SYMBOLS = ["SPX", "/ES"];
+const LIVE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL];
 
 export default function MktView({
   straddleData,
@@ -32,7 +32,7 @@ export default function MktView({
 
   const ticks = useLiveTick(LIVE_SYMBOLS);
   const spxTick = ticks["SPX"] ?? null;
-  const esTick = ticks["/ES"] ?? null;
+  const esTick = ticks[ES_STREAMER_SYMBOL] ?? null;
 
   const { esData } = useEsData(selectedDate);
 
@@ -75,7 +75,6 @@ export default function MktView({
         ? "#f59e0b"
         : "#9ca3af";
 
-  // ES PDH/PDL approximated from SPX levels + basis
   const esPdh = pdh && esBasis !== null ? pdh + esBasis : null;
   const esPdl = pdl && esBasis !== null ? pdl + esBasis : null;
 

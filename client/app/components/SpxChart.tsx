@@ -21,6 +21,15 @@ type Props = {
   currentPrice?: number | null;
 };
 
+function isToday(selectedDate: string): boolean {
+  return (
+    selectedDate ===
+    new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/New_York",
+    })
+  );
+}
+
 export default function SpxChart({
   data,
   selectedDate,
@@ -86,8 +95,7 @@ export default function SpxChart({
     const series = chart.addSeries(LineSeries, {
       color: "#737373",
       lineWidth: 1,
-      priceLineVisible: true,
-      priceLineStyle: 1,
+      priceLineVisible: false,
       lastValueVisible: true,
       title: "SPX",
     });
@@ -211,14 +219,16 @@ export default function SpxChart({
     }
   }, [pdh, pdl]);
 
-  // Live tick — extend line with current price
+  // Live tick — only append when viewing today, rounded to minute
   useEffect(() => {
     if (!seriesRef.current || !currentPrice) return;
-    const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
+    if (!isToday(selectedDate)) return;
+
+    const nowMinute = (Math.floor(Date.now() / 60000) * 60) as UTCTimestamp;
     try {
-      seriesRef.current.update({ time: now, value: currentPrice });
+      seriesRef.current.update({ time: nowMinute, value: currentPrice });
     } catch {}
-  }, [currentPrice]);
+  }, [currentPrice, selectedDate]);
 
   return (
     <div ref={containerRef} className="w-full rounded-sm overflow-hidden" />

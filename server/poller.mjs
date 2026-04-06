@@ -170,29 +170,25 @@ async function getSpxQuoteMid() {
 }
 
 async function getEsMid() {
+  // Front-month ES futures streamer symbol — update quarterly (H=Mar, M=Jun, U=Sep, Z=Dec)
+  // Format: /ES{month}{2-digit-year}:XCME — current: Jun 2026
+  const ES_SYMBOL = "/ESM26:XCME";
+
   try {
     return await withTimeout(
       new Promise((resolve) => {
         const listener = (events) => {
-          // Log ALL incoming events to see what symbols we're getting
-          events.forEach((e) => {
-            if (e.eventType === "Quote") {
-              console.log(
-                `[${nowCT()}] Quote received: ${e.eventSymbol} bid:${e.bidPrice} ask:${e.askPrice}`,
-              );
-            }
-          });
           const esQuote = events.find(
-            (e) => e.eventSymbol === "/ES" && e.eventType === "Quote",
+            (e) => e.eventSymbol === ES_SYMBOL && e.eventType === "Quote",
           );
           if (esQuote && esQuote.bidPrice > 0 && esQuote.askPrice > 0) {
             client.quoteStreamer.removeEventListener(listener);
-            client.quoteStreamer.unsubscribe(["/ES"]);
+            client.quoteStreamer.unsubscribe([ES_SYMBOL]);
             resolve((esQuote.bidPrice + esQuote.askPrice) / 2);
           }
         };
         client.quoteStreamer.addEventListener(listener);
-        client.quoteStreamer.subscribe(["/ES"]);
+        client.quoteStreamer.subscribe([ES_SYMBOL]);
       }),
       10000,
       "ES quote",

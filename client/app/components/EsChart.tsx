@@ -21,6 +21,15 @@ type Props = {
   pdl?: number | null;
 };
 
+function isToday(selectedDate: string): boolean {
+  return (
+    selectedDate ===
+    new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/New_York",
+    })
+  );
+}
+
 export default function EsChart({
   data,
   selectedDate,
@@ -84,8 +93,7 @@ export default function EsChart({
     const series = chart.addSeries(LineSeries, {
       color: "#737373",
       lineWidth: 1,
-      priceLineVisible: true,
-      priceLineStyle: 1,
+      priceLineVisible: false,
       lastValueVisible: true,
       title: "ES",
     });
@@ -105,7 +113,7 @@ export default function EsChart({
     };
   }, []);
 
-  // Historical data — show full day including overnight
+  // Historical data — reload on date or data change
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
 
@@ -120,21 +128,16 @@ export default function EsChart({
 
     seriesRef.current.setData(points);
 
-    // Show full day — midnight to midnight CT
-    const dayStart = Math.floor(
-      new Date(`${selectedDate}T06:00:00Z`).getTime() / 1000,
-    ) as UTCTimestamp;
-    const dayEnd = Math.floor(
-      new Date(`${selectedDate}T22:00:00Z`).getTime() / 1000,
-    ) as UTCTimestamp;
-
     try {
       if (points.length > 0) {
         chartRef.current.timeScale().fitContent();
       } else {
+        // Empty — show a reasonable window around now
+        const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
+        const sixHoursAgo = (now - 6 * 60 * 60) as UTCTimestamp;
         chartRef.current
           .timeScale()
-          .setVisibleRange({ from: dayStart, to: dayEnd });
+          .setVisibleRange({ from: sixHoursAgo, to: now });
       }
     } catch {}
   }, [data, selectedDate]);
@@ -178,14 +181,16 @@ export default function EsChart({
     }
   }, [pdh, pdl]);
 
-  // Live tick
+  // Live tick — only append when viewing today, rounded to minute
   useEffect(() => {
     if (!seriesRef.current || !currentPrice) return;
-    const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
+    if (!isToday(selectedDate)) return;
+
+    const nowMinute = (Math.floor(Date.now() / 60000) * 60) as UTCTimestamp;
     try {
-      seriesRef.current.update({ time: now, value: currentPrice });
+      seriesRef.current.update({ time: nowMinute, value: currentPrice });
     } catch {}
-  }, [currentPrice]);
+  }, [currentPrice, selectedDate]);
 
   return (
     <div ref={containerRef} className="w-full rounded-sm overflow-hidden" />
