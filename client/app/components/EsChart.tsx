@@ -8,7 +8,6 @@ import {
   ISeriesApi,
   SeriesType,
   IChartApi,
-  IPriceLine,
   CrosshairMode,
 } from "lightweight-charts";
 import { EsSnapshot } from "../types";
@@ -17,8 +16,6 @@ type Props = {
   data: EsSnapshot[];
   selectedDate: string;
   currentPrice?: number | null;
-  pdh?: number | null;
-  pdl?: number | null;
 };
 
 function isToday(selectedDate: string): boolean {
@@ -30,18 +27,10 @@ function isToday(selectedDate: string): boolean {
   );
 }
 
-export default function EsChart({
-  data,
-  selectedDate,
-  currentPrice,
-  pdh,
-  pdl,
-}: Props) {
+export default function EsChart({ data, selectedDate, currentPrice }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
-  const pdhLineRef = useRef<IPriceLine | null>(null);
-  const pdlLineRef = useRef<IPriceLine | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -64,6 +53,10 @@ export default function EsChart({
         visible: true,
         borderColor: "#1f1f1f",
         textColor: "#444444",
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.1,
+        },
       },
       localization: {
         timeFormatter: (time: number) =>
@@ -78,6 +71,7 @@ export default function EsChart({
         borderColor: "#1f1f1f",
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 60,
         tickMarkFormatter: (time: number) =>
           new Date(time * 1000).toLocaleTimeString("en-US", {
             timeZone: "America/Chicago",
@@ -93,7 +87,9 @@ export default function EsChart({
     const series = chart.addSeries(LineSeries, {
       color: "#737373",
       lineWidth: 1,
-      priceLineVisible: false,
+      priceLineVisible: true,
+      priceLineStyle: 1,
+      priceLineColor: "#CF7C00",
       lastValueVisible: true,
       title: "ES",
     });
@@ -113,7 +109,7 @@ export default function EsChart({
     };
   }, []);
 
-  // Historical data — reload on date or data change
+  // Historical data
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
 
@@ -132,7 +128,6 @@ export default function EsChart({
       if (points.length > 0) {
         chartRef.current.timeScale().fitContent();
       } else {
-        // Empty — show a reasonable window around now
         const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
         const sixHoursAgo = (now - 6 * 60 * 60) as UTCTimestamp;
         chartRef.current
@@ -142,50 +137,10 @@ export default function EsChart({
     } catch {}
   }, [data, selectedDate]);
 
-  // PDH/PDL lines
-  useEffect(() => {
-    if (!seriesRef.current) return;
-
-    if (pdhLineRef.current) {
-      try {
-        seriesRef.current.removePriceLine(pdhLineRef.current);
-      } catch {}
-      pdhLineRef.current = null;
-    }
-    if (pdlLineRef.current) {
-      try {
-        seriesRef.current.removePriceLine(pdlLineRef.current);
-      } catch {}
-      pdlLineRef.current = null;
-    }
-
-    if (pdh) {
-      pdhLineRef.current = seriesRef.current.createPriceLine({
-        price: pdh,
-        color: "#265C4D",
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: true,
-        title: "PDH",
-      });
-    }
-    if (pdl) {
-      pdlLineRef.current = seriesRef.current.createPriceLine({
-        price: pdl,
-        color: "#265C4D",
-        lineWidth: 1,
-        lineStyle: 2,
-        axisLabelVisible: true,
-        title: "PDL",
-      });
-    }
-  }, [pdh, pdl]);
-
-  // Live tick — only append when viewing today, rounded to minute
+  // Live tick — rounded to minute
   useEffect(() => {
     if (!seriesRef.current || !currentPrice) return;
     if (!isToday(selectedDate)) return;
-
     const nowMinute = (Math.floor(Date.now() / 60000) * 60) as UTCTimestamp;
     try {
       seriesRef.current.update({ time: nowMinute, value: currentPrice });

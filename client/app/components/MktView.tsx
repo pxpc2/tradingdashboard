@@ -73,8 +73,6 @@ export default function MktView({
         ? "#f59e0b"
         : "#9ca3af";
 
-  const esPdh = pdh && esBasis !== null ? pdh + esBasis : null;
-  const esPdl = pdl && esBasis !== null ? pdl + esBasis : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -161,8 +159,6 @@ export default function MktView({
           data={esData}
           selectedDate={selectedDate}
           currentPrice={esTick?.mid ?? null}
-          pdh={esPdh}
-          pdl={esPdl}
         />
         <div className="mt-4">
           <EsSpxConverter initialBasis={esBasis} />

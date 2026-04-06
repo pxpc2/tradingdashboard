@@ -66,6 +66,10 @@ export default function SpxChart({
         visible: true,
         borderColor: "#1f1f1f",
         textColor: "#444444",
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.1,
+        },
       },
       localization: {
         timeFormatter: (time: number) =>
@@ -80,6 +84,7 @@ export default function SpxChart({
         borderColor: "#1f1f1f",
         timeVisible: true,
         secondsVisible: false,
+        rightOffset: 15,
         tickMarkFormatter: (time: number) =>
           new Date(time * 1000).toLocaleTimeString("en-US", {
             timeZone: "America/Chicago",
@@ -95,7 +100,9 @@ export default function SpxChart({
     const series = chart.addSeries(LineSeries, {
       color: "#737373",
       lineWidth: 1,
-      priceLineVisible: false,
+      priceLineVisible: true,
+      priceLineStyle: 1,
+      priceLineColor: "#CF7C00",
       lastValueVisible: true,
       title: "SPX",
     });
@@ -131,15 +138,11 @@ export default function SpxChart({
     seriesRef.current.setData(points);
 
     if (upperLineRef.current) {
-      try {
-        seriesRef.current.removePriceLine(upperLineRef.current);
-      } catch {}
+      try { seriesRef.current.removePriceLine(upperLineRef.current); } catch {}
       upperLineRef.current = null;
     }
     if (lowerLineRef.current) {
-      try {
-        seriesRef.current.removePriceLine(lowerLineRef.current);
-      } catch {}
+      try { seriesRef.current.removePriceLine(lowerLineRef.current); } catch {}
       lowerLineRef.current = null;
     }
 
@@ -166,17 +169,10 @@ export default function SpxChart({
       });
     }
 
-    const marketOpen = Math.floor(
-      new Date(`${selectedDate}T13:30:00Z`).getTime() / 1000,
-    ) as UTCTimestamp;
-    const marketClose = Math.floor(
-      new Date(`${selectedDate}T20:00:00Z`).getTime() / 1000,
-    ) as UTCTimestamp;
-
     try {
-      chartRef.current
-        .timeScale()
-        .setVisibleRange({ from: marketOpen, to: marketClose });
+      if (points.length > 0) {
+        chartRef.current.timeScale().fitContent();
+      }
     } catch {}
   }, [data, selectedDate]);
 
@@ -185,15 +181,11 @@ export default function SpxChart({
     if (!seriesRef.current) return;
 
     if (pdhLineRef.current) {
-      try {
-        seriesRef.current.removePriceLine(pdhLineRef.current);
-      } catch {}
+      try { seriesRef.current.removePriceLine(pdhLineRef.current); } catch {}
       pdhLineRef.current = null;
     }
     if (pdlLineRef.current) {
-      try {
-        seriesRef.current.removePriceLine(pdlLineRef.current);
-      } catch {}
+      try { seriesRef.current.removePriceLine(pdlLineRef.current); } catch {}
       pdlLineRef.current = null;
     }
 
@@ -219,11 +211,10 @@ export default function SpxChart({
     }
   }, [pdh, pdl]);
 
-  // Live tick — only append when viewing today, rounded to minute
+  // Live tick — rounded to minute
   useEffect(() => {
     if (!seriesRef.current || !currentPrice) return;
     if (!isToday(selectedDate)) return;
-
     const nowMinute = (Math.floor(Date.now() / 60000) * 60) as UTCTimestamp;
     try {
       seriesRef.current.update({ time: nowMinute, value: currentPrice });

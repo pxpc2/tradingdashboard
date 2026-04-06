@@ -79,8 +79,8 @@ function getSpxStatus(
 function getEsStatus(lastEsTime: string | null): SourceStatus {
   const esOpen = isEsOpen();
   if (!esOpen) return "closed";
-  // ES every 1min
-  if (isRecent(lastEsTime, 90 * 1000)) return "live";
+  // ES every 1min - using 3min window
+  if (isRecent(lastEsTime, 180 * 1000)) return "live";
   return "error";
 }
 
