@@ -22,8 +22,9 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      router.push("/");
-      router.refresh();
+      // Use window.location instead of router to force a full page reload
+      // so middleware picks up the new session cookie properly
+      window.location.href = "/";
     }
   }
 
