@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.99.3",
     "@tastytrade/api": "^7.0.1",
     "black-scholes": "^1.1.0",
