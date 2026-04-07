@@ -66,11 +66,11 @@ export default function MktView({
   const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
 
   // Compute ONH/ONL from esData — only during RTH on today
+  // Uses high/low columns for accuracy, falls back to es_ref for old rows
   const { onh, onl } = (() => {
     if (!isToday(selectedDate) || !isSpxOpen()) return { onh: null, onl: null };
 
     const rthOpen = new Date(`${selectedDate}T14:30:00Z`).getTime();
-    // Overnight = from 17:00 ET prev day (22:00 UTC) to 09:30 ET today (14:30 UTC)
     const prevRthClose = rthOpen - 17.5 * 60 * 60 * 1000;
 
     const overnightPoints = esData.filter((s) => {
@@ -81,8 +81,8 @@ export default function MktView({
     if (overnightPoints.length === 0) return { onh: null, onl: null };
 
     return {
-      onh: Math.max(...overnightPoints.map((s) => s.es_ref)),
-      onl: Math.min(...overnightPoints.map((s) => s.es_ref)),
+      onh: Math.max(...overnightPoints.map((s) => s.high ?? s.es_ref)),
+      onl: Math.min(...overnightPoints.map((s) => s.low ?? s.es_ref)),
     };
   })();
 

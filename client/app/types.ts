@@ -46,4 +46,16 @@ export type EsSnapshot = {
   id: string;
   created_at: string;
   es_ref: number;
+  open?: number | null;
+  high?: number | null;
+  low?: number | null;
+};
+
+export type SpxSnapshot = {
+  id: string;
+  created_at: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
 };
