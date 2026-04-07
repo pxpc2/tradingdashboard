@@ -8,6 +8,7 @@ import {
   ISeriesApi,
   SeriesType,
   IChartApi,
+  createTextWatermark,
 } from "lightweight-charts";
 import { StraddleSnapshot } from "../types";
 
@@ -74,6 +75,18 @@ export default function StraddleChart({ data, selectedDate }: Props) {
       priceLineVisible: false,
       lastValueVisible: true,
       title: "Straddle",
+    });
+
+    createTextWatermark(chart.panes()[0], {
+      horzAlign: "center",
+      vertAlign: "center",
+      lines: [
+        {
+          text: "vovonacci - straddle",
+          color: "rgba(204, 204, 204, 0.2)",
+          fontSize: 24,
+        },
+      ],
     });
 
     seriesRef.current = series;

@@ -8,6 +8,7 @@ import {
   ISeriesApi,
   SeriesType,
   IChartApi,
+  createTextWatermark,
 } from "lightweight-charts";
 
 type SkewSnapshot = {
@@ -86,6 +87,18 @@ export default function SkewChart({ data, selectedDate }: Props) {
       priceLineVisible: false,
       lastValueVisible: true,
       title: "Skew",
+    });
+
+    createTextWatermark(chart.panes()[0], {
+      horzAlign: "center",
+      vertAlign: "center",
+      lines: [
+        {
+          text: "vovonacci - 25Δ 1 month skew",
+          color: "rgba(204, 204, 204, 0.2)",
+          fontSize: 24,
+        },
+      ],
     });
 
     seriesRef.current = series;

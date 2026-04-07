@@ -8,6 +8,7 @@ import {
   ISeriesApi,
   SeriesType,
   IChartApi,
+  createTextWatermark,
 } from "lightweight-charts";
 
 type FlySnapshot = {
@@ -85,6 +86,18 @@ export default function FlyChart({ data, width, color, selectedDate }: Props) {
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,
+    });
+
+    createTextWatermark(chart.panes()[0], {
+      horzAlign: "center",
+      vertAlign: "center",
+      lines: [
+        {
+          text: `vovonacci - SML ${width}W fly`,
+          color: "rgba(204, 204, 204, 0.2)",
+          fontSize: 24,
+        },
+      ],
     });
 
     seriesRef.current = series;
