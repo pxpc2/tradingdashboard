@@ -137,7 +137,7 @@ export default function MktView({
         </div>
         <div>
           <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
-            Current Straddle
+            Straddle
           </span>
           <span className="text-2xl font-medium text-gray-400">
             ${latest?.straddle_mid?.toFixed(2) ?? "—"}
@@ -146,7 +146,7 @@ export default function MktView({
         {opening && (
           <div>
             <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
-              Implied Move
+              Implied
             </span>
             <span className="text-2xl font-medium text-gray-400">
               ${opening.straddle_mid.toFixed(2)}
