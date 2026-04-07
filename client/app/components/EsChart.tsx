@@ -11,6 +11,7 @@ import {
   IPriceLine,
   CrosshairMode,
   LineStyle,
+  createTextWatermark,
 } from "lightweight-charts";
 import { EsSnapshot } from "../types";
 import { PharmLevel } from "../hooks/usePharmLevels";
@@ -110,6 +111,18 @@ export default function EsChart({
       priceLineColor: "#CF7C00",
       lastValueVisible: true,
       title: "ES",
+    });
+
+    createTextWatermark(chart.panes()[0], {
+      horzAlign: "center",
+      vertAlign: "center",
+      lines: [
+        {
+          text: "vovonacci - ES futs",
+          color: "rgba(204, 204, 204, 0.2)",
+          fontSize: 24,
+        },
+      ],
     });
 
     seriesRef.current = series;

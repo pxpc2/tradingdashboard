@@ -72,13 +72,6 @@ export default function Dashboard({
           className="bg-[#111111] text-[#444444] border border-[#1f1f1f] rounded-sm px-2 py-1 text-sm"
         />
         <div className="flex items-center gap-3">
-          <LiveIndicator
-            lastStraddleTime={lastStraddleTime}
-            lastSkewTime={lastSkewTime}
-            lastEsTime={lastEsTime}
-            lastQuoteTime={null}
-            hasActivePositions={false}
-          />
           <span className="text-sm text-gray-400">
             {new Date().toLocaleDateString("en-US", {
               timeZone: "America/Chicago",

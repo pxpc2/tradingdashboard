@@ -10,6 +10,7 @@ import {
   IChartApi,
   IPriceLine,
   CrosshairMode,
+  createTextWatermark,
 } from "lightweight-charts";
 import { StraddleSnapshot } from "../types";
 
@@ -107,6 +108,18 @@ export default function SpxChart({
       title: "SPX",
     });
 
+    createTextWatermark(chart.panes()[0], {
+      horzAlign: "center",
+      vertAlign: "center",
+      lines: [
+        {
+          text: "vovonacci - SPX index",
+          color: "rgba(204, 204, 204, 0.2)",
+          fontSize: 24,
+        },
+      ],
+    });
+
     seriesRef.current = series;
     chartRef.current = chart;
 
@@ -138,11 +151,15 @@ export default function SpxChart({
     seriesRef.current.setData(points);
 
     if (upperLineRef.current) {
-      try { seriesRef.current.removePriceLine(upperLineRef.current); } catch {}
+      try {
+        seriesRef.current.removePriceLine(upperLineRef.current);
+      } catch {}
       upperLineRef.current = null;
     }
     if (lowerLineRef.current) {
-      try { seriesRef.current.removePriceLine(lowerLineRef.current); } catch {}
+      try {
+        seriesRef.current.removePriceLine(lowerLineRef.current);
+      } catch {}
       lowerLineRef.current = null;
     }
 
@@ -181,11 +198,15 @@ export default function SpxChart({
     if (!seriesRef.current) return;
 
     if (pdhLineRef.current) {
-      try { seriesRef.current.removePriceLine(pdhLineRef.current); } catch {}
+      try {
+        seriesRef.current.removePriceLine(pdhLineRef.current);
+      } catch {}
       pdhLineRef.current = null;
     }
     if (pdlLineRef.current) {
-      try { seriesRef.current.removePriceLine(pdlLineRef.current); } catch {}
+      try {
+        seriesRef.current.removePriceLine(pdlLineRef.current);
+      } catch {}
       pdlLineRef.current = null;
     }
 

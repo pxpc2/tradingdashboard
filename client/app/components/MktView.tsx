@@ -34,6 +34,25 @@ function isSpxOpen(): boolean {
   return time >= "09:30:00" && time < "16:00:00";
 }
 
+function isEsOpen(): boolean {
+  const day = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+  });
+  const time = new Date().toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  if (day === "Sat") return false;
+  if (day === "Sun" && time < "18:00:00") return false;
+  if (!["Sat", "Sun"].includes(day) && time >= "17:00:00" && time < "18:00:00")
+    return false;
+  return true;
+}
+
 function isToday(selectedDate: string): boolean {
   return (
     selectedDate ===
@@ -66,7 +85,6 @@ export default function MktView({
   const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
 
   // Compute ONH/ONL from esData — only during RTH on today
-  // Uses high/low columns for accuracy, falls back to es_ref for old rows
   const { onh, onl } = (() => {
     if (!isToday(selectedDate) || !isSpxOpen()) return { onh: null, onl: null };
 
@@ -123,8 +141,12 @@ export default function MktView({
         ? "#f59e0b"
         : "#9ca3af";
 
+  const spxOpen = isSpxOpen();
+  const esOpen = isEsOpen();
+
   return (
     <div className="flex flex-col gap-6">
+      {/* Metric strip */}
       <div className="flex items-baseline gap-8">
         <div>
           <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
@@ -182,9 +204,16 @@ export default function MktView({
         )}
       </div>
 
+      {/* SPX chart */}
       <div>
-        <div className="text-xs text-[#333] uppercase tracking-widest mb-3">
-          SPX
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs text-gray-400 uppercase tracking-widest">
+            SPX
+          </span>
+          <div
+            className="w-1.5 h-1.5 rounded-full"
+            style={{ backgroundColor: spxOpen ? "#4ade80" : "#333333" }}
+          />
         </div>
         <SpxChart
           data={straddleData}
@@ -197,9 +226,16 @@ export default function MktView({
 
       <div className="border-t border-[#1a1a1a]" />
 
+      {/* ES chart */}
       <div>
-        <div className="text-xs text-[#333] uppercase tracking-widest mb-3">
-          ES
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xs text-gray-400 uppercase tracking-widest">
+            ES
+          </span>
+          <div
+            className="w-1.5 h-1.5 rounded-full"
+            style={{ backgroundColor: esOpen ? "#4ade80" : "#333333" }}
+          />
         </div>
         <EsChart
           data={esData}
