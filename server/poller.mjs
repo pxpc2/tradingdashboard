@@ -68,11 +68,8 @@ function isMarketHours() {
 function isGlobexHours() {
   const day = getETDay();
   const time = getETTime();
-  // Closed all Saturday
   if (day === "Sat") return false;
-  // Closed Sunday before 18:00 ET
   if (day === "Sun" && time < "18:00:00") return false;
-  // Closed weekdays during 17:00–18:00 ET settlement break
   if (!["Sat", "Sun"].includes(day) && time >= "17:00:00" && time < "18:00:00")
     return false;
   return true;
@@ -170,10 +167,7 @@ async function getSpxQuoteMid() {
 }
 
 async function getEsMid() {
-  // Front-month ES futures streamer symbol — update quarterly (H=Mar, M=Jun, U=Sep, Z=Dec)
-  // Format: /ES{month}{2-digit-year}:XCME — current: Jun 2026
   const ES_SYMBOL = "/ESM26:XCME";
-
   try {
     return await withTimeout(
       new Promise((resolve) => {
@@ -198,6 +192,116 @@ async function getEsMid() {
     return null;
   }
 }
+
+// ─── OHLC Collection ─────────────────────────────────────────────────────────
+
+const ES_SYMBOL = "/ESM26:XCME";
+const OHLC_WINDOW_MS = 55 * 1000; // collect for 55s, insert, repeat
+
+async function collectOhlc(symbols, durationMs) {
+  // Returns { [symbol]: { open, high, low, close } }
+  const ohlc = {};
+
+  return new Promise((resolve) => {
+    const listener = (events) => {
+      events.forEach((e) => {
+        if (!symbols.includes(e.eventSymbol)) return;
+        if (e.eventType !== "Quote") return;
+        if (e.bidPrice <= 0 || e.askPrice <= 0) return;
+
+        const mid = (e.bidPrice + e.askPrice) / 2;
+        const sym = e.eventSymbol;
+
+        if (!ohlc[sym]) {
+          ohlc[sym] = { open: mid, high: mid, low: mid, close: mid };
+        } else {
+          ohlc[sym].high = Math.max(ohlc[sym].high, mid);
+          ohlc[sym].low = Math.min(ohlc[sym].low, mid);
+          ohlc[sym].close = mid;
+        }
+      });
+    };
+
+    client.quoteStreamer.addEventListener(listener);
+    client.quoteStreamer.subscribe(symbols);
+
+    setTimeout(() => {
+      client.quoteStreamer.removeEventListener(listener);
+      client.quoteStreamer.unsubscribe(symbols);
+      resolve(ohlc);
+    }, durationMs);
+  });
+}
+
+async function runOhlcLoop() {
+  const esOpen = isGlobexHours();
+  const spxOpen = isMarketHours();
+
+  if (!esOpen && !spxOpen) {
+    // Nothing to collect — retry in 60s
+    setTimeout(runOhlcLoop, 60 * 1000);
+    return;
+  }
+
+  const symbolsToCollect = [];
+  if (esOpen) symbolsToCollect.push(ES_SYMBOL);
+  if (spxOpen) symbolsToCollect.push("SPX");
+
+  try {
+    const ohlc = await collectOhlc(symbolsToCollect, OHLC_WINDOW_MS);
+
+    // Insert ES OHLC
+    if (ohlc[ES_SYMBOL]) {
+      const { open, high, low, close } = ohlc[ES_SYMBOL];
+      const { error } = await withTimeout(
+        supabase.from("es_snapshots").insert({
+          es_ref: close,
+          open,
+          high,
+          low,
+        }),
+        10000,
+        "es ohlc insert",
+      );
+      if (error) {
+        console.error(`[${nowCT()}] ES OHLC insert error:`, error.message);
+      } else {
+        console.log(
+          `[${nowCT()}] ES OHLC | O:${open.toFixed(2)} H:${high.toFixed(2)} L:${low.toFixed(2)} C:${close.toFixed(2)}`,
+        );
+      }
+    }
+
+    // Insert SPX OHLC
+    if (ohlc["SPX"]) {
+      const { open, high, low, close } = ohlc["SPX"];
+      const { error } = await withTimeout(
+        supabase.from("spx_snapshots").insert({
+          open,
+          high,
+          low,
+          close,
+        }),
+        10000,
+        "spx ohlc insert",
+      );
+      if (error) {
+        console.error(`[${nowCT()}] SPX OHLC insert error:`, error.message);
+      } else {
+        console.log(
+          `[${nowCT()}] SPX OHLC | O:${open.toFixed(2)} H:${high.toFixed(2)} L:${low.toFixed(2)} C:${close.toFixed(2)}`,
+        );
+      }
+    }
+  } catch (err) {
+    console.error(`[${nowCT()}] OHLC loop error:`, err.message);
+  }
+
+  // Schedule next — 5s gap after the 55s collection window = ~60s total
+  setTimeout(runOhlcLoop, 5 * 1000);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // BSM helpers
 function normalCDF(x) {
@@ -476,33 +580,8 @@ async function computeAndStoreSkew(allOptions, spxMid) {
 let lastSkipLog = 0;
 
 async function runCycle(isOpenCycle = false) {
-  const globexOpen = isGlobexHours();
-  const marketOpen = isMarketHours();
-
-  // Always try to store ES if globex is open
-  if (globexOpen) {
-    try {
-      // Small delay on first cycle to let DXLink warm up
-      const esMid = await getEsMid();
-      if (esMid !== null) {
-        const { error } = await withTimeout(
-          supabase.from("es_snapshots").insert({ es_ref: esMid }),
-          10000,
-          "es insert",
-        );
-        if (error) {
-          console.error(`[${nowCT()}] ES insert error:`, error.message);
-        } else {
-          console.log(`[${nowCT()}] ES: ${esMid.toFixed(2)}`);
-        }
-      }
-    } catch (err) {
-      console.error(`[${nowCT()}] ES cycle error:`, err.message);
-    }
-  }
-
   // SPX/options logic only during market hours
-  if (!marketOpen) {
+  if (!isMarketHours()) {
     const now = Date.now();
     if (now - lastSkipLog > 60 * 60 * 1000) {
       console.log(`[${nowCT()}] SPX fechado, tentaremos mais tarde.`);
@@ -557,7 +636,6 @@ async function runCycle(isOpenCycle = false) {
         `[${nowCT()}] SPX open price: ${openPrice?.toFixed(2)} | ATM strike: ${atmStrikePrice}`,
       );
 
-      // ES basis at open
       const esMid = await getEsMid();
       if (esMid !== null && spxMid > 0) {
         esBasis = parseFloat((esMid - spxMid).toFixed(2));
@@ -634,13 +712,11 @@ async function runCycle(isOpenCycle = false) {
       );
     }
 
-    // Skew — every 5 cycles
     skewCycleCount++;
     if (skewCycleCount % 5 === 0) {
       await computeAndStoreSkew(options, spxMid);
     }
 
-    // SML Fly
     const { data: sessions } = await supabase
       .from("rtm_sessions")
       .select("*")
@@ -751,7 +827,9 @@ console.log(`[${nowCT()}] Inicializando servidor...`);
 await client.quoteStreamer.connect();
 console.log(`[${nowCT()}] DXLink conectado com sucesso.`);
 
+// Start both loops independently
 runAndScheduleNext();
+runOhlcLoop();
 
 process.on("SIGINT", async () => {
   console.log(`\n[${nowCT()}] Desligando..`);
