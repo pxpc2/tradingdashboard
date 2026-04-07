@@ -93,7 +93,7 @@ export default function FlyChart({ data, width, color, selectedDate }: Props) {
       vertAlign: "center",
       lines: [
         {
-          text: `vovonacci - SML ${width}W fly`,
+          text: `SML ${width}W fly`,
           color: "rgba(204, 204, 204, 0.2)",
           fontSize: 24,
         },

@@ -113,7 +113,7 @@ export default function SpxChart({
       vertAlign: "center",
       lines: [
         {
-          text: "vovonacci - SPX index",
+          text: "SPX index",
           color: "rgba(204, 204, 204, 0.2)",
           fontSize: 24,
         },

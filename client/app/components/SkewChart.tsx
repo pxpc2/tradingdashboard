@@ -94,7 +94,7 @@ export default function SkewChart({ data, selectedDate }: Props) {
       vertAlign: "center",
       lines: [
         {
-          text: "vovonacci - 25Δ 1 month skew",
+          text: "25Δ 1 month skew",
           color: "rgba(204, 204, 204, 0.2)",
           fontSize: 24,
         },

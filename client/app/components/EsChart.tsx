@@ -118,7 +118,7 @@ export default function EsChart({
       vertAlign: "center",
       lines: [
         {
-          text: "vovonacci - ES futs",
+          text: "ES futs",
           color: "rgba(204, 204, 204, 0.2)",
           fontSize: 24,
         },
