@@ -82,7 +82,7 @@ export default function StraddleChart({ data, selectedDate }: Props) {
       vertAlign: "center",
       lines: [
         {
-          text: "vovonacci - straddle",
+          text: "vovonacci - 0DTE ATM straddle",
           color: "rgba(204, 204, 204, 0.2)",
           fontSize: 24,
         },
