@@ -76,10 +76,22 @@ export function useXxxData(
 
 Rules:
 
-- Always use the `cancelled` flag in fetch effects — prevents stale setState on fast date changes
+- Always use the `cancelled` flag in fetch effects
 - Always clean up realtime channels in the return of the subscription effect
-- Expose patch functions (e.g. `patchEntryMid`) from the hook when local state needs to be mutated after a Supabase update, so the UI reacts immediately without a reload
-- `initialData` param exists only on hooks whose data is SSR-fetched in `page.tsx` (currently straddle + fly session)
+- Expose patch functions from the hook when local state needs immediate mutation
+- `initialData` param only on hooks whose data is SSR-fetched in `page.tsx`
+
+### Exception: useEsData
+
+`useEsData` does NOT use the standard date range query. ES data spans UTC day boundaries
+(overnight globex session), so it queries a 48hr window:
+
+```typescript
+const from = `${prevDay}T06:00:00Z`;
+const to = `${nextDay}T06:00:00Z`;
+```
+
+This captures all rows that belong to a CT date regardless of their UTC timestamp.
 
 ---
 
@@ -98,10 +110,8 @@ type Props = {
 
 export default function XxxView({ data, selectedDate }: Props) {
   const latest = data[data.length - 1];
-  // derive display values from props only
   return (
     <div>
-      {/* metric labels */}
       <SomeChart data={data} selectedDate={selectedDate} />
     </div>
   );
@@ -111,20 +121,24 @@ export default function XxxView({ data, selectedDate }: Props) {
 Rules:
 
 - Props only — no hooks that touch Supabase
-- Local `useState` is fine for UI-only state (editing, tooltips, active tab within the view)
-- Derive computed values (latest, opening, pnl, pct) inline from props — no separate state for these
-- All fetch side effects that depend on `selectedDate` belong in a hook, not a view component
-  - Exception: `StraddleView` fetches PDH/PDL via `/api/pdhl` — this is acceptable since it's a one-shot API call, not a Supabase subscription
+- Local `useState` fine for UI-only state
+- Derive computed values inline from props — no separate state for these
+- Exception: `MktView` fetches PDH/PDL via `/api/pdhl` — acceptable as one-shot API call
 
 ---
 
 ## Chart Component Structure
 
+Two effects: one for chart creation (deps `[]`), one for data update (deps `[data, selectedDate]`).
+
 ```typescript
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createChart, AreaSeries, UTCTimestamp, IChartApi, ISeriesApi, SeriesType } from "lightweight-charts";
+import {
+  createChart, LineSeries, UTCTimestamp,
+  IChartApi, ISeriesApi, SeriesType
+} from "lightweight-charts";
 import { XxxSnapshot } from "../types";
 
 type Props = {
@@ -137,15 +151,15 @@ export default function XxxChart({ data, selectedDate }: Props) {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
 
-  // Effect 1 — create chart once on mount
   useEffect(() => {
     if (!containerRef.current) return;
     const chart = createChart(containerRef.current, { /* options */ });
-    const series = chart.addSeries(AreaSeries, { /* options */ });
+    const series = chart.addSeries(LineSeries, { /* options */ });
     chartRef.current = chart;
     seriesRef.current = series;
     const handleResize = () => {
-      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
+      if (containerRef.current)
+        chart.applyOptions({ width: containerRef.current.clientWidth });
     };
     window.addEventListener("resize", handleResize);
     return () => {
@@ -154,7 +168,6 @@ export default function XxxChart({ data, selectedDate }: Props) {
     };
   }, []);
 
-  // Effect 2 — update data when props change
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
     const points = data
@@ -162,12 +175,9 @@ export default function XxxChart({ data, selectedDate }: Props) {
         time: Math.floor(new Date(s.created_at).getTime() / 1000) as UTCTimestamp,
         value: s.some_value,
       }))
-      .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time); // dedup
+      .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
     seriesRef.current.setData(points);
-    // set visible range to market hours
-    const marketOpen = Math.floor(new Date(`${selectedDate}T13:30:00Z`).getTime() / 1000) as UTCTimestamp;
-    const marketClose = Math.floor(new Date(`${selectedDate}T20:00:00Z`).getTime() / 1000) as UTCTimestamp;
-    try { chartRef.current.timeScale().setVisibleRange({ from: marketOpen, to: marketClose }); } catch {}
+    try { chartRef.current.timeScale().fitContent(); } catch {}
   }, [data, selectedDate]);
 
   return <div ref={containerRef} className="w-full rounded-sm overflow-hidden" />;
@@ -176,39 +186,39 @@ export default function XxxChart({ data, selectedDate }: Props) {
 
 Rules:
 
-- Two effects: one for chart creation (deps `[]`), one for data update (deps `[data, selectedDate]`)
 - Always dedup time series points — filter where `p.time > arr[i-1].time`
-- Market hours visible range: `T13:30:00Z` to `T20:00:00Z` (UTC = 08:30–15:00 CT)
-- **Never use `display:none` on a chart container** — the chart unmounts and loses state. Use `visibility/height:0` trick instead:
-  ```tsx
-  style={{
-    visibility: isActive ? "visible" : "hidden",
-    height: isActive ? "auto" : "0",
-    overflow: "hidden",
-  }}
-  ```
-- Price lines (PDH, PDL, implied high/low) use separate refs and separate effects so they update independently of chart data
-- Wrap `removePriceLine` and `setVisibleRange` in try/catch — they throw if chart is not ready
+- Use `fitContent()` as default — only use `setVisibleRange` when explicitly needed
+- **Never use `display:none` on chart containers** — use `visibility/height:0` trick
+- Wrap `removePriceLine` and `setVisibleRange` in try/catch
+- Price lines use separate refs and separate effects so they update independently
+- Live tick updates use minute-bucketed timestamps: `Math.floor(Date.now() / 60000) * 60`
+- Only append live ticks when `isToday(selectedDate)` — guard every live tick effect
+- Chart overlays (pharm levels, ONH/ONL, PDH/PDL) only shown on today — clear and skip on past dates
 
 ---
 
 ## Types
 
-All shared types live in `client/app/types.ts`. Import from there everywhere.
+All shared types live in `client/app/types.ts`.
 
 ```typescript
-import {
-  StraddleSnapshot,
-  FlySnapshot,
-  SkewSnapshot,
-  RtmSession,
-} from "../types";
+import { StraddleSnapshot, EsSnapshot, PharmLevel } from "../types";
 ```
 
-Never redeclare types inline in components or hooks. If a new Supabase column is added, update `types.ts` first.
+Never redeclare types inline. Current types:
 
-Current types: `StraddleSnapshot`, `RtmSession`, `FlySnapshot`, `SkewSnapshot`.
-`StraddleSnapshot` includes `es_basis?: number | null` — only non-null on the open cycle row.
+```
+StraddleSnapshot   straddle_snapshots — includes es_basis?: number | null
+RtmSession         rtm_sessions
+FlySnapshot        sml_fly_snapshots
+SkewSnapshot       skew_snapshots
+EsSnapshot         es_snapshots — includes open/high/low as optional nullable
+SpxSnapshot        spx_snapshots — open/high/low/close all required
+PharmLevel         parsed from pharm_levels content — not a Supabase row type
+                   { high, low, label, isKey, source }
+```
+
+If a new Supabase column is added, update `types.ts` first.
 
 ---
 
@@ -218,8 +228,9 @@ Current types: `StraddleSnapshot`, `RtmSession`, `FlySnapshot`, `SkewSnapshot`.
 
 - Calls hooks
 - Owns `selectedDate` state
-- Owns tab/layout state
+- Owns tab state
 - Passes data down as props to view components
+- Imports and calls `signOut` server action
 
 When adding a new view:
 
@@ -231,42 +242,42 @@ When adding a new view:
 
 ## Dark Theme Color Palette
 
-All UI uses a consistent dark palette. Never use arbitrary hex values — use these:
-
 ```
 Backgrounds:
-  #0a0a0a   page background (set in layout/page)
+  #0a0a0a   page background
   #111111   component background, chart background
   #1a1a1a   subtle surface, grid lines, borders
   #1f1f1f   active tab background, input background
   #2a2a2a   borders, dividers
 
 Text:
-  #ffffff   primary (headings, active)
-  #888888   secondary (labels, muted values)
+  #ffffff   primary
+  #888888   secondary labels
   #666666   tertiary
-  #444444   very muted, inactive tabs
-  #333333   near-invisible, hints
-  gray-400  Tailwind alias used for metric labels (= ~#9ca3af)
+  #444444   very muted, chart text, inactive tabs
+  #333333   near-invisible hints
+  gray-400  Tailwind alias for metric labels (~#9ca3af)
 
-Accent colors (series, indicators):
-  #9CA9FF   straddle series, default area (blue-purple)
+Chart series / indicators:
+  #9CA9FF   straddle series (blue-purple)
   #60a5fa   fly 10W
-  #fb923c   fly 20W
+  #fb923c   fly 20W, orange live dot (ES open SPX closed)
   #34d399   fly 25W, ES output in converter
   #f472b6   fly 30W
   #4ade80   live indicator green
   #f59e0b   live indicator amber
   #f87171   live indicator red
   #265C4D   implied high/low lines, PDH/PDL lines (dark green)
-  #737373   SPX line on straddle chart
+  #737373   SPX/ES price line series color
+  #CF7C00   price line color on SPX and ES charts (orange)
+  #3b4f7a   weekly pharm levels (dark blue)
+  #444444   daily pharm levels (gray)
+  #2a6b6b   ONH/ONL lines (teal)
 ```
 
 ---
 
 ## Timezone Handling
-
-Three timezones are used — be deliberate:
 
 | Purpose                                 | Timezone              |
 | --------------------------------------- | --------------------- |
@@ -275,7 +286,7 @@ Three timezones are used — be deliberate:
 | Chart tick labels, time display         | America/Chicago (CT)  |
 | Date picker / `en-CA` locale dates      | America/New_York (ET) |
 
-Pattern for today's date string:
+Pattern for today's ET date string:
 
 ```typescript
 const today = new Date().toLocaleDateString("en-CA", {
@@ -300,7 +311,20 @@ new Date(timestamp).toLocaleTimeString("en-US", {
 
 - All DB inserts wrapped in `withTimeout(supabase.from(...).insert(...), 10000, "label")`
 - All quote fetches wrapped in `withTimeout(new Promise(...), 15000, "label")`
-- Log format: `[${nowCT()}] message` — CT time in brackets, then message in Portuguese
-- Abort early and log clearly rather than inserting bad data — the skew function is the reference example
-- `isOpenCycle` flag passed to `runCycle()` — open-cycle-only logic is gated behind this flag
-- Never block the open cycle on optional fetches — ES basis fetch has its own try/catch and is non-blocking
+- Log format: `[${nowCT()}] message` — CT time, messages in Portuguese
+- Abort early and log rather than inserting bad data
+- `isOpenCycle` flag gates open-cycle-only logic in `runCycle()`
+- Two independent loops: `runAndScheduleNext()` (options, RTH only) and `runOhlcLoop()` (OHLC, ES globex + SPX RTH)
+- OHLC loop: `collectOhlc(symbols, 55000)` collects ticks for 55s tracking open/high/low/close, then inserts, then 5s gap
+- ES symbol: `/ESM26:XCME` — update quarterly (next: Sep 2026 → `/ESU26:XCME`)
+- Service role key used for all Supabase writes (bypasses RLS)
+
+---
+
+## Auth Conventions
+
+- Login/signOut are server actions in `app/login/actions.ts`
+- `proxy.ts` (not `middleware.ts` — Next.js 16) exports `proxy` function and `config`
+- Use `createSupabaseServerClient()` from `lib/supabase-server.ts` in server actions
+- Use `createBrowserClient` from `@supabase/ssr` in `lib/supabase.ts` — carries session cookies for RLS
+- Never use plain `createClient` from `@supabase/supabase-js` in browser context — RLS writes will fail

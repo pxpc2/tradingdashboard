@@ -6,9 +6,10 @@ Personal SPX options monitoring dashboard. Real-time data from Tastytrade/DXFeed
 
 ## Stack
 
-- **Poller**: Node.js (`server/poller.mjs`) on Railway — runs 9:30–16:00 ET weekdays
+- **Poller**: Node.js (`server/poller.mjs`) on Railway
 - **Database**: Supabase (PostgreSQL + Realtime)
 - **Frontend**: Next.js (`client/`) with Tailwind, Lightweight Charts v5, TypeScript
+- **Auth**: Supabase Auth (email/password, single user), session via `@supabase/ssr` cookies
 - **Data source**: Tastytrade API via OAuth2 refresh token, DXFeed/DXLink WebSocket streaming
 
 ---
@@ -17,36 +18,48 @@ Personal SPX options monitoring dashboard. Real-time data from Tastytrade/DXFeed
 
 ```
 server/
-  poller.mjs              # Main polling loop, runs on Railway
-  .env                    # CLIENT_SECRET, REFRESH_TOKEN, SUPABASE_URL, SUPABASE_ANON_KEY
-                          # Railway mirrors these vars from its dashboard — no railway.json needed
+  poller.mjs              # Main polling loop on Railway
 
 client/app/
-  page.tsx                # Server component — fetches today's straddle + session SSR, renders Dashboard
+  page.tsx                # SSR initial data fetch, renders Dashboard
   layout.tsx
   globals.css
-  types.ts                # Shared TypeScript types for all Supabase tables — never redeclare locally
+  types.ts                # ALL shared types — never redeclare locally
+  proxy.ts                # Auth middleware (Next.js 16 uses proxy not middleware)
   lib/
-    supabase.ts           # Supabase client
+    supabase.ts           # createBrowserClient — session-aware, used in hooks/components
+    supabase-server.ts    # createSupabaseServerClient — used in server actions + page.tsx
+    supabase-middleware.ts # updateSession — used in proxy.ts
+  login/
+    page.tsx              # Server component login page
+    actions.ts            # login() and signOut() server actions
+    SubmitButton.tsx      # useFormStatus loading spinner
   hooks/
-    useStraddleData.ts    # Fetch + realtime for straddle_snapshots, exposes esBasis from first row
-    useFlyData.ts         # Fetch + realtime for rtm_sessions + sml_fly_snapshots, exposes patchEntryMid
-    useSkewData.ts        # Fetch + realtime for skew_snapshots
+    useStraddleData.ts    # straddle_snapshots fetch+realtime, exposes esBasis
+    useFlyData.ts         # rtm_sessions + sml_fly_snapshots fetch+realtime, exposes patchEntryMid
+    useSkewData.ts        # skew_snapshots fetch+realtime
+    useEsData.ts          # es_snapshots fetch+realtime, 48hr UTC window, exposes lastEsTime
+    usePharmLevels.ts     # pharm_levels fetch, parses weekly+daily content
+    useLiveTick.ts        # DXFeed WebSocket, auto-reconnect, exports ES_STREAMER_SYMBOL
   components/
-    Dashboard.tsx         # Top-level orchestrator — tab logic, layout, calls all three hooks
-    StraddleView.tsx      # Straddle + SPX combined chart with implied move labels, PDH/PDL
-    StraddleChart.tsx     # Lightweight Charts: dual-axis SPX line + straddle area, implied/PDH/PDL lines
-    SkewView.tsx          # Skew metric labels + SkewChart
-    SkewChart.tsx         # Lightweight Charts: skew area series
-    SmlFlyView.tsx        # SML Fly session creation form + per-width charts + inline entry price edit
-    FlyChart.tsx          # Lightweight Charts: fly mid area series
-    PositionsView.tsx     # Scratchpad positions — manual legs, BSM Greeks, live quote refresh every 60s
-    EsSpxConverter.tsx    # ES/SPX basis converter strip — basis read-only from DB, bidirectional toggle
-    LiveIndicator.tsx     # Live dot in header — green/amber/red per source, tooltip with last timestamps
+    Dashboard.tsx         # Orchestrator — tabs, selectedDate, calls all hooks, sign-out
+    MktView.tsx           # SPX+ES charts, metric strip, ONH/ONL, pharm levels
+    VolView.tsx           # Straddle chart + skew chart + metrics
+    PosView.tsx           # SML Fly + Scratchpad positions
+    SpxChart.tsx          # Lightweight Charts line, implied H/L, PDH/PDL, live tick
+    EsChart.tsx           # Lightweight Charts line, pharm levels, ONH/ONL, live tick
+    StraddleChart.tsx     # Straddle area series (VOL tab)
+    SkewChart.tsx         # Skew area series (VOL tab)
+    FlyChart.tsx          # Fly area series (POS tab)
+    SmlFlyView.tsx        # Fly session creation, per-width charts, inline entry edit
+    PositionsView.tsx     # Scratchpad positions, BSM Greeks, live quotes
+    LiveIndicator.tsx     # Dot with tooltip — SPX/ES/Volatility/Posições sources
+    EsSpxConverter.tsx    # Basis converter, bidirectional toggle
   api/
-    quotes/route.ts       # POST {symbols} — streams live quotes via Tastytrade, returns bid/ask/mid
-    chain/route.ts        # GET — fetches full SPXW option chain (expirations + strikes) for position builder
-    pdhl/route.ts         # GET — fetches previous day high, low, close from Tastytrade daily candles
+    quotes/route.ts       # POST — live quotes via Tastytrade
+    chain/route.ts        # GET — SPXW option chain
+    pdhl/route.ts         # GET — previous day H/L/close from Tastytrade candles
+    dxfeed-token/route.ts # GET — returns dxLinkUrl + dxLinkAuthToken
 ```
 
 ---
@@ -55,7 +68,7 @@ client/app/
 
 ```
 straddle_snapshots   id, created_at, spx_ref, atm_strike, call_bid, call_ask,
-                     put_bid, put_ask, straddle_mid, es_basis (nullable — only set on open cycle row)
+                     put_bid, put_ask, straddle_mid, es_basis (nullable — only on open cycle row)
 
 rtm_sessions         id, created_at, sml_ref, sal_ref, widths (int[]), type ('call'|'put')
 
@@ -68,94 +81,107 @@ positions            id, created_at, label, is_active, notes
 
 position_legs        id, created_at, position_id, expiration_date, strike,
                      opt_type, action, quantity, entry_price_mid, streamer_symbol
+
+es_snapshots         id, created_at, es_ref (close), open (nullable), high (nullable), low (nullable)
+                     -- es_ref kept as column name for backward compat, represents close price
+                     -- open/high/low populated from OHLC loop, null on old rows
+
+spx_snapshots        id, created_at, open, high, low, close
+                     -- populated by OHLC loop during RTH only
+                     -- not yet used by frontend (future candlestick charts)
+
+pharm_levels         id, created_at, updated_at, weekly_content (text), daily_content (text)
+                     -- single row, edit directly in Supabase table editor
+                     -- paste pharm's message directly, parser handles it client-side
 ```
+
+All tables have RLS enabled. Anon read on all. Auth write on rtm_sessions, sml_fly_snapshots,
+positions, position_legs, pharm_levels. Poller uses service role key (bypasses RLS).
 
 ---
 
 ## Poller Behavior
 
-- Connects to DXFeed WebSocket once at startup, keeps connection alive
-- Runs `runCycle()` every 60 seconds via `setTimeout` chain
-- **Open cycle** fires once per day at exactly 09:30:00–09:30:30 ET:
-  - Uses SPX `Summary.openPrice` (not mid) as ATM strike reference
-  - Also fetches `/ES` quote → computes `es_basis = ES_mid - SPX_mid`, stored on first straddle row
-  - Resets `skewCycleCount` to 0
-- **Skew** computed every 5th regular cycle (~5 min):
-  - Finds nearest 30-day expiry, fetches ATM quotes first to get IV seed
-  - Uses ATM IV as sigma estimate for 25-delta strike targeting
-  - Multiple abort conditions: invalid quotes (bid≤0, ask≤bid, spread/mid>50%), IV out of bounds, skew out of bounds
-- **SML Fly** stored each cycle if an active `rtm_sessions` row exists for today
-- Does not know about market holidays — logs "Nenhuma opção SPXW encontrada" harmlessly on those days
+Two independent loops run in parallel after startup:
+
+### `runAndScheduleNext()` — main options cycle, every 60s
+
+- RTH only (09:30–16:00 ET weekdays)
+- **Open cycle** fires once per day at 09:30:00–09:30:30 ET:
+  - Uses SPX `Summary.openPrice` for ATM strike reference
+  - Fetches ES basis (`ES_mid - SPX_mid`), stored on first straddle row
+  - Resets `skewCycleCount`
+- Each cycle: fetches option chain, SPX quote, ATM straddle quotes → inserts `straddle_snapshots`
+- Skew computed every 5th cycle (~5 min) → inserts `skew_snapshots`
+- SML Fly quotes fetched and inserted if active `rtm_sessions` row exists for today
+
+### `runOhlcLoop()` — OHLC collection, every ~60s
+
+- Runs independently, parallel to main cycle
+- Collects 55 seconds of live ticks for active symbols
+- ES (`/ESM26:XCME`): runs during globex hours, inserts into `es_snapshots` with open/high/low/close
+- SPX: runs during RTH only, inserts into `spx_snapshots`
+- 5s gap after 55s collection window = ~60s total per cycle
+
+### ES Symbol
+
+- Current: `/ESM26:XCME` (June 2026)
+- Format: `/ES{month}{2-digit-year}:XCME`
+- Month codes: H=Mar, M=Jun, U=Sep, Z=Dec
+- Update quarterly — next roll: September 2026 → `/ESU26:XCME`
 
 ---
 
-## Auth / API
+## Auth
 
-- Tastytrade uses OAuth2 refresh token flow. Env vars:
-  - Server: `CLIENT_SECRET`, `REFRESH_TOKEN`
-  - Client (Next.js API routes): `TASTY_CLIENT_SECRET`, `TASTY_REFRESH_TOKEN`
-- Each Next.js API route (`/api/quotes`, `/api/pdhl`, `/api/chain`) spins up a fresh `TastytradeClient`, connects, fetches, disconnects. 15s timeout on all streaming calls.
-- Refresh token will eventually expire — if API routes start returning 401, rotate the token.
-
----
-
-## Target Tab Architecture (MKT / VOL / POS)
-
-Planned reorganization to replace the current Straddle / SML Fly / Skew / Posições tabs.
-
-### [MKT]
-
-- SPX chart — implied high/low zones, PDH/PDL axis labels (existing, needs extraction from StraddleView)
-- ES chart — PDH/PDL, overnight high/low, pharmDK levels (placeholder — not built yet)
-- Inline metric strip: current straddle, implied move %, ATM IV, realized move %
-
-### [VOL]
-
-- Straddle chart with theoretical decay curve overlay — dashed BSM line computed from open IV
-- Historical skew chart across multiple days (pending formula validation + data accumulation)
-- Realized move % history chart (pending daily_summary table)
-
-### [POS]
-
-- Real positions from Tastytrade API — live P&L, portfolio Greeks aggregation (placeholder — not built yet)
-- SML Fly tracker (existing SmlFlyView, moves here unchanged)
-- Scratchpad positions (existing PositionsView, moves here unchanged)
+- Supabase Auth email+password, single user
+- Server actions for login/signOut in `client/app/login/actions.ts`
+- Session managed via `@supabase/ssr` cookies
+- `proxy.ts` (Next.js 16 middleware convention) checks session on every request
+- Unauthenticated requests redirected to `/login`
+- Frontend Supabase client uses `createBrowserClient` from `@supabase/ssr` — carries session for RLS
 
 ---
 
-## Current Status
+## Live Indicator Logic
 
-### Working
+Four sources, each with status: `live` | `closed` | `error`
 
-- Straddle snapshots with SPX overlay, dual Y-axes, implied move zones, PDH/PDL
-- SML Fly multi-width tracking, entry price inline editing, PnL
-- Normalized 25-delta skew on ~30-day expiry, sanitized, throttled every 5 min
-- Scratchpad positions with manual legs, BSM Greeks, live quote refresh every 60s
-- ES/SPX basis converter strip — basis from open cycle, read-only, bidirectional toggle
-- Live indicator dot with per-source freshness tooltip
-- Date picker with full historical browsing
-- Tall mode (all views stacked) / compact mode (tab-based)
-- Clean hooks / view components / chart components / types separation
+- **SPX**: `isSpxOpen()` + straddle recent (90s) + skew recent (360s)
+- **ES**: `isEsOpen()` + lastEsTime recent (180s)
+- **Volatility**: same as SPX (straddle + skew combined)
+- **Posições**: `hasActivePositions` + lastQuoteTime recent (120s)
 
-### Pending / In Progress
+Dot color:
 
-- Skew formula validation vs LiveVol (first real test upcoming)
-- Implied move % should use prev close, not open SPX ref (pdhl route already returns close)
-- SML Fly quote averaging to kill occasional bad prints at open/close
-- Live indicator for Posições (written, not yet wired in Dashboard)
-- ES/SPX converter input field reset on date change
-- Tab restructure to MKT/VOL/POS (planned next — start with structure + placeholders)
-- SPX chart and straddle chart need to be split into separate components before restructure
+- Any error → red
+- SPX closed + ES closed + no errors → gray
+- SPX open + no errors → green
+- ES open + SPX closed + no errors → orange (#fb923c)
 
-### Planned / Not Started
+---
 
-- ES chart with overnight candle data and pharmDK level inputs
-- Straddle theoretical decay curve (BSM with open IV, plotted as dashed line)
-- Historical skew chart (multi-day)
-- Realized move % label and history chart
-- Real Tastytrade positions component with live Greeks aggregation
-- Holiday list in poller
-- Daily summary table in Supabase for EOD metrics
+## PharmDK Levels
+
+- Stored as raw text in `pharm_levels` table (single row)
+- `weekly_content`: updated every Monday, persists all week
+- `daily_content`: updated each morning, replaced daily
+- Parsed client-side in `usePharmLevels` hook
+- Parser handles: ranges (`6639-6645`), single levels (`6469`), asterisks (`*`), notes (`monitor for LAAF`)
+- Single levels plot as one horizontal line
+- Ranges plot as two horizontal lines (top + bottom of region)
+- Weekly: dark blue (`#3b4f7a`), Daily: gray (`#444444`), both dashed width 2
+- Only shown on today's date — hidden on past dates
+
+---
+
+## Overnight High/Low (ONH/ONL)
+
+- Computed client-side from `esData` already fetched by `useEsData`
+- Overnight window: prev RTH close (22:00 UTC / 17:00 ET) → today RTH open (14:30 UTC / 09:30 ET)
+- Uses `high` column for ONH and `low` column for ONL (falls back to `es_ref` for old rows)
+- Only shown during RTH (`isSpxOpen()`) on today's date
+- Displayed as teal dashed lines (`#2a6b6b`) with axis labels ONH/ONL
 
 ---
 
@@ -164,7 +190,9 @@ Planned reorganization to replace the current Straddle / SML Fly / Skew / Posiç
 See AGENTS.md for full coding conventions. Summary:
 
 - **Timezones**: Supabase stores UTC. Frontend displays CT (America/Chicago). Market hours gated in ET (America/New_York).
-- **Lightweight Charts**: Never use `display:none` on chart containers — use `visibility/height:0` to keep charts mounted and avoid remount bugs.
-- **Data flow**: Hooks own all Supabase access. View components receive data as props only — no direct Supabase calls in components.
+- **Lightweight Charts**: Never use `display:none` on chart containers — use `visibility/height:0`.
+- **Data flow**: Hooks own all Supabase access. View components receive data as props only.
 - **Types**: All shared types in `types.ts`. Never redeclare inline.
-- **es_basis**: Only non-null on the first `straddle_snapshots` row of each day. Read via `straddleData[0]?.es_basis` in `useStraddleData`.
+- **es_basis**: Only non-null on the first `straddle_snapshots` row of each day.
+- **useEsData**: Uses a 48hr UTC window query (not standard date range) to handle overnight data correctly.
+- **createBrowserClient**: Must be used instead of `createClient` for RLS-authenticated browser writes.
