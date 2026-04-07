@@ -14,6 +14,8 @@ type Props = {
   selectedDate: string;
   esBasis: number | null;
   esData: EsSnapshot[];
+  onh: number | null;
+  onl: number | null;
 };
 
 const LIVE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL];
@@ -53,21 +55,14 @@ function isEsOpen(): boolean {
   return true;
 }
 
-function isToday(selectedDate: string): boolean {
-  return (
-    selectedDate ===
-    new Date().toLocaleDateString("en-CA", {
-      timeZone: "America/New_York",
-    })
-  );
-}
-
 export default function MktView({
   straddleData,
   skewSnapshots,
   selectedDate,
   esBasis,
   esData,
+  onh,
+  onl,
 }: Props) {
   const latest = straddleData[straddleData.length - 1];
   const opening = straddleData[0];
@@ -84,25 +79,10 @@ export default function MktView({
 
   const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
 
-  // Compute ONH/ONL from esData — only during RTH on today
-  const { onh, onl } = (() => {
-    if (!isToday(selectedDate) || !isSpxOpen()) return { onh: null, onl: null };
-
-    const rthOpen = new Date(`${selectedDate}T14:30:00Z`).getTime();
-    const prevRthClose = rthOpen - 17.5 * 60 * 60 * 1000;
-
-    const overnightPoints = esData.filter((s) => {
-      const t = new Date(s.created_at).getTime();
-      return t >= prevRthClose && t < rthOpen;
-    });
-
-    if (overnightPoints.length === 0) return { onh: null, onl: null };
-
-    return {
-      onh: Math.max(...overnightPoints.map((s) => s.high ?? s.es_ref)),
-      onl: Math.min(...overnightPoints.map((s) => s.low ?? s.es_ref)),
-    };
-  })();
+  const liveBasis =
+    spxTick && esTick
+      ? parseFloat((esTick.mid - spxTick.mid).toFixed(2))
+      : esBasis;
 
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
@@ -146,7 +126,6 @@ export default function MktView({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Metric strip */}
       <div className="flex items-baseline gap-8">
         <div>
           <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
@@ -204,7 +183,6 @@ export default function MktView({
         )}
       </div>
 
-      {/* SPX chart */}
       <div>
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs text-gray-400 uppercase tracking-widest">
@@ -226,7 +204,6 @@ export default function MktView({
 
       <div className="border-t border-[#1a1a1a]" />
 
-      {/* ES chart */}
       <div>
         <div className="flex items-center gap-2 mb-3">
           <span className="text-xs text-gray-400 uppercase tracking-widest">
@@ -247,7 +224,7 @@ export default function MktView({
           onl={onl}
         />
         <div className="mt-4">
-          <EsSpxConverter initialBasis={esBasis} />
+          <EsSpxConverter initialBasis={liveBasis} />
         </div>
       </div>
     </div>
