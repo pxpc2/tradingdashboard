@@ -131,7 +131,7 @@ export default function MacroEvents({ selectedDate }: Props) {
           <div
             ref={scrollRef}
             className="macro-scroll"
-            style={{ height: "250px", overflowY: "auto" }}
+            style={{ height: "300px", overflowY: "auto" }}
           >
             {events.map((e, i) => {
               const auction = isAuction(e.event);
@@ -154,7 +154,7 @@ export default function MacroEvents({ selectedDate }: Props) {
                   ref={(el) => { rowRefs.current[i] = el; }}
                   className="grid grid-cols-[64px_1fr_80px_80px_80px] gap-x-4 py-2 border-b border-[#111] transition-colors"
                   style={{
-                    backgroundColor: isNext ? "#161616" : "transparent",
+                    backgroundColor: isNext ? "#212121" : "transparent",
                     borderLeft: isNext ? "2px solid #555" : "2px solid transparent",
                     paddingLeft: isNext ? "6px" : "0",
                   }}
@@ -169,7 +169,6 @@ export default function MacroEvents({ selectedDate }: Props) {
                     {eventDot(e.event, e.impact)}
                     <span
                       className="font-sans text-[11px] truncate"
-                      style={{ color: isNext ? "#aaa" : eventTextColor }}
                     >
                       {e.event}
                     </span>

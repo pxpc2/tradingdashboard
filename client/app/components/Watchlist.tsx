@@ -127,7 +127,7 @@ export default function Watchlist({ entries, ticks }: Props) {
         <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">Chg%</span>
       </div>
 
-      <div className="macro-scroll" style={{ height: "250px", overflowY: "auto" }}>
+      <div className="macro-scroll" style={{ height: "300px", overflowY: "auto" }}>
         {groups.map(([category, categoryEntries]) => (
           <div key={category}>
             <div className="font-sans text-[9px] text-[#333] uppercase tracking-widest py-1.5 border-b border-[#111]">

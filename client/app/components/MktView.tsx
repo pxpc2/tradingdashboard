@@ -22,7 +22,7 @@ type Props = {
   esTick: TickData | null;
   liveBasis: number | null;
   watchlistEntries: WatchlistEntry[];
-ticks: Record<string, TickData>;
+  ticks: Record<string, TickData>;
 };
 
 function isSpxOpen(): boolean {
@@ -85,7 +85,7 @@ export default function MktView({
   esTick,
   liveBasis,
   watchlistEntries,
-  ticks
+  ticks,
 }: Props) {
   const latest = straddleData[straddleData.length - 1];
   const opening = straddleData[0];
@@ -140,14 +140,13 @@ export default function MktView({
   const spxOpen = isSpxOpen();
   const esOpen = isEsOpen();
 
+  // SPX % from pdhl close, ES % from DXFeed Summary prevDayClosePrice
   const spxPct = pctChange(liveSpx, prevClose);
-  const esPrevClose =
-    prevClose && esBasis !== null ? prevClose + esBasis : null;
-  const esPct = pctChange(liveEs, esPrevClose);
+  const esPct = pctChange(liveEs, esTick?.prevClose ?? null);
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Metric strip */}
+      {/* Metric strip — no % change, kept clean */}
       <div className="flex items-baseline gap-6 flex-nowrap overflow-x-auto pb-1 border-b border-[#222]">
         <div className="flex items-baseline gap-1.5 shrink-0">
           <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
@@ -156,15 +155,6 @@ export default function MktView({
           <span className="font-mono font-light text-lg text-[#9ca3af]">
             {liveSpx?.toFixed(2) ?? "—"}
           </span>
-          {spxPct && (
-            <span
-              className="font-mono text-xs"
-              style={{ color: pctColor(spxPct) }}
-            >
-              {parseFloat(spxPct) >= 0 ? "+" : ""}
-              {spxPct}%
-            </span>
-          )}
         </div>
 
         <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
@@ -237,10 +227,7 @@ export default function MktView({
         <div className="flex items-center gap-3 mb-3">
           <div
             className="w-0.5 h-4"
-            style={{
-              backgroundColor: spxOpen ? "#4ade80" : "#2a2a2a",
-              borderRadius: 0,
-            }}
+            style={{ backgroundColor: spxOpen ? "#4ade80" : "#2a2a2a", borderRadius: 0 }}
           />
           <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             SPX
@@ -251,12 +238,8 @@ export default function MktView({
             </span>
           )}
           {spxPct && (
-            <span
-              className="font-mono text-xs"
-              style={{ color: pctColor(spxPct) }}
-            >
-              {parseFloat(spxPct) >= 0 ? "+" : ""}
-              {spxPct}%
+            <span className="font-mono text-xs" style={{ color: pctColor(spxPct) }}>
+              {parseFloat(spxPct) >= 0 ? "+" : ""}{spxPct}%
             </span>
           )}
         </div>
@@ -276,10 +259,7 @@ export default function MktView({
         <div className="flex items-center gap-3 mb-3">
           <div
             className="w-0.5 h-4"
-            style={{
-              backgroundColor: esOpen ? "#4ade80" : "#2a2a2a",
-              borderRadius: 0,
-            }}
+            style={{ backgroundColor: esOpen ? "#4ade80" : "#2a2a2a", borderRadius: 0 }}
           />
           <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             ES
@@ -290,12 +270,8 @@ export default function MktView({
             </span>
           )}
           {esPct && (
-            <span
-              className="font-mono text-xs"
-              style={{ color: pctColor(esPct) }}
-            >
-              {parseFloat(esPct) >= 0 ? "+" : ""}
-              {esPct}%
+            <span className="font-mono text-xs" style={{ color: pctColor(esPct) }}>
+              {parseFloat(esPct) >= 0 ? "+" : ""}{esPct}%
             </span>
           )}
         </div>
@@ -309,11 +285,17 @@ export default function MktView({
           onl={onl}
         />
       </div>
+
       <div className="border-t border-[#222]" />
-      <div className="grid grid-cols-2 gap-8">
-  <MacroEvents selectedDate={selectedDate} />
-  <Watchlist entries={watchlistEntries} ticks={ticks} />
-</div>
+
+      {/* Two column: macro + watchlist */}
+      <div className="grid grid-cols-3 gap-8">
+        <div className="col-span-2">
+
+        <MacroEvents selectedDate={selectedDate} />
+        </div>
+        <Watchlist entries={watchlistEntries} ticks={ticks} />
+      </div>
     </div>
   );
 }

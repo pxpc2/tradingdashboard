@@ -14,11 +14,10 @@ export async function GET() {
   try {
     await client.quoteStreamer.connect();
 
-    // Use UTC date since candle times are midnight UTC
     const todayUTC = new Date().toISOString().slice(0, 10);
 
-    const { pdh, pdl } = await Promise.race([
-      new Promise<{ pdh: number; pdl: number }>((resolve) => {
+    const { pdh, pdl, close } = await Promise.race([
+      new Promise<{ pdh: number; pdl: number; close: number }>((resolve) => {
         const candles: any[] = [];
 
         const listener = (events: any[]) => {
@@ -33,7 +32,6 @@ export async function GET() {
             }
           });
 
-          // Filter to only completed previous days using UTC date string
           const previousCandles = candles.filter((c) => {
             const candleDate = new Date(c.time).toISOString().slice(0, 10);
             return candleDate < todayUTC;
@@ -43,7 +41,7 @@ export async function GET() {
             previousCandles.sort((a, b) => b.time - a.time);
             const prev = previousCandles[0];
             client.quoteStreamer.removeEventListener(listener);
-            resolve({ pdh: prev.high, pdl: prev.low });
+            resolve({ pdh: prev.high, pdl: prev.low, close: prev.close });
           }
         };
 
@@ -64,7 +62,7 @@ export async function GET() {
     ]);
 
     await client.quoteStreamer.disconnect();
-    return NextResponse.json({ pdh, pdl });
+    return NextResponse.json({ pdh, pdl, close });
   } catch (err: any) {
     try {
       await client.quoteStreamer.disconnect();
