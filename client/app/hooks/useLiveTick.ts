@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 
-type TickData = {
+export type TickData = {
   bid: number;
   ask: number;
   mid: number;
@@ -40,7 +40,8 @@ function isEsOpen(): boolean {
   });
   if (day === "Sat") return false;
   if (day === "Sun" && time < "18:00:00") return false;
-  if (!["Sat", "Sun"].includes(day) && time >= "17:00:00" && time < "18:00:00") return false;
+  if (!["Sat", "Sun"].includes(day) && time >= "17:00:00" && time < "18:00:00")
+    return false;
   return true;
 }
 
@@ -48,7 +49,9 @@ export function useLiveTick(symbols: string[]) {
   const [ticks, setTicks] = useState<Record<string, TickData>>({});
   const wsRef = useRef<WebSocket | null>(null);
   const channelId = useRef(1);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const cancelledRef = useRef(false);
 
   useEffect(() => {
@@ -79,32 +82,41 @@ export function useLiveTick(symbols: string[]) {
         wsRef.current = ws;
 
         ws.onopen = () => {
-          ws.send(JSON.stringify({
-            type: "SETUP",
-            channel: 0,
-            version: "0.1",
-            minVersion: "0.1",
-            keepaliveTimeout: 60,
-            acceptKeepaliveTimeout: 60,
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "SETUP",
+              channel: 0,
+              version: "0.1",
+              minVersion: "0.1",
+              keepaliveTimeout: 60,
+              acceptKeepaliveTimeout: 60,
+            }),
+          );
           ws.send(JSON.stringify({ type: "AUTH", channel: 0, token }));
-          ws.send(JSON.stringify({
-            type: "CHANNEL_REQUEST",
-            channel: channelId.current,
-            service: "FEED",
-            parameters: { contract: "AUTO" },
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "CHANNEL_REQUEST",
+              channel: channelId.current,
+              service: "FEED",
+              parameters: { contract: "AUTO" },
+            }),
+          );
         };
 
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data);
 
-          if (msg.type === "CHANNEL_OPENED" && msg.channel === channelId.current) {
-            ws.send(JSON.stringify({
-              type: "FEED_SUBSCRIPTION",
-              channel: channelId.current,
-              add: activeSymbols.map((symbol) => ({ type: "Quote", symbol })),
-            }));
+          if (
+            msg.type === "CHANNEL_OPENED" &&
+            msg.channel === channelId.current
+          ) {
+            ws.send(
+              JSON.stringify({
+                type: "FEED_SUBSCRIPTION",
+                channel: channelId.current,
+                add: activeSymbols.map((symbol) => ({ type: "Quote", symbol })),
+              }),
+            );
           }
 
           if (msg.type === "FEED_DATA" && msg.channel === channelId.current) {
@@ -143,11 +155,12 @@ export function useLiveTick(symbols: string[]) {
         ws.onclose = () => {
           wsRef.current = null;
           if (!cancelledRef.current) {
-            console.log("[useLiveTick] Connection closed, reconnecting in 5s...");
+            console.log(
+              "[useLiveTick] Connection closed, reconnecting in 5s...",
+            );
             reconnectTimeoutRef.current = setTimeout(connect, 5 * 1000);
           }
         };
-
       } catch (err) {
         console.error("[useLiveTick] Failed to connect:", err);
         if (!cancelledRef.current) {

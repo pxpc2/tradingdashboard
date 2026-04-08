@@ -3,9 +3,8 @@
 import { useState, useEffect } from "react";
 import SpxChart from "./SpxChart";
 import EsChart from "./EsChart";
-import EsSpxConverter from "./Converter";
-import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
 import { usePharmLevels } from "../hooks/usePharmLevels";
+import { ES_STREAMER_SYMBOL, TickData } from "../hooks/useLiveTick";
 import { StraddleSnapshot, SkewSnapshot, EsSnapshot } from "../types";
 
 type Props = {
@@ -16,9 +15,10 @@ type Props = {
   esData: EsSnapshot[];
   onh: number | null;
   onl: number | null;
+  spxTick: TickData | null;
+  esTick: TickData | null;
+  liveBasis: number | null;
 };
-
-const LIVE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL];
 
 function isSpxOpen(): boolean {
   const day = new Date().toLocaleDateString("en-US", {
@@ -76,6 +76,9 @@ export default function MktView({
   esData,
   onh,
   onl,
+  spxTick,
+  esTick,
+  liveBasis,
 }: Props) {
   const latest = straddleData[straddleData.length - 1];
   const opening = straddleData[0];
@@ -85,19 +88,10 @@ export default function MktView({
   const [pdl, setPdl] = useState<number | null>(null);
   const [prevClose, setPrevClose] = useState<number | null>(null);
 
-  const ticks = useLiveTick(LIVE_SYMBOLS);
-  const spxTick = ticks["SPX"] ?? null;
-  const esTick = ticks[ES_STREAMER_SYMBOL] ?? null;
-
   const { weeklyLevels, dailyLevels } = usePharmLevels();
 
   const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
   const liveEs = esTick?.mid ?? esData[esData.length - 1]?.es_ref ?? null;
-
-  const liveBasis =
-    spxTick && esTick
-      ? parseFloat((esTick.mid - spxTick.mid).toFixed(2))
-      : esBasis;
 
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
@@ -307,9 +301,6 @@ export default function MktView({
           onh={onh}
           onl={onl}
         />
-        <div className="mt-4">
-          <EsSpxConverter initialBasis={liveBasis} />
-        </div>
       </div>
     </div>
   );

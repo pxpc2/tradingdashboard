@@ -4,10 +4,12 @@ import { useState } from "react";
 import MktView from "./MktView";
 import VolView from "./VolView";
 import PosView from "./PosView";
+import EsSpxConverter from "./Converter";
 import { useStraddleData } from "../hooks/useStraddleData";
 import { useFlyData } from "../hooks/useFlyData";
 import { useSkewData } from "../hooks/useSkewData";
 import { useEsData } from "../hooks/useEsData";
+import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
 import { signOut } from "../login/actions";
 import { StraddleSnapshot, RtmSession, EsSnapshot } from "../types";
 
@@ -18,6 +20,8 @@ type Props = {
 
 const TABS = ["MKT", "VOL", "POS"] as const;
 type Tab = (typeof TABS)[number];
+
+const LIVE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL];
 
 function isToday(selectedDate: string): boolean {
   return (
@@ -78,6 +82,16 @@ export default function Dashboard({
   const { skewSnapshots } = useSkewData(selectedDate);
   const { esData, lastEsTime } = useEsData(selectedDate);
 
+  // Lifted from MktView so converter in topbar shares the same ticks
+  const ticks = useLiveTick(LIVE_SYMBOLS);
+  const spxTick = ticks["SPX"] ?? null;
+  const esTick = ticks[ES_STREAMER_SYMBOL] ?? null;
+
+  const liveBasis =
+    spxTick && esTick
+      ? parseFloat((esTick.mid - spxTick.mid).toFixed(2))
+      : esBasis;
+
   const { onh, onl } =
     isToday(selectedDate) && esData.length > 0
       ? computeOvernightLevels(esData, selectedDate)
@@ -113,7 +127,7 @@ export default function Dashboard({
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="font-mono bg-transparent text-[#333] text-xs outline-none border-none cursor-pointer"
+              className="font-mono bg-transparent text-[#333] text-xs hover:cursor-pointer outline-none border-none"
             />
             <span className="font-mono text-xs text-[#2a2a2a]">
               {new Date().toLocaleDateString("en-US", {
@@ -124,12 +138,18 @@ export default function Dashboard({
                 year: "numeric",
               })}
             </span>
+
+            {/* Converter inline in topbar */}
+            <div className="w-px h-4 bg-[#1a1a1a]" />
+            <EsSpxConverter initialBasis={liveBasis} compact />
+
+            <div className="w-px h-4 bg-[#1a1a1a]" />
             <form action={signOut}>
               <button
                 type="submit"
                 className="font-sans text-xs text-[#2a2a2a] hover:text-[#555] transition-colors hover:cursor-pointer uppercase tracking-widest"
               >
-                sair
+                log out
               </button>
             </form>
           </div>
@@ -153,6 +173,9 @@ export default function Dashboard({
             esData={esData}
             onh={onh}
             onl={onl}
+            spxTick={spxTick}
+            esTick={esTick}
+            liveBasis={liveBasis}
           />
         </div>
 
