@@ -84,14 +84,15 @@ Rules:
 ### Exception: useEsData
 
 `useEsData` does NOT use the standard date range query. ES data spans UTC day boundaries
-(overnight globex session), so it queries a 48hr window:
+(overnight globex session), so it queries a 48hr window with NO `.limit()` in code:
 
 ```typescript
 const from = `${prevDay}T06:00:00Z`;
 const to = `${nextDay}T06:00:00Z`;
 ```
 
-This captures all rows that belong to a CT date regardless of their UTC timestamp.
+Row limit is controlled via Supabase dashboard setting (currently 15,000). Do not add
+`.limit()` to this query — it would re-introduce the truncation bug.
 
 ---
 
@@ -137,7 +138,8 @@ Two effects: one for chart creation (deps `[]`), one for data update (deps `[dat
 import { useEffect, useRef } from "react";
 import {
   createChart, LineSeries, UTCTimestamp,
-  IChartApi, ISeriesApi, SeriesType
+  IChartApi, ISeriesApi, SeriesType,
+  createTextWatermark,
 } from "lightweight-charts";
 import { XxxSnapshot } from "../types";
 
@@ -157,6 +159,11 @@ export default function XxxChart({ data, selectedDate }: Props) {
     const series = chart.addSeries(LineSeries, { /* options */ });
     chartRef.current = chart;
     seriesRef.current = series;
+    createTextWatermark(chart.panes()[0], {
+      horzAlign: "center",
+      vertAlign: "center",
+      lines: [{ text: "vovonacci", color: "rgba(204, 204, 204, 0.2)", fontSize: 24 }],
+    });
     const handleResize = () => {
       if (containerRef.current)
         chart.applyOptions({ width: containerRef.current.clientWidth });
@@ -194,6 +201,58 @@ Rules:
 - Live tick updates use minute-bucketed timestamps: `Math.floor(Date.now() / 60000) * 60`
 - Only append live ticks when `isToday(selectedDate)` — guard every live tick effect
 - Chart overlays (pharm levels, ONH/ONL, PDH/PDL) only shown on today — clear and skip on past dates
+- All charts use `createTextWatermark` for the "vovonacci" watermark
+
+---
+
+## Tab Switching — Never Unmount Views
+
+All three tab views (MKT/VOL/POS) must stay mounted at all times. Use visibility trick in Dashboard:
+
+```tsx
+<div style={{
+  visibility: activeTab === "MKT" ? "visible" : "hidden",
+  height: activeTab === "MKT" ? "auto" : "0",
+  overflow: "hidden",
+}}>
+  <MktView ... />
+</div>
+```
+
+This prevents Lightweight Charts instances from being destroyed, WebSockets from disconnecting,
+and state from resetting on tab switch. Never revert to conditional `{activeTab === "X" && <View />}`.
+
+---
+
+## Typography Conventions
+
+All UI text follows this pattern:
+
+- **Labels**: `font-sans text-[9px] text-[#444] uppercase tracking-widest`
+- **Values/numbers**: `font-mono font-light text-xl text-[#9ca3af]`
+- **Metric strips**: `flex-nowrap overflow-x-auto` — single line, scrolls horizontally, never wraps
+- **Pipe dividers**: `w-px h-4 bg-[#1f1f1f] shrink-0` between metric groups
+- **Section headers**: left-border accent + label + optional live price + % change
+
+Section header pattern:
+
+```tsx
+<div className="flex items-center gap-3 mb-3">
+  <div
+    className="w-0.5 h-4"
+    style={{ backgroundColor: isOpen ? "#4ade80" : "#2a2a2a", borderRadius: 0 }}
+  />
+  <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+    SYMBOL
+  </span>
+  <span className="font-mono font-light text-sm text-[#666]">
+    {price.toFixed(2)}
+  </span>
+  <span className="font-mono text-xs" style={{ color: pctColor }}>
+    {pct}%
+  </span>
+</div>
+```
 
 ---
 
@@ -231,12 +290,14 @@ If a new Supabase column is added, update `types.ts` first.
 - Owns tab state
 - Passes data down as props to view components
 - Imports and calls `signOut` server action
+- Computes ONH/ONL inline (pure function, no state/effects)
 
 When adding a new view:
 
 1. Create the hook in `hooks/` if new data is needed
 2. Create the view component in `components/`
 3. Import and wire in `Dashboard.tsx` only
+4. Add visibility/height:0 wrapper — never conditional rendering
 
 ---
 
@@ -246,27 +307,29 @@ When adding a new view:
 Backgrounds:
   #0a0a0a   page background
   #111111   component background, chart background
-  #1a1a1a   subtle surface, grid lines, borders
-  #1f1f1f   active tab background, input background
-  #2a2a2a   borders, dividers
+  #1a1a1a   subtle surface, grid lines, chart borders, topbar border
+  #1f1f1f   pipe dividers, input background
+  #222222   section dividers (border-[#222])
+  #2a2a2a   section header accent (closed state)
 
 Text:
   #ffffff   primary
-  #888888   secondary labels
-  #666666   tertiary
-  #444444   very muted, chart text, inactive tabs
-  #333333   near-invisible hints
-  gray-400  Tailwind alias for metric labels (~#9ca3af)
+  #9ca3af   metric values (gray-400)
+  #888888   active tab, secondary labels
+  #666666   chart header prices
+  #444444   metric labels, chart text, inactive tabs
+  #333333   near-invisible hints, inactive tab hover target
+  #222222   very faint labels
 
 Chart series / indicators:
   #9CA9FF   straddle series (blue-purple)
   #60a5fa   fly 10W
-  #fb923c   fly 20W, orange live dot (ES open SPX closed)
+  #fb923c   fly 20W
   #34d399   fly 25W, ES output in converter
   #f472b6   fly 30W
-  #4ade80   live indicator green
-  #f59e0b   live indicator amber
-  #f87171   live indicator red
+  #4ade80   open state (section header accent, % change positive)
+  #f87171   % change negative, realized >= 100%
+  #f59e0b   realized >= 70%
   #265C4D   implied high/low lines, PDH/PDL lines (dark green)
   #737373   SPX/ES price line series color
   #CF7C00   price line color on SPX and ES charts (orange)
@@ -285,6 +348,9 @@ Chart series / indicators:
 | Market hours gating (poller + frontend) | America/New_York (ET) |
 | Chart tick labels, time display         | America/Chicago (CT)  |
 | Date picker / `en-CA` locale dates      | America/New_York (ET) |
+
+**Critical**: ET is UTC-4 during DST (currently active). RTH open = 09:30 ET = **13:30 UTC**.
+Never use `T14:30:00Z` for RTH open — that would be 10:30 ET.
 
 Pattern for today's ET date string:
 

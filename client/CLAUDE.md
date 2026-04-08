@@ -11,6 +11,7 @@ Personal SPX options monitoring dashboard. Real-time data from Tastytrade/DXFeed
 - **Frontend**: Next.js (`client/`) with Tailwind, Lightweight Charts v5, TypeScript
 - **Auth**: Supabase Auth (email/password, single user), session via `@supabase/ssr` cookies
 - **Data source**: Tastytrade API via OAuth2 refresh token, DXFeed/DXLink WebSocket streaming
+- **Fonts**: IBM Plex Sans (labels/UI) + IBM Plex Mono (numbers/values) via `next/font/google`
 
 ---
 
@@ -22,8 +23,8 @@ server/
 
 client/app/
   page.tsx                # SSR initial data fetch, renders Dashboard
-  layout.tsx
-  globals.css
+  layout.tsx              # Loads IBM Plex Sans + Mono, sets --font-sans/--font-mono vars
+  globals.css             # .font-sans and .font-mono utility classes
   types.ts                # ALL shared types — never redeclare locally
   proxy.ts                # Auth middleware (Next.js 16 uses proxy not middleware)
   lib/
@@ -42,19 +43,18 @@ client/app/
     usePharmLevels.ts     # pharm_levels fetch, parses weekly+daily content
     useLiveTick.ts        # DXFeed WebSocket, auto-reconnect, exports ES_STREAMER_SYMBOL
   components/
-    Dashboard.tsx         # Orchestrator — tabs, selectedDate, calls all hooks, sign-out
-    MktView.tsx           # SPX+ES charts, metric strip, ONH/ONL, pharm levels
+    Dashboard.tsx         # Orchestrator — thin topbar, underline tabs, date, sign-out, all hooks
+    MktView.tsx           # SPX+ES charts, metric strip, ONH/ONL, pharm levels, % change
     VolView.tsx           # Straddle chart + skew chart + metrics
     PosView.tsx           # SML Fly + Scratchpad positions
-    SpxChart.tsx          # Lightweight Charts line, implied H/L, PDH/PDL, live tick
-    EsChart.tsx           # Lightweight Charts line, pharm levels, ONH/ONL, live tick
+    SpxChart.tsx          # Lightweight Charts line, implied H/L, PDH/PDL, live tick, watermark
+    EsChart.tsx           # Lightweight Charts line, pharm levels, ONH/ONL, live tick, watermark
     StraddleChart.tsx     # Straddle area series (VOL tab)
     SkewChart.tsx         # Skew area series (VOL tab)
     FlyChart.tsx          # Fly area series (POS tab)
     SmlFlyView.tsx        # Fly session creation, per-width charts, inline entry edit
     PositionsView.tsx     # Scratchpad positions, BSM Greeks, live quotes
-    LiveIndicator.tsx     # Dot with tooltip — SPX/ES/Volatility/Posições sources
-    EsSpxConverter.tsx    # Basis converter, bidirectional toggle
+    EsSpxConverter.tsx    # Basis converter, bidirectional toggle, live basis from ticks
   api/
     quotes/route.ts       # POST — live quotes via Tastytrade
     chain/route.ts        # GET — SPXW option chain
@@ -97,6 +97,7 @@ pharm_levels         id, created_at, updated_at, weekly_content (text), daily_co
 
 All tables have RLS enabled. Anon read on all. Auth write on rtm_sessions, sml_fly_snapshots,
 positions, position_legs, pharm_levels. Poller uses service role key (bypasses RLS).
+Supabase project max rows setting: 15,000 (required for ES overnight data).
 
 ---
 
@@ -143,21 +144,40 @@ Two independent loops run in parallel after startup:
 
 ---
 
-## Live Indicator Logic
+## UI Architecture
 
-Four sources, each with status: `live` | `closed` | `error`
+### Layout
 
-- **SPX**: `isSpxOpen()` + straddle recent (90s) + skew recent (360s)
-- **ES**: `isEsOpen()` + lastEsTime recent (180s)
-- **Volatility**: same as SPX (straddle + skew combined)
-- **Posições**: `hasActivePositions` + lastQuoteTime recent (120s)
+- Thin 36px topbar (`border-b border-[#1a1a1a]`) — sticky, contains tabs + date + sign-out
+- Tabs use underline indicator (`border-b-2 border-[#555]`) not pill/box style
+- Sign-out is plain text "sair" — no icon
+- Content area: `max-w-7xl mx-auto px-6 py-6`
+- All three tab views (MKT/VOL/POS) stay mounted via `visibility/height:0` — never unmount
 
-Dot color:
+### Typography
 
-- Any error → red
-- SPX closed + ES closed + no errors → gray
-- SPX open + no errors → green
-- ES open + SPX closed + no errors → orange (#fb923c)
+- Labels: `font-sans text-[9px] text-[#444] uppercase tracking-widest`
+- Values: `font-mono font-light text-xl text-[#9ca3af]`
+- Metric strips: `flex-nowrap overflow-x-auto` — single line, scrolls horizontally, never wraps
+- Pipe dividers between metrics: `w-px h-4 bg-[#1f1f1f]`
+
+### Section headers
+
+- Bloomberg-style left border accent: `w-0.5 h-4` colored `#4ade80` (open) or `#2a2a2a` (closed)
+- Symbol label + live price + % change inline
+- % change colored green (`#4ade80`) or red (`#f87171`)
+
+### Dividers
+
+- `border-[#222]` — slightly more visible than old `#1a1a1a`
+
+---
+
+## Live Basis
+
+- `EsSpxConverter` receives `liveBasis` computed in `MktView` from live ticks
+- `liveBasis = esTick.mid - spxTick.mid` when both ticks available
+- Falls back to stored `esBasis` from open cycle when ticks unavailable
 
 ---
 
@@ -167,7 +187,7 @@ Dot color:
 - `weekly_content`: updated every Monday, persists all week
 - `daily_content`: updated each morning, replaced daily
 - Parsed client-side in `usePharmLevels` hook
-- Parser handles: ranges (`6639-6645`), single levels (`6469`), asterisks (`*`), notes (`monitor for LAAF`)
+- Parser handles: ranges (`6639-6645`), single levels (`6469`), asterisks (`*`), notes
 - Single levels plot as one horizontal line
 - Ranges plot as two horizontal lines (top + bottom of region)
 - Weekly: dark blue (`#3b4f7a`), Daily: gray (`#444444`), both dashed width 2
@@ -177,11 +197,14 @@ Dot color:
 
 ## Overnight High/Low (ONH/ONL)
 
-- Computed client-side from `esData` already fetched by `useEsData`
-- Overnight window: prev RTH close (22:00 UTC / 17:00 ET) → today RTH open (14:30 UTC / 09:30 ET)
+- Computed inline in `Dashboard.tsx` from `esData` — no state/effects needed
+- Overnight window: globex open (23:00 UTC prev day = 18:00 ET) → RTH open (13:30 UTC = 09:30 ET)
+- `rthOpen = selectedDate T13:30:00Z` — 09:30 ET = 13:30 UTC (ET is UTC-4 during DST)
+- `globexOpen = rthOpen - 15.5 * 60 * 60 * 1000`
 - Uses `high` column for ONH and `low` column for ONL (falls back to `es_ref` for old rows)
 - Only shown during RTH (`isSpxOpen()`) on today's date
 - Displayed as teal dashed lines (`#2a6b6b`) with axis labels ONH/ONL
+- Passed from Dashboard → MktView → EsChart as props
 
 ---
 
@@ -189,10 +212,12 @@ Dot color:
 
 See AGENTS.md for full coding conventions. Summary:
 
-- **Timezones**: Supabase stores UTC. Frontend displays CT (America/Chicago). Market hours gated in ET (America/New_York).
+- **Timezones**: Supabase stores UTC. Frontend displays CT. Market hours gated in ET. RTH open = `T13:30:00Z` not `T14:30:00Z`.
 - **Lightweight Charts**: Never use `display:none` on chart containers — use `visibility/height:0`.
+- **Tab switching**: All views mounted at all times — visibility trick prevents chart/WebSocket destruction.
 - **Data flow**: Hooks own all Supabase access. View components receive data as props only.
 - **Types**: All shared types in `types.ts`. Never redeclare inline.
 - **es_basis**: Only non-null on the first `straddle_snapshots` row of each day.
-- **useEsData**: Uses a 48hr UTC window query (not standard date range) to handle overnight data correctly.
+- **useEsData**: Uses 48hr UTC window + Supabase 15k row limit. No `.limit()` in code — controlled via Supabase dashboard setting.
 - **createBrowserClient**: Must be used instead of `createClient` for RLS-authenticated browser writes.
+- **ONH/ONL**: Computed inline during render in Dashboard, not in state/effects. Pure function of esData.
