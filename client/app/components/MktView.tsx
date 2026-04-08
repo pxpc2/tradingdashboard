@@ -6,6 +6,7 @@ import EsChart from "./EsChart";
 import { usePharmLevels } from "../hooks/usePharmLevels";
 import { ES_STREAMER_SYMBOL, TickData } from "../hooks/useLiveTick";
 import { StraddleSnapshot, SkewSnapshot, EsSnapshot } from "../types";
+import MacroEvents from "./MacroEvents";
 
 type Props = {
   straddleData: StraddleSnapshot[];
@@ -302,6 +303,9 @@ export default function MktView({
           onl={onl}
         />
       </div>
+      <div className="border-t border-[#222]" />
+
+      <MacroEvents selectedDate={selectedDate} />
     </div>
   );
 }
