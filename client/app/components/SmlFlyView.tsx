@@ -36,7 +36,6 @@ export default function SmlFlyView({
   const [selectedWidths, setSelectedWidths] = useState<number[]>([10, 15, 20]);
   const [activeWidth, setActiveWidth] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState<string>("");
 
@@ -88,7 +87,7 @@ export default function SmlFlyView({
     return (
       <div className="flex flex-col gap-5 max-w-sm">
         <div className="flex flex-col gap-2">
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             SML Strike
           </span>
           <input
@@ -109,7 +108,7 @@ export default function SmlFlyView({
                 className={`font-sans px-5 py-1.5 text-xs uppercase tracking-widest transition-colors hover:cursor-pointer ${
                   optionType === t
                     ? "bg-[#1f1f1f] text-[#888]"
-                    : "text-[#333] hover:text-[#555]"
+                    : "text-[#444] hover:text-[#666]"
                 }`}
               >
                 {t}
@@ -119,7 +118,7 @@ export default function SmlFlyView({
         </div>
 
         <div className="flex flex-col gap-2">
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             Widths to track
           </span>
           <div className="flex gap-2 flex-wrap">
@@ -130,7 +129,7 @@ export default function SmlFlyView({
                 className={`font-mono px-3 py-1.5 text-xs border transition-colors hover:cursor-pointer rounded-sm ${
                   selectedWidths.includes(w)
                     ? "bg-[#1f1f1f] text-[#888] border-[#333]"
-                    : "bg-transparent text-[#333] border-[#1f1f1f] hover:text-[#555]"
+                    : "bg-transparent text-[#444] border-[#1f1f1f] hover:text-[#666]"
                 }`}
               >
                 {w}W
@@ -155,7 +154,6 @@ export default function SmlFlyView({
 
   return (
     <div>
-      {/* Width tabs — underline style */}
       <div className="flex items-center border-b border-[#1a1a1a] mb-4">
         {widths.map((w) => (
           <button
@@ -164,7 +162,7 @@ export default function SmlFlyView({
             className={`font-mono text-xs px-4 py-2 border-b-2 transition-colors hover:cursor-pointer ${
               effectiveActiveWidth === w
                 ? "border-[#555] text-[#888]"
-                : "border-transparent text-[#333] hover:text-[#555]"
+                : "border-transparent text-[#444] hover:text-[#666]"
             }`}
           >
             {w}W
@@ -189,10 +187,9 @@ export default function SmlFlyView({
               overflow: "hidden",
             }}
           >
-            {/* Metric strip */}
             <div className="flex items-baseline gap-6 flex-nowrap overflow-x-auto pb-3 mb-4 border-b border-[#222]">
               <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
                   Entrada
                 </span>
                 {isEditing ? (
@@ -207,11 +204,11 @@ export default function SmlFlyView({
                       if (e.key === "Enter") confirmEntryEdit(entry.id);
                       if (e.key === "Escape") setEditingId(null);
                     }}
-                    className="font-mono font-light text-xl text-[#9ca3af] bg-transparent border-b border-[#444] outline-none w-24"
+                    className="font-mono font-light text-lg text-[#9ca3af] bg-transparent border-b border-[#444] outline-none w-24"
                   />
                 ) : (
                   <span
-                    className="font-mono font-light text-xl text-[#9ca3af] cursor-pointer hover:text-white transition-colors"
+                    className="font-mono font-light text-lg text-[#9ca3af] cursor-pointer hover:text-white transition-colors"
                     title="Editar entry mid price"
                     onClick={() => {
                       if (!entry) return;
@@ -227,10 +224,10 @@ export default function SmlFlyView({
               <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
 
               <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
                   Bid
                 </span>
-                <span className="font-mono font-light text-xl text-[#9ca3af]">
+                <span className="font-mono font-light text-lg text-[#9ca3af]">
                   {latest ? latest.bid.toFixed(2) : "—"}
                 </span>
               </div>
@@ -238,10 +235,10 @@ export default function SmlFlyView({
               <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
 
               <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
                   Mid
                 </span>
-                <span className="font-mono font-light text-xl text-[#9ca3af]">
+                <span className="font-mono font-light text-lg text-[#9ca3af]">
                   {latest ? latest.mid.toFixed(2) : "—"}
                 </span>
               </div>
@@ -249,10 +246,10 @@ export default function SmlFlyView({
               <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
 
               <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
                   Ask
                 </span>
-                <span className="font-mono font-light text-xl text-[#9ca3af]">
+                <span className="font-mono font-light text-lg text-[#9ca3af]">
                   {latest ? latest.ask.toFixed(2) : "—"}
                 </span>
               </div>
@@ -260,14 +257,14 @@ export default function SmlFlyView({
               <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
 
               <div className="flex items-baseline gap-1.5 shrink-0">
-                <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
                   PnL
                 </span>
                 <span
-                  className="font-mono font-light text-xl"
+                  className="font-mono font-light text-lg"
                   style={{
                     color:
-                      pnl === null ? "#444" : pnl >= 0 ? "#4ade80" : "#f87171",
+                      pnl === null ? "#666" : pnl >= 0 ? "#4ade80" : "#f87171",
                   }}
                 >
                   {pnl === null
@@ -277,7 +274,7 @@ export default function SmlFlyView({
               </div>
 
               <div className="ml-auto shrink-0">
-                <span className="font-mono text-[9px] text-[#333]">
+                <span className="font-mono text-[11px] text-[#555]">
                   {smlStrike - w}
                   {sessionType === "call" ? "C" : "P"} · {smlStrike}
                   {sessionType === "call" ? "C" : "P"} · {smlStrike + w}

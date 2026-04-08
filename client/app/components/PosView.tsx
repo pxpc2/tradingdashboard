@@ -16,7 +16,7 @@ type Props = {
 function RealPositionsPlaceholder() {
   return (
     <div className="w-full py-8 rounded-sm bg-[#111111] flex items-center justify-center">
-      <span className="font-sans text-[9px] text-[#222] uppercase tracking-widest">
+      <span className="font-sans text-[11px] text-[#333] uppercase tracking-widest">
         Posições Tastytrade — em breve
       </span>
     </div>
@@ -33,11 +33,10 @@ export default function PosView({
 }: Props) {
   return (
     <div className="flex flex-col gap-6">
-      {/* Real positions placeholder */}
       <div>
         <div className="flex items-center gap-3 mb-3">
           <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             Posições
           </span>
         </div>
@@ -46,11 +45,10 @@ export default function PosView({
 
       <div className="border-t border-[#222]" />
 
-      {/* SML Fly */}
       <div>
         <div className="flex items-center gap-3 mb-3">
           <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             SML Fly
           </span>
         </div>
@@ -66,11 +64,10 @@ export default function PosView({
 
       <div className="border-t border-[#222]" />
 
-      {/* Scratchpad */}
       <div>
         <div className="flex items-center gap-3 mb-3">
           <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             Scratchpad
           </span>
         </div>

@@ -24,10 +24,10 @@ export default function VolView({
       {/* Straddle metrics */}
       <div className="flex items-baseline gap-6 flex-nowrap overflow-x-auto pb-1 border-b border-[#222]">
         <div className="flex items-baseline gap-1.5 shrink-0">
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             Straddle
           </span>
-          <span className="font-mono font-light text-xl text-[#9ca3af]">
+          <span className="font-mono font-light text-lg text-[#9ca3af]">
             ${latestStraddle?.straddle_mid?.toFixed(2) ?? "—"}
           </span>
         </div>
@@ -35,10 +35,10 @@ export default function VolView({
           <>
             <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
             <div className="flex items-baseline gap-1.5 shrink-0">
-              <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+              <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
                 Implied
               </span>
-              <span className="font-mono font-light text-xl text-[#9ca3af]">
+              <span className="font-mono font-light text-lg text-[#9ca3af]">
                 ${openingStraddle.straddle_mid.toFixed(2)}
               </span>
             </div>
@@ -66,11 +66,11 @@ export default function VolView({
               <>
                 <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
                 <div className="flex items-baseline gap-1.5 shrink-0">
-                  <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                  <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
                     Realized
                   </span>
                   <span
-                    className="font-mono font-light text-xl"
+                    className="font-mono font-light text-lg"
                     style={{ color }}
                   >
                     {realizedPts.toFixed(1)}pts
@@ -90,7 +90,7 @@ export default function VolView({
       <div>
         <div className="flex items-center gap-3 mb-3">
           <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             Straddle
           </span>
         </div>
@@ -102,37 +102,37 @@ export default function VolView({
       {/* Skew metrics */}
       <div className="flex items-baseline gap-6 flex-nowrap overflow-x-auto pb-1 border-b border-[#222]">
         <div className="flex items-baseline gap-1.5 shrink-0">
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             Skew
           </span>
-          <span className="font-mono font-light text-xl text-[#9ca3af]">
+          <span className="font-mono font-light text-lg text-[#9ca3af]">
             {latestSkew?.skew?.toFixed(4) ?? "—"}
           </span>
         </div>
         <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
         <div className="flex items-baseline gap-1.5 shrink-0">
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             Call IV
           </span>
-          <span className="font-mono font-light text-xl text-[#9ca3af]">
+          <span className="font-mono font-light text-lg text-[#9ca3af]">
             {latestSkew ? `${(latestSkew.call_iv * 100).toFixed(1)}` : "—"}
           </span>
         </div>
         <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
         <div className="flex items-baseline gap-1.5 shrink-0">
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             ATM IV
           </span>
-          <span className="font-mono font-light text-xl text-[#9ca3af]">
+          <span className="font-mono font-light text-lg text-[#9ca3af]">
             {latestSkew ? `${(latestSkew.atm_iv * 100).toFixed(1)}` : "—"}
           </span>
         </div>
         <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
         <div className="flex items-baseline gap-1.5 shrink-0">
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             Put IV
           </span>
-          <span className="font-mono font-light text-xl text-[#9ca3af]">
+          <span className="font-mono font-light text-lg text-[#9ca3af]">
             {latestSkew ? `${(latestSkew.put_iv * 100).toFixed(1)}` : "—"}
           </span>
         </div>
@@ -142,7 +142,7 @@ export default function VolView({
       <div>
         <div className="flex items-center gap-3 mb-3">
           <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             Skew
           </span>
         </div>

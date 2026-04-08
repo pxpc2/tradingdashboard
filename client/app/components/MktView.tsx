@@ -64,7 +64,7 @@ function pctChange(
 }
 
 function pctColor(pct: string | null): string {
-  if (!pct) return "#444";
+  if (!pct) return "#666";
   return parseFloat(pct) >= 0 ? "#4ade80" : "#f87171";
 }
 
@@ -140,7 +140,6 @@ export default function MktView({
   const esOpen = isEsOpen();
 
   const spxPct = pctChange(liveSpx, prevClose);
-  // ES % change: use prevClose + basis as rough prev ES close
   const esPrevClose =
     prevClose && esBasis !== null ? prevClose + esBasis : null;
   const esPct = pctChange(liveEs, esPrevClose);
@@ -150,10 +149,10 @@ export default function MktView({
       {/* Metric strip */}
       <div className="flex items-baseline gap-6 flex-nowrap overflow-x-auto pb-1 border-b border-[#222]">
         <div className="flex items-baseline gap-1.5 shrink-0">
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             SPX
           </span>
-          <span className="font-mono font-light text-xl text-[#9ca3af]">
+          <span className="font-mono font-light text-lg text-[#9ca3af]">
             {liveSpx?.toFixed(2) ?? "—"}
           </span>
           {spxPct && (
@@ -170,10 +169,10 @@ export default function MktView({
         <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
 
         <div className="flex items-baseline gap-1.5 shrink-0">
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             Straddle
           </span>
-          <span className="font-mono font-light text-xl text-[#9ca3af]">
+          <span className="font-mono font-light text-lg text-[#9ca3af]">
             ${latest?.straddle_mid?.toFixed(2) ?? "—"}
           </span>
         </div>
@@ -182,10 +181,10 @@ export default function MktView({
           <>
             <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
             <div className="flex items-baseline gap-1.5 shrink-0">
-              <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+              <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
                 Implied
               </span>
-              <span className="font-mono font-light text-xl text-[#9ca3af]">
+              <span className="font-mono font-light text-lg text-[#9ca3af]">
                 ${opening.straddle_mid.toFixed(2)}
               </span>
             </div>
@@ -196,11 +195,11 @@ export default function MktView({
           <>
             <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
             <div className="flex items-baseline gap-1.5 shrink-0">
-              <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+              <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
                 Realized
               </span>
               <span
-                className="font-mono font-light text-xl"
+                className="font-mono font-light text-lg"
                 style={{ color: realizedColor }}
               >
                 {currentMovePts.toFixed(1)}pts
@@ -221,10 +220,10 @@ export default function MktView({
           <>
             <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
             <div className="flex items-baseline gap-1.5 shrink-0">
-              <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+              <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
                 IV30
               </span>
-              <span className="font-mono font-light text-xl text-[#9ca3af]">
+              <span className="font-mono font-light text-lg text-[#9ca3af]">
                 {(latestSkew.atm_iv * 100).toFixed(1)}
               </span>
             </div>
@@ -242,7 +241,7 @@ export default function MktView({
               borderRadius: 0,
             }}
           />
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             SPX
           </span>
           {liveSpx && (
@@ -281,7 +280,7 @@ export default function MktView({
               borderRadius: 0,
             }}
           />
-          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             ES
           </span>
           {liveEs && (
