@@ -239,7 +239,7 @@ export default function EsChart({
     if (onh) {
       onhLineRef.current = seriesRef.current.createPriceLine({
         price: onh,
-        color: "#2a6b6b",
+        color: "#265C4D",
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
@@ -250,7 +250,7 @@ export default function EsChart({
     if (onl) {
       onlLineRef.current = seriesRef.current.createPriceLine({
         price: onl,
-        color: "#2a6b6b",
+        color: "#265C4D",
         lineWidth: 1,
         lineStyle: LineStyle.Dashed,
         axisLabelVisible: true,
