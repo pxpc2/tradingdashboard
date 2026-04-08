@@ -88,36 +88,38 @@ export default function SmlFlyView({
     return (
       <div className="flex flex-col gap-5 max-w-sm">
         <div className="flex flex-col gap-2">
-          <span className="text-xs text-[#444] uppercase tracking-wide">
-            SML strike
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+            SML Strike
           </span>
           <input
             type="number"
             value={strike}
             onChange={(e) => setStrike(e.target.value)}
             placeholder="6620"
-            className="bg-[#0a0a0a] border border-[#1f1f1f] rounded-sm px-3 py-2 text-sm text-white w-full"
+            className="font-mono bg-[#0a0a0a] border border-[#1f1f1f] rounded-sm px-3 py-2 text-sm text-white w-full"
           />
         </div>
+
         <div className="flex flex-col gap-2">
-          <div className="flex gap-1 bg-[#0a0a0a] rounded-sm p-1 w-fit">
+          <div className="flex gap-0 border border-[#1f1f1f] rounded-sm w-fit overflow-hidden">
             {(["call", "put"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setOptionType(t)}
-                className={`px-4 py-1.5 rounded-sm text-sm font-medium transition-colors hover:cursor-pointer ${
+                className={`font-sans px-5 py-1.5 text-xs uppercase tracking-widest transition-colors hover:cursor-pointer ${
                   optionType === t
-                    ? "bg-[#1f1f1f] text-white"
-                    : "text-[#444444] hover:text-[#888888]"
+                    ? "bg-[#1f1f1f] text-[#888]"
+                    : "text-[#333] hover:text-[#555]"
                 }`}
               >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
+                {t}
               </button>
             ))}
           </div>
         </div>
+
         <div className="flex flex-col gap-2">
-          <span className="text-xs text-[#444] uppercase tracking-wide">
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
             Widths to track
           </span>
           <div className="flex gap-2 flex-wrap">
@@ -125,10 +127,10 @@ export default function SmlFlyView({
               <button
                 key={w}
                 onClick={() => toggleWidth(w)}
-                className={`px-3 py-1.5 rounded-sm text-sm border transition-colors hover:cursor-pointer ${
+                className={`font-mono px-3 py-1.5 text-xs border transition-colors hover:cursor-pointer rounded-sm ${
                   selectedWidths.includes(w)
-                    ? "bg-[#1f1f1f] text-white border-[#333]"
-                    : "bg-transparent text-[#444] border-[#1f1f1f] hover:text-[#888]"
+                    ? "bg-[#1f1f1f] text-[#888] border-[#333]"
+                    : "bg-transparent text-[#333] border-[#1f1f1f] hover:text-[#555]"
                 }`}
               >
                 {w}W
@@ -136,10 +138,11 @@ export default function SmlFlyView({
             ))}
           </div>
         </div>
+
         <button
           onClick={handleSubmit}
           disabled={submitting || !strike || selectedWidths.length === 0}
-          className="bg-white text-black text-sm font-medium py-2 px-6 rounded-sm hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:cursor-pointer"
+          className="font-sans text-xs uppercase tracking-widest bg-white text-black py-2 px-6 rounded-sm hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:cursor-pointer"
         >
           {submitting ? "Iniciando..." : "Iniciar tracking"}
         </button>
@@ -152,15 +155,16 @@ export default function SmlFlyView({
 
   return (
     <div>
-      <div className="flex gap-1 bg-[#111111] rounded-sm p-1 w-fit mb-4">
+      {/* Width tabs — underline style */}
+      <div className="flex items-center border-b border-[#1a1a1a] mb-4">
         {widths.map((w) => (
           <button
             key={w}
             onClick={() => setActiveWidth(w)}
-            className={`px-4 py-1.5 rounded-sm text-sm font-medium transition-colors ${
+            className={`font-mono text-xs px-4 py-2 border-b-2 transition-colors hover:cursor-pointer ${
               effectiveActiveWidth === w
-                ? "bg-[#1f1f1f] text-white"
-                : "text-[#444444] hover:text-[#888888]"
+                ? "border-[#555] text-[#888]"
+                : "border-transparent text-[#333] hover:text-[#555]"
             }`}
           >
             {w}W
@@ -180,74 +184,108 @@ export default function SmlFlyView({
           <div
             key={w}
             style={{
-              display: effectiveActiveWidth === w ? "block" : "block",
               visibility: effectiveActiveWidth === w ? "visible" : "hidden",
               height: effectiveActiveWidth === w ? "auto" : "0",
               overflow: "hidden",
             }}
           >
-            <div className="flex items-baseline justify-between mb-4">
-              <div className="flex items-baseline gap-8">
-                <div>
-                  <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
-                    Entrada
-                  </div>
-                  {isEditing ? (
-                    <input
-                      type="number"
-                      step="0.01"
-                      autoFocus
-                      value={editingValue}
-                      onChange={(e) => setEditingValue(e.target.value)}
-                      onBlur={() => confirmEntryEdit(entry.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") confirmEntryEdit(entry.id);
-                        if (e.key === "Escape") setEditingId(null);
-                      }}
-                      className="text-2xl font-medium text-gray-400 bg-transparent border-b border-[#444] outline-none w-24"
-                    />
-                  ) : (
-                    <div
-                      className="text-2xl font-medium text-gray-400 cursor-pointer hover:text-white transition-colors"
-                      title="Editar entry mid price"
-                      onClick={() => {
-                        if (!entry) return;
-                        setEditingId(entry.id);
-                        setEditingValue(entry.mid.toFixed(2));
-                      }}
-                    >
-                      {entry ? entry.mid.toFixed(2) : "—"}
-                    </div>
-                  )}
-                </div>
-                <div>
-                  <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
-                    Bid / Mid / Ask
-                  </div>
-                  <div className="text-2xl font-medium text-gray-400">
-                    {latest
-                      ? `${latest.bid.toFixed(2)} / ${latest.mid.toFixed(2)} / ${latest.ask.toFixed(2)}`
-                      : "— / — / —"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-gray-400 uppercase tracking-wide mb-1">
-                    PnL
-                  </div>
-                  <div className="text-2xl font-medium text-gray-400">
-                    {pnl === null
-                      ? "—"
-                      : `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`}
-                  </div>
-                </div>
+            {/* Metric strip */}
+            <div className="flex items-baseline gap-6 flex-nowrap overflow-x-auto pb-3 mb-4 border-b border-[#222]">
+              <div className="flex items-baseline gap-1.5 shrink-0">
+                <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                  Entrada
+                </span>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    step="0.01"
+                    autoFocus
+                    value={editingValue}
+                    onChange={(e) => setEditingValue(e.target.value)}
+                    onBlur={() => confirmEntryEdit(entry.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") confirmEntryEdit(entry.id);
+                      if (e.key === "Escape") setEditingId(null);
+                    }}
+                    className="font-mono font-light text-xl text-[#9ca3af] bg-transparent border-b border-[#444] outline-none w-24"
+                  />
+                ) : (
+                  <span
+                    className="font-mono font-light text-xl text-[#9ca3af] cursor-pointer hover:text-white transition-colors"
+                    title="Editar entry mid price"
+                    onClick={() => {
+                      if (!entry) return;
+                      setEditingId(entry.id);
+                      setEditingValue(entry.mid.toFixed(2));
+                    }}
+                  >
+                    {entry ? entry.mid.toFixed(2) : "—"}
+                  </span>
+                )}
               </div>
-              <div className="text-xs text-[#444]">
-                {smlStrike - w}
-                {sessionType === "call" ? "C" : "P"} · {smlStrike}
-                {sessionType === "call" ? "C" : "P"} · {smlStrike + w}
-                {sessionType === "call" ? "C" : "P"}
+
+              <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+
+              <div className="flex items-baseline gap-1.5 shrink-0">
+                <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                  Bid
+                </span>
+                <span className="font-mono font-light text-xl text-[#9ca3af]">
+                  {latest ? latest.bid.toFixed(2) : "—"}
+                </span>
+              </div>
+
+              <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+
+              <div className="flex items-baseline gap-1.5 shrink-0">
+                <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                  Mid
+                </span>
+                <span className="font-mono font-light text-xl text-[#9ca3af]">
+                  {latest ? latest.mid.toFixed(2) : "—"}
+                </span>
+              </div>
+
+              <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+
+              <div className="flex items-baseline gap-1.5 shrink-0">
+                <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                  Ask
+                </span>
+                <span className="font-mono font-light text-xl text-[#9ca3af]">
+                  {latest ? latest.ask.toFixed(2) : "—"}
+                </span>
+              </div>
+
+              <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+
+              <div className="flex items-baseline gap-1.5 shrink-0">
+                <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                  PnL
+                </span>
+                <span
+                  className="font-mono font-light text-xl"
+                  style={{
+                    color:
+                      pnl === null ? "#444" : pnl >= 0 ? "#4ade80" : "#f87171",
+                  }}
+                >
+                  {pnl === null
+                    ? "—"
+                    : `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`}
+                </span>
+              </div>
+
+              <div className="ml-auto shrink-0">
+                <span className="font-mono text-[9px] text-[#333]">
+                  {smlStrike - w}
+                  {sessionType === "call" ? "C" : "P"} · {smlStrike}
+                  {sessionType === "call" ? "C" : "P"} · {smlStrike + w}
+                  {sessionType === "call" ? "C" : "P"}
+                </span>
               </div>
             </div>
+
             <FlyChart
               data={widthSnapshots}
               width={w}

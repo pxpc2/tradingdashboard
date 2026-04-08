@@ -55,6 +55,19 @@ function isEsOpen(): boolean {
   return true;
 }
 
+function pctChange(
+  current: number | null,
+  prevClose: number | null,
+): string | null {
+  if (!current || !prevClose || prevClose === 0) return null;
+  return (((current - prevClose) / prevClose) * 100).toFixed(2);
+}
+
+function pctColor(pct: string | null): string {
+  if (!pct) return "#444";
+  return parseFloat(pct) >= 0 ? "#4ade80" : "#f87171";
+}
+
 export default function MktView({
   straddleData,
   skewSnapshots,
@@ -70,6 +83,7 @@ export default function MktView({
 
   const [pdh, setPdh] = useState<number | null>(null);
   const [pdl, setPdl] = useState<number | null>(null);
+  const [prevClose, setPrevClose] = useState<number | null>(null);
 
   const ticks = useLiveTick(LIVE_SYMBOLS);
   const spxTick = ticks["SPX"] ?? null;
@@ -78,6 +92,7 @@ export default function MktView({
   const { weeklyLevels, dailyLevels } = usePharmLevels();
 
   const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
+  const liveEs = esTick?.mid ?? esData[esData.length - 1]?.es_ref ?? null;
 
   const liveBasis =
     spxTick && esTick
@@ -88,11 +103,11 @@ export default function MktView({
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/New_York",
     });
-
     async function fetchPdhl() {
       if (selectedDate !== today) {
         setPdh(null);
         setPdl(null);
+        setPrevClose(null);
         return;
       }
       try {
@@ -100,9 +115,9 @@ export default function MktView({
         const data = await res.json();
         if (data.pdh) setPdh(data.pdh);
         if (data.pdl) setPdl(data.pdl);
+        if (data.close) setPrevClose(data.close);
       } catch {}
     }
-
     fetchPdhl();
   }, [selectedDate]);
 
@@ -124,79 +139,126 @@ export default function MktView({
   const spxOpen = isSpxOpen();
   const esOpen = isEsOpen();
 
+  const spxPct = pctChange(liveSpx, prevClose);
+  // ES % change: use prevClose + basis as rough prev ES close
+  const esPrevClose =
+    prevClose && esBasis !== null ? prevClose + esBasis : null;
+  const esPct = pctChange(liveEs, esPrevClose);
+
   return (
     <div className="flex flex-col gap-6">
       {/* Metric strip */}
-      <div className="flex items-baseline gap-8 flex-wrap">
-        <div>
-          <span className="font-sans text-xs text-gray-400 uppercase tracking-wide mr-2">
+      <div className="flex items-baseline gap-6 flex-nowrap overflow-x-auto pb-1 border-b border-[#222]">
+        <div className="flex items-baseline gap-1.5 shrink-0">
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
             SPX
           </span>
-          <span className="font-mono font-light text-2xl text-gray-400">
+          <span className="font-mono font-light text-xl text-[#9ca3af]">
             {liveSpx?.toFixed(2) ?? "—"}
           </span>
+          {spxPct && (
+            <span
+              className="font-mono text-xs"
+              style={{ color: pctColor(spxPct) }}
+            >
+              {parseFloat(spxPct) >= 0 ? "+" : ""}
+              {spxPct}%
+            </span>
+          )}
         </div>
-        <div>
-          <span className="font-sans text-xs text-gray-400 uppercase tracking-wide mr-2">
+
+        <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+
+        <div className="flex items-baseline gap-1.5 shrink-0">
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
             Straddle
           </span>
-          <span className="font-mono font-light text-2xl text-gray-400">
+          <span className="font-mono font-light text-xl text-[#9ca3af]">
             ${latest?.straddle_mid?.toFixed(2) ?? "—"}
           </span>
         </div>
+
         {opening && (
-          <div>
-            <span className="font-sans text-xs text-gray-400 uppercase tracking-wide mr-2">
-              Implied
-            </span>
-            <span className="font-mono font-light text-2xl text-gray-400">
-              ${opening.straddle_mid.toFixed(2)}
-            </span>
-          </div>
+          <>
+            <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+            <div className="flex items-baseline gap-1.5 shrink-0">
+              <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                Implied
+              </span>
+              <span className="font-mono font-light text-xl text-[#9ca3af]">
+                ${opening.straddle_mid.toFixed(2)}
+              </span>
+            </div>
+          </>
         )}
+
         {currentMovePts !== null && (
-          <div>
-            <span className="font-sans text-xs text-gray-400 uppercase tracking-wide mr-2">
-              Realized
-            </span>
-            <span
-              className="font-mono font-light text-2xl"
-              style={{ color: realizedColor }}
-            >
-              {currentMovePts.toFixed(1)}pts
-            </span>
-            {realizedMovePct && (
+          <>
+            <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+            <div className="flex items-baseline gap-1.5 shrink-0">
+              <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                Realized
+              </span>
               <span
-                className="font-mono font-light text-lg ml-1.5"
+                className="font-mono font-light text-xl"
                 style={{ color: realizedColor }}
               >
-                ({realizedMovePct}%)
+                {currentMovePts.toFixed(1)}pts
               </span>
-            )}
-          </div>
+              {realizedMovePct && (
+                <span
+                  className="font-mono text-xs"
+                  style={{ color: realizedColor }}
+                >
+                  ({realizedMovePct}%)
+                </span>
+              )}
+            </div>
+          </>
         )}
+
         {latestSkew && (
-          <div>
-            <span className="font-sans text-xs text-gray-400 uppercase tracking-wide mr-2">
-              IV30
-            </span>
-            <span className="font-mono font-light text-2xl text-gray-400">
-              {(latestSkew.atm_iv * 100).toFixed(1)}
-            </span>
-          </div>
+          <>
+            <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+            <div className="flex items-baseline gap-1.5 shrink-0">
+              <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                IV30
+              </span>
+              <span className="font-mono font-light text-xl text-[#9ca3af]">
+                {(latestSkew.atm_iv * 100).toFixed(1)}
+              </span>
+            </div>
+          </>
         )}
       </div>
 
       {/* SPX chart */}
       <div>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="font-sans text-xs text-gray-400 uppercase tracking-widest">
+        <div className="flex items-center gap-3 mb-3">
+          <div
+            className="w-0.5 h-4"
+            style={{
+              backgroundColor: spxOpen ? "#4ade80" : "#2a2a2a",
+              borderRadius: 0,
+            }}
+          />
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
             SPX
           </span>
-          <div
-            className="w-1.5 h-1.5 rounded-full"
-            style={{ backgroundColor: spxOpen ? "#4ade80" : "#333333" }}
-          />
+          {liveSpx && (
+            <span className="font-mono font-light text-sm text-[#666]">
+              {liveSpx.toFixed(2)}
+            </span>
+          )}
+          {spxPct && (
+            <span
+              className="font-mono text-xs"
+              style={{ color: pctColor(spxPct) }}
+            >
+              {parseFloat(spxPct) >= 0 ? "+" : ""}
+              {spxPct}%
+            </span>
+          )}
         </div>
         <SpxChart
           data={straddleData}
@@ -207,18 +269,35 @@ export default function MktView({
         />
       </div>
 
-      <div className="border-t border-[#1a1a1a]" />
+      <div className="border-t border-[#222]" />
 
       {/* ES chart */}
       <div>
-        <div className="flex items-center gap-2 mb-3">
-          <span className="font-sans text-xs text-gray-400 uppercase tracking-widest">
+        <div className="flex items-center gap-3 mb-3">
+          <div
+            className="w-0.5 h-4"
+            style={{
+              backgroundColor: esOpen ? "#4ade80" : "#2a2a2a",
+              borderRadius: 0,
+            }}
+          />
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
             ES
           </span>
-          <div
-            className="w-1.5 h-1.5 rounded-full"
-            style={{ backgroundColor: esOpen ? "#4ade80" : "#333333" }}
-          />
+          {liveEs && (
+            <span className="font-mono font-light text-sm text-[#666]">
+              {liveEs.toFixed(2)}
+            </span>
+          )}
+          {esPct && (
+            <span
+              className="font-mono text-xs"
+              style={{ color: pctColor(esPct) }}
+            >
+              {parseFloat(esPct) >= 0 ? "+" : ""}
+              {esPct}%
+            </span>
+          )}
         </div>
         <EsChart
           data={esData}

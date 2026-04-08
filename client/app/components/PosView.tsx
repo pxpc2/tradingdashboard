@@ -16,7 +16,7 @@ type Props = {
 function RealPositionsPlaceholder() {
   return (
     <div className="w-full py-8 rounded-sm bg-[#111111] flex items-center justify-center">
-      <span className="text-xs text-[#2a2a2a] uppercase tracking-widest">
+      <span className="font-sans text-[9px] text-[#222] uppercase tracking-widest">
         Posições Tastytrade — em breve
       </span>
     </div>
@@ -35,18 +35,24 @@ export default function PosView({
     <div className="flex flex-col gap-6">
       {/* Real positions placeholder */}
       <div>
-        <div className="text-xs text-[#333] uppercase tracking-widest mb-3">
-          Posições
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+            Posições
+          </span>
         </div>
         <RealPositionsPlaceholder />
       </div>
 
-      <div className="border-t border-[#1a1a1a]" />
+      <div className="border-t border-[#222]" />
 
       {/* SML Fly */}
       <div>
-        <div className="text-xs text-[#333] uppercase tracking-widest mb-3">
-          SML Fly
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+            SML Fly
+          </span>
         </div>
         <SmlFlyView
           session={smlSession}
@@ -58,12 +64,15 @@ export default function PosView({
         />
       </div>
 
-      <div className="border-t border-[#1a1a1a]" />
+      <div className="border-t border-[#222]" />
 
-      {/* Scratchpad positions */}
+      {/* Scratchpad */}
       <div>
-        <div className="text-xs text-[#333] uppercase tracking-widest mb-3">
-          Scratchpad
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+            Scratchpad
+          </span>
         </div>
         <PositionsView spxPrice={spxPrice} />
       </div>

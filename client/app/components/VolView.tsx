@@ -22,24 +22,27 @@ export default function VolView({
   return (
     <div className="flex flex-col gap-6">
       {/* Straddle metrics */}
-      <div className="flex items-baseline gap-8">
-        <div>
-          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+      <div className="flex items-baseline gap-6 flex-nowrap overflow-x-auto pb-1 border-b border-[#222]">
+        <div className="flex items-baseline gap-1.5 shrink-0">
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
             Straddle
           </span>
-          <span className="text-2xl font-medium text-gray-400">
+          <span className="font-mono font-light text-xl text-[#9ca3af]">
             ${latestStraddle?.straddle_mid?.toFixed(2) ?? "—"}
           </span>
         </div>
         {openingStraddle && (
-          <div>
-            <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
-              Implied Move
-            </span>
-            <span className="text-2xl font-medium text-gray-400">
-              ${openingStraddle.straddle_mid.toFixed(2)}
-            </span>
-          </div>
+          <>
+            <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+            <div className="flex items-baseline gap-1.5 shrink-0">
+              <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                Implied
+              </span>
+              <span className="font-mono font-light text-xl text-[#9ca3af]">
+                ${openingStraddle.straddle_mid.toFixed(2)}
+              </span>
+            </div>
+          </>
         )}
         {openingStraddle &&
           latestStraddle &&
@@ -60,76 +63,88 @@ export default function VolView({
                   ? "#f59e0b"
                   : "#9ca3af";
             return (
-              <div>
-                <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
-                  Realized
-                </span>
-                <span className="text-2xl font-medium text-gray-400">
-                  {realizedPts.toFixed(1)}pts
-                </span>
-                {realizedPct && (
+              <>
+                <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+                <div className="flex items-baseline gap-1.5 shrink-0">
+                  <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+                    Realized
+                  </span>
                   <span
-                    className="text-lg font-medium ml-1.5"
+                    className="font-mono font-light text-xl"
                     style={{ color }}
                   >
-                    ({realizedPct}%)
+                    {realizedPts.toFixed(1)}pts
                   </span>
-                )}
-              </div>
+                  {realizedPct && (
+                    <span className="font-mono text-xs" style={{ color }}>
+                      ({realizedPct}%)
+                    </span>
+                  )}
+                </div>
+              </>
             );
           })()}
       </div>
 
-      {/* Straddle chart — decay curve will be overlaid here eventually */}
+      {/* Straddle chart */}
       <div>
-        <div className="text-xs text-[#333] uppercase tracking-widest mb-3">
-          Straddle
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+            Straddle
+          </span>
         </div>
         <StraddleChart data={straddleData} selectedDate={selectedDate} />
       </div>
 
-      <div className="border-t border-[#1a1a1a]" />
+      <div className="border-t border-[#222]" />
 
       {/* Skew metrics */}
-      <div className="flex items-baseline gap-8">
-        <div>
-          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+      <div className="flex items-baseline gap-6 flex-nowrap overflow-x-auto pb-1 border-b border-[#222]">
+        <div className="flex items-baseline gap-1.5 shrink-0">
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
             Skew
           </span>
-          <span className="text-2xl font-medium text-gray-400">
+          <span className="font-mono font-light text-xl text-[#9ca3af]">
             {latestSkew?.skew?.toFixed(4) ?? "—"}
           </span>
         </div>
-        <div>
-          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+        <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+        <div className="flex items-baseline gap-1.5 shrink-0">
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
             Call IV
           </span>
-          <span className="text-2xl font-medium text-gray-400">
+          <span className="font-mono font-light text-xl text-[#9ca3af]">
             {latestSkew ? `${(latestSkew.call_iv * 100).toFixed(1)}` : "—"}
           </span>
         </div>
-        <div>
-          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+        <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+        <div className="flex items-baseline gap-1.5 shrink-0">
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
             ATM IV
           </span>
-          <span className="text-2xl font-medium text-gray-400">
+          <span className="font-mono font-light text-xl text-[#9ca3af]">
             {latestSkew ? `${(latestSkew.atm_iv * 100).toFixed(1)}` : "—"}
           </span>
         </div>
-        <div>
-          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+        <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+        <div className="flex items-baseline gap-1.5 shrink-0">
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
             Put IV
           </span>
-          <span className="text-2xl font-medium text-gray-400">
+          <span className="font-mono font-light text-xl text-[#9ca3af]">
             {latestSkew ? `${(latestSkew.put_iv * 100).toFixed(1)}` : "—"}
           </span>
         </div>
       </div>
 
-      {/* Skew chart — intraday for now, will become historical */}
+      {/* Skew chart */}
       <div>
-        <div className="text-xs text-[#333] uppercase tracking-widest mb-3">
-          Skew
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
+          <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+            Skew
+          </span>
         </div>
         <SkewChart data={skewSnapshots} selectedDate={selectedDate} />
       </div>
