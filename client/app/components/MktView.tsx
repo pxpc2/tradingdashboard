@@ -126,44 +126,48 @@ export default function MktView({
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-baseline gap-8">
+      {/* Metric strip */}
+      <div className="flex items-baseline gap-8 flex-wrap">
         <div>
-          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+          <span className="font-sans text-xs text-gray-400 uppercase tracking-wide mr-2">
             SPX
           </span>
-          <span className="text-2xl font-medium text-gray-400">
+          <span className="font-mono font-light text-2xl text-gray-400">
             {liveSpx?.toFixed(2) ?? "—"}
           </span>
         </div>
         <div>
-          <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+          <span className="font-sans text-xs text-gray-400 uppercase tracking-wide mr-2">
             Straddle
           </span>
-          <span className="text-2xl font-medium text-gray-400">
+          <span className="font-mono font-light text-2xl text-gray-400">
             ${latest?.straddle_mid?.toFixed(2) ?? "—"}
           </span>
         </div>
         {opening && (
           <div>
-            <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+            <span className="font-sans text-xs text-gray-400 uppercase tracking-wide mr-2">
               Implied
             </span>
-            <span className="text-2xl font-medium text-gray-400">
+            <span className="font-mono font-light text-2xl text-gray-400">
               ${opening.straddle_mid.toFixed(2)}
             </span>
           </div>
         )}
         {currentMovePts !== null && (
           <div>
-            <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+            <span className="font-sans text-xs text-gray-400 uppercase tracking-wide mr-2">
               Realized
             </span>
-            <span className="text-2xl font-medium text-gray-400">
+            <span
+              className="font-mono font-light text-2xl"
+              style={{ color: realizedColor }}
+            >
               {currentMovePts.toFixed(1)}pts
             </span>
             {realizedMovePct && (
               <span
-                className="ml-1.5 text-lg font-medium"
+                className="font-mono font-light text-lg ml-1.5"
                 style={{ color: realizedColor }}
               >
                 ({realizedMovePct}%)
@@ -173,19 +177,20 @@ export default function MktView({
         )}
         {latestSkew && (
           <div>
-            <span className="text-xs text-gray-400 uppercase tracking-wide mr-2">
+            <span className="font-sans text-xs text-gray-400 uppercase tracking-wide mr-2">
               IV30
             </span>
-            <span className="text-2xl font-medium text-gray-400">
+            <span className="font-mono font-light text-2xl text-gray-400">
               {(latestSkew.atm_iv * 100).toFixed(1)}
             </span>
           </div>
         )}
       </div>
 
+      {/* SPX chart */}
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs text-gray-400 uppercase tracking-widest">
+          <span className="font-sans text-xs text-gray-400 uppercase tracking-widest">
             SPX
           </span>
           <div
@@ -204,9 +209,10 @@ export default function MktView({
 
       <div className="border-t border-[#1a1a1a]" />
 
+      {/* ES chart */}
       <div>
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs text-gray-400 uppercase tracking-widest">
+          <span className="font-sans text-xs text-gray-400 uppercase tracking-widest">
             ES
           </span>
           <div

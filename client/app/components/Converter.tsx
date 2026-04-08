@@ -37,8 +37,8 @@ export default function EsSpxConverter({ initialBasis }: Props) {
         <span className="text-xs text-[#333] uppercase tracking-wide">
           Basis
         </span>
-        <span className="text-xs text-[#444]">ES = SPX +</span>
-        <span className="text-sm text-[#555] w-16 text-right">
+        <span className="font-sans text-xs text-[#444]">ES = SPX +</span>
+        <span className="font-mono text-sm text-[#555] w-16 text-right">
           {initialBasis !== null ? initialBasis.toFixed(2) : "—"}
         </span>
       </div>
@@ -47,7 +47,7 @@ export default function EsSpxConverter({ initialBasis }: Props) {
 
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-[#333] uppercase tracking-wide w-6">
+          <span className="font-sans text-xs text-[#333] uppercase tracking-wide w-6">
             {fromLabel}
           </span>
           <input
@@ -56,7 +56,7 @@ export default function EsSpxConverter({ initialBasis }: Props) {
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="—"
-            className="w-24 bg-[#111111] border border-[#1f1f1f] rounded-sm px-2 py-1 text-sm text-[#888] outline-none text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            className="font-mono w-24 bg-[#111111] border border-[#1f1f1f] rounded-sm px-2 py-1 text-sm text-[#888] outline-none text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
           />
         </div>
 
@@ -69,11 +69,11 @@ export default function EsSpxConverter({ initialBasis }: Props) {
         </button>
 
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-[#333] uppercase tracking-wide w-6">
+          <span className="font-sans text-xs text-[#333] uppercase tracking-wide w-6">
             {toLabel}
           </span>
           <span
-            className="w-24 text-sm text-right px-2 py-1"
+            className="font-mono w-24 text-sm text-right px-2 py-1"
             style={{ color: outputNum !== null ? outputColor : "#333" }}
           >
             {outputNum !== null ? outputNum.toFixed(2) : "—"}

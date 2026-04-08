@@ -1,19 +1,26 @@
-import type { Metadata } from "next";
+import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: "trading dashboard",
-  description: "",
-};
+const plexSans = IBM_Plex_Sans({
+  subsets: ["latin"],
+  weight: ["300", "400"],
+  variable: "--font-sans",
+});
+
+const plexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["300", "400"],
+  variable: "--font-mono",
+});
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
-    <html lang="en" className={"h-full antialiased"}>
-      <body className="bg-[#0a0a0a] text-white antialiased">{children}</body>
+    <html lang="en" className={`${plexSans.variable} ${plexMono.variable}`}>
+      <body style={{ fontFamily: "var(--font-sans)" }}>{children}</body>
     </html>
   );
 }
