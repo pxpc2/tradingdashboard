@@ -7,6 +7,8 @@ import { usePharmLevels } from "../hooks/usePharmLevels";
 import { ES_STREAMER_SYMBOL, TickData } from "../hooks/useLiveTick";
 import { StraddleSnapshot, SkewSnapshot, EsSnapshot } from "../types";
 import MacroEvents from "./MacroEvents";
+import Watchlist from "./Watchlist";
+import { WatchlistEntry } from "../api/watchlist/route";
 
 type Props = {
   straddleData: StraddleSnapshot[];
@@ -19,6 +21,8 @@ type Props = {
   spxTick: TickData | null;
   esTick: TickData | null;
   liveBasis: number | null;
+  watchlistEntries: WatchlistEntry[];
+ticks: Record<string, TickData>;
 };
 
 function isSpxOpen(): boolean {
@@ -80,6 +84,8 @@ export default function MktView({
   spxTick,
   esTick,
   liveBasis,
+  watchlistEntries,
+  ticks
 }: Props) {
   const latest = straddleData[straddleData.length - 1];
   const opening = straddleData[0];
@@ -304,8 +310,10 @@ export default function MktView({
         />
       </div>
       <div className="border-t border-[#222]" />
-
-      <MacroEvents selectedDate={selectedDate} />
+      <div className="grid grid-cols-2 gap-8">
+  <MacroEvents selectedDate={selectedDate} />
+  <Watchlist entries={watchlistEntries} ticks={ticks} />
+</div>
     </div>
   );
 }
