@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import MktView from "./MktView";
 import VolView from "./VolView";
 import PosView from "./PosView";
@@ -46,8 +46,8 @@ function isToday(selectedDate: string): boolean {
 }
 
 function computeOvernightLevels(esData: EsSnapshot[], selectedDate: string) {
-  const rthOpen = new Date(`${selectedDate}T13:30:00Z`).getTime(); // 09:30 ET = 13:30 UTC
-  const globexOpen = rthOpen - 15.5 * 60 * 60 * 1000; // 18:00 ET prev day = 23:00 UTC prev day
+  const rthOpen = new Date(`${selectedDate}T13:30:00Z`).getTime();
+  const globexOpen = rthOpen - 15.5 * 60 * 60 * 1000;
 
   const overnightPoints = esData.filter((s) => {
     const t = new Date(s.created_at).getTime();
@@ -82,34 +82,12 @@ export default function Dashboard({
   const { skewSnapshots } = useSkewData(selectedDate);
   const { esData, lastEsTime } = useEsData(selectedDate);
 
-  // ONH/ONL lifted here so it survives tab switches
-  const [onh, setOnh] = useState<number | null>(null);
-  const [onl, setOnl] = useState<number | null>(null);
-  const onhOnlComputedRef = useRef(false);
-
-  useEffect(() => {
-    if (!isToday(selectedDate) || !isSpxOpen()) return;
-    if (onhOnlComputedRef.current) return;
-    if (esData.length === 0) return;
-
-    const { onh: computedOnh, onl: computedOnl } = computeOvernightLevels(
-      esData,
-      selectedDate,
-    );
-
-    if (computedOnh === null || computedOnl === null) return;
-
-    setOnh(computedOnh);
-    setOnl(computedOnl);
-    onhOnlComputedRef.current = true;
-  }, [esData, selectedDate]);
-
-  // Reset when date changes
-  useEffect(() => {
-    onhOnlComputedRef.current = false;
-    setOnh(null);
-    setOnl(null);
-  }, [selectedDate]);
+  // Computed inline — filter correctly excludes RTH data (t < rthOpen = 13:30 UTC)
+  // No state/ref needed — recomputing on render is safe since filter is stable
+  const { onh, onl } =
+    isToday(selectedDate) && esData.length > 0
+      ? computeOvernightLevels(esData, selectedDate)
+      : { onh: null, onl: null };
 
   const latestSpx = straddleData[straddleData.length - 1]?.spx_ref ?? 0;
 
@@ -158,7 +136,14 @@ export default function Dashboard({
         </div>
       </div>
 
-      {activeTab === "MKT" && (
+      {/* All views stay mounted — visibility trick prevents chart destruction on tab switch */}
+      <div
+        style={{
+          visibility: activeTab === "MKT" ? "visible" : "hidden",
+          height: activeTab === "MKT" ? "auto" : "0",
+          overflow: "hidden",
+        }}
+      >
         <MktView
           straddleData={straddleData}
           skewSnapshots={skewSnapshots}
@@ -168,15 +153,29 @@ export default function Dashboard({
           onh={onh}
           onl={onl}
         />
-      )}
-      {activeTab === "VOL" && (
+      </div>
+
+      <div
+        style={{
+          visibility: activeTab === "VOL" ? "visible" : "hidden",
+          height: activeTab === "VOL" ? "auto" : "0",
+          overflow: "hidden",
+        }}
+      >
         <VolView
           straddleData={straddleData}
           skewSnapshots={skewSnapshots}
           selectedDate={selectedDate}
         />
-      )}
-      {activeTab === "POS" && (
+      </div>
+
+      <div
+        style={{
+          visibility: activeTab === "POS" ? "visible" : "hidden",
+          height: activeTab === "POS" ? "auto" : "0",
+          overflow: "hidden",
+        }}
+      >
         <PosView
           smlSession={smlSession}
           onSessionCreated={setSmlSession}
@@ -185,7 +184,7 @@ export default function Dashboard({
           selectedDate={selectedDate}
           spxPrice={latestSpx}
         />
-      )}
+      </div>
     </div>
   );
 }
