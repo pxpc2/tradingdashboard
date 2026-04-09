@@ -73,6 +73,16 @@ function pctColor(pct: string | null): string {
   return parseFloat(pct) >= 0 ? "#4ade80" : "#f87171";
 }
 
+function ctTime(): string {
+  return new Date().toLocaleTimeString("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
 export default function MktView({
   straddleData,
   skewSnapshots,
@@ -94,11 +104,17 @@ export default function MktView({
   const [pdh, setPdh] = useState<number | null>(null);
   const [pdl, setPdl] = useState<number | null>(null);
   const [prevClose, setPrevClose] = useState<number | null>(null);
+  const [nowCt, setNowCt] = useState(ctTime);
 
   const { weeklyLevels, dailyLevels } = usePharmLevels();
 
   const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
   const liveEs = esTick?.mid ?? esData[esData.length - 1]?.es_ref ?? null;
+
+  useEffect(() => {
+    const interval = setInterval(() => setNowCt(ctTime()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
@@ -139,17 +155,15 @@ export default function MktView({
 
   const spxOpen = isSpxOpen();
   const esOpen = isEsOpen();
-
-  // SPX % from pdhl close, ES % from DXFeed Summary prevDayClosePrice
   const spxPct = pctChange(liveSpx, prevClose);
   const esPct = pctChange(liveEs, esTick?.prevClose ?? null);
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Metric strip — no % change, kept clean */}
-      <div className="flex items-baseline gap-6 flex-nowrap overflow-x-auto pb-1 border-b border-[#222]">
+      {/* Metric strip */}
+      <div className="flex items-baseline gap-4 flex-nowrap overflow-x-auto pb-1 border-b border-[#222]">
         <div className="flex items-baseline gap-1.5 shrink-0">
-          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
+          <span className="font-sans text-[10px] text-[#666] uppercase tracking-widest">
             SPX
           </span>
           <span className="font-mono font-light text-lg text-[#9ca3af]">
@@ -160,7 +174,7 @@ export default function MktView({
         <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
 
         <div className="flex items-baseline gap-1.5 shrink-0">
-          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
+          <span className="font-sans text-[10px] text-[#666] uppercase tracking-widest">
             Straddle
           </span>
           <span className="font-mono font-light text-lg text-[#9ca3af]">
@@ -172,7 +186,7 @@ export default function MktView({
           <>
             <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
             <div className="flex items-baseline gap-1.5 shrink-0">
-              <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
+              <span className="font-sans text-[10px] text-[#666] uppercase tracking-widest">
                 Implied
               </span>
               <span className="font-mono font-light text-lg text-[#9ca3af]">
@@ -186,7 +200,7 @@ export default function MktView({
           <>
             <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
             <div className="flex items-baseline gap-1.5 shrink-0">
-              <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
+              <span className="font-sans text-[10px] text-[#666] uppercase tracking-widest">
                 Realized
               </span>
               <span
@@ -211,7 +225,7 @@ export default function MktView({
           <>
             <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
             <div className="flex items-baseline gap-1.5 shrink-0">
-              <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
+              <span className="font-sans text-[10px] text-[#666] uppercase tracking-widest">
                 IV30
               </span>
               <span className="font-mono font-light text-lg text-[#9ca3af]">
@@ -220,6 +234,17 @@ export default function MktView({
             </div>
           </>
         )}
+
+        {/* Clock — pushed to right end */}
+        <div className="w-px h-4 bg-[#1f1f1f] shrink-0 ml-auto" />
+        <div className="flex items-baseline gap-1.5 shrink-0">
+          <span className="font-mono font-light text-lg text-[#444]">
+            {nowCt}
+          </span>
+          <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">
+            CT
+          </span>
+        </div>
       </div>
 
       {/* SPX chart */}
@@ -227,7 +252,10 @@ export default function MktView({
         <div className="flex items-center gap-3 mb-3">
           <div
             className="w-0.5 h-4"
-            style={{ backgroundColor: spxOpen ? "#4ade80" : "#2a2a2a", borderRadius: 0 }}
+            style={{
+              backgroundColor: spxOpen ? "#4ade80" : "#2a2a2a",
+              borderRadius: 0,
+            }}
           />
           <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             SPX
@@ -238,8 +266,12 @@ export default function MktView({
             </span>
           )}
           {spxPct && (
-            <span className="font-mono text-xs" style={{ color: pctColor(spxPct) }}>
-              {parseFloat(spxPct) >= 0 ? "+" : ""}{spxPct}%
+            <span
+              className="font-mono text-xs"
+              style={{ color: pctColor(spxPct) }}
+            >
+              {parseFloat(spxPct) >= 0 ? "+" : ""}
+              {spxPct}%
             </span>
           )}
         </div>
@@ -259,7 +291,10 @@ export default function MktView({
         <div className="flex items-center gap-3 mb-3">
           <div
             className="w-0.5 h-4"
-            style={{ backgroundColor: esOpen ? "#4ade80" : "#2a2a2a", borderRadius: 0 }}
+            style={{
+              backgroundColor: esOpen ? "#4ade80" : "#2a2a2a",
+              borderRadius: 0,
+            }}
           />
           <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
             ES
@@ -270,8 +305,12 @@ export default function MktView({
             </span>
           )}
           {esPct && (
-            <span className="font-mono text-xs" style={{ color: pctColor(esPct) }}>
-              {parseFloat(esPct) >= 0 ? "+" : ""}{esPct}%
+            <span
+              className="font-mono text-xs"
+              style={{ color: pctColor(esPct) }}
+            >
+              {parseFloat(esPct) >= 0 ? "+" : ""}
+              {esPct}%
             </span>
           )}
         </div>
@@ -291,8 +330,7 @@ export default function MktView({
       {/* Two column: macro + watchlist */}
       <div className="grid grid-cols-3 gap-8">
         <div className="col-span-2">
-
-        <MacroEvents selectedDate={selectedDate} />
+          <MacroEvents selectedDate={selectedDate} />
         </div>
         <Watchlist entries={watchlistEntries} ticks={ticks} />
       </div>
