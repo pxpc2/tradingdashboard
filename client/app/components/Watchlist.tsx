@@ -10,42 +10,52 @@ type Props = {
 
 const EXCLUDE = new Set(["SPX", ES_STREAMER_SYMBOL]);
 
-// Symbol-based category overrides — takes priority over instrumentType
 const SYMBOL_CATEGORY_OVERRIDES: Record<string, string> = {
-  // Vol ETFs
-  UVXY: "Vol", VXX: "Vol", SVXY: "Vol", VIX1D: "Vol", VVIX: "Vol",
-  // Commodity ETFs
-  GLD: "Metals", SLV: "Metals", IAU: "Metals", PPLT: "Metals",
-  USO: "Energy", UNG: "Energy", UCO: "Energy",
-  COPX: "Metals", HG: "Metals",
-  // Rates ETFs
-  TLT: "Rates", IEF: "Rates", SHY: "Rates",
-  HYG: "Credit", LQD: "Credit", JNK: "Credit",
+  VIX1D: "Vol",
+  VVIX: "Vol",
+  VIX3M: "Vol",
+  UVXY: "Vol",
+  VXX: "Vol",
+  SVXY: "Vol",
+  GLD: "Metals",
+  SLV: "Metals",
+  IAU: "Metals",
+  PPLT: "Metals",
+  USO: "Energy",
+  UNG: "Energy",
+  UCO: "Energy",
+  TLT: "Rates",
+  IEF: "Rates",
+  SHY: "Rates",
+  HYG: "Credit",
+  LQD: "Credit",
+  JNK: "Credit",
 };
 
 function getCategory(entry: WatchlistEntry): string {
-  // Check symbol override first
   if (SYMBOL_CATEGORY_OVERRIDES[entry.symbol]) {
     return SYMBOL_CATEGORY_OVERRIDES[entry.symbol];
   }
-
   const { instrumentType, marketSector } = entry;
-
-  if (instrumentType === "Index") return "Vol";
+  if (instrumentType === "Index" || instrumentType === "Unknown") return "Vol";
   if (instrumentType === "Cryptocurrency") return "Crypto";
   if (instrumentType === "Equity") return "Equities";
-
   if (instrumentType === "Future") {
     const sector = marketSector?.toLowerCase() ?? "";
-    if (sector.includes("equity") || sector.includes("index")) return "Equity Futs";
+    if (sector.includes("equity") || sector.includes("index"))
+      return "Equity Futs";
     if (sector.includes("energy")) return "Energy";
     if (sector.includes("metal")) return "Metals";
     if (sector.includes("fx") || sector.includes("currenc")) return "FX";
-    if (sector.includes("rate") || sector.includes("interest") || sector.includes("fixed")) return "Rates";
+    if (
+      sector.includes("rate") ||
+      sector.includes("interest") ||
+      sector.includes("fixed")
+    )
+      return "Rates";
     if (sector.includes("agri") || sector.includes("grain")) return "Agri";
     return "Futures";
   }
-
   return instrumentType;
 }
 
@@ -65,26 +75,67 @@ const CATEGORY_ORDER = [
 
 function groupEntries(entries: WatchlistEntry[]): [string, WatchlistEntry[]][] {
   const groups: Record<string, WatchlistEntry[]> = {};
-
   for (const entry of entries) {
-    if (EXCLUDE.has(entry.symbol) || EXCLUDE.has(entry.streamerSymbol)) continue;
+    if (EXCLUDE.has(entry.symbol) || EXCLUDE.has(entry.streamerSymbol))
+      continue;
     const cat = getCategory(entry);
     if (!groups[cat]) groups[cat] = [];
     groups[cat].push(entry);
   }
-
-  const ordered: [string, WatchlistEntry[]][] = CATEGORY_ORDER
-    .filter((cat) => groups[cat])
-    .map((cat): [string, WatchlistEntry[]] => [cat, groups[cat]]);
-
-  const unordered: [string, WatchlistEntry[]][] = Object.entries(groups)
-    .filter(([cat]) => !CATEGORY_ORDER.includes(cat));
-
+  const ordered: [string, WatchlistEntry[]][] = CATEGORY_ORDER.filter(
+    (cat) => groups[cat],
+  ).map((cat): [string, WatchlistEntry[]] => [cat, groups[cat]]);
+  const unordered: [string, WatchlistEntry[]][] = Object.entries(groups).filter(
+    ([cat]) => !CATEGORY_ORDER.includes(cat),
+  );
   return [...ordered, ...unordered];
 }
 
+function isCategoryOpen(category: string): boolean {
+  const day = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+  });
+  const time = new Date().toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const isWeekday = !["Sat", "Sun"].includes(day);
+  const rthOpen = isWeekday && time >= "09:30:00" && time < "16:00:00";
+  const globexOpen =
+    day !== "Sat" &&
+    !(day === "Sun" && time < "18:00:00") &&
+    !(isWeekday && time >= "17:00:00" && time < "18:00:00");
+
+  switch (category) {
+    case "Vol":
+    case "Equities":
+    case "Credit":
+      return rthOpen;
+    case "Equity Futs":
+    case "Energy":
+    case "Metals":
+    case "FX":
+    case "Rates":
+    case "Agri":
+    case "Futures":
+      return globexOpen;
+    case "Crypto":
+      return true;
+    default:
+      return rthOpen;
+  }
+}
+
 function formatPrice(val: number): string {
-  if (val >= 10000) return val.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (val >= 10000)
+    return val.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
   if (val >= 100) return val.toFixed(2);
   if (val >= 1) return val.toFixed(3);
   return val.toFixed(5);
@@ -106,7 +157,9 @@ export default function Watchlist({ entries, ticks }: Props) {
       <div>
         <div className="flex items-center gap-3 mb-3">
           <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
-          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">Watchlist</span>
+          <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
+            Watchlist
+          </span>
         </div>
         <div className="font-mono text-[11px] text-[#333] py-4">loading...</div>
       </div>
@@ -117,20 +170,33 @@ export default function Watchlist({ entries, ticks }: Props) {
     <div>
       <div className="flex items-center gap-3 mb-3">
         <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
-        <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">Watchlist</span>
+        <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
+          Watchlist
+        </span>
       </div>
 
-      <div className="grid grid-cols-[1fr_80px_60px_64px] gap-x-3 pb-2 border-b border-[#1a1a1a]">
-        <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">Symbol</span>
-        <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">Last</span>
-        <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">Chg</span>
-        <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">Chg%</span>
+      <div className="grid grid-cols-[1fr_80px_60px_64px] gap-x-3 pb-2 border-b border-[#1a1a1a] pl-1.5">
+        <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">
+          Symbol
+        </span>
+        <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
+          Last
+        </span>
+        <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
+          Chg
+        </span>
+        <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
+          Chg%
+        </span>
       </div>
 
-      <div className="macro-scroll" style={{ height: "300px", overflowY: "auto" }}>
+      <div
+        className="macro-scroll"
+        style={{ height: "300px", overflowY: "auto" }}
+      >
         {groups.map(([category, categoryEntries]) => (
           <div key={category}>
-            <div className="font-sans text-[9px] text-[#333] uppercase tracking-widest py-1.5 border-b border-[#111]">
+            <div className="font-sans text-[9px] text-[#333] uppercase tracking-widest py-1.5 border-b border-[#111] pl-1.5">
               {category}
             </div>
             {categoryEntries.map((entry) => {
@@ -139,8 +205,8 @@ export default function Watchlist({ entries, ticks }: Props) {
               const last = tick?.last ?? null;
               const prevClose = tick?.prevClose ?? null;
 
-              // Use Trade last price for indices (mid=0), otherwise use mid
-              const displayPrice = (mid === null || mid === 0) ? last : mid;
+              const displayPrice = mid === null || mid === 0 ? last : mid;
+              const isOpen = isCategoryOpen(category);
 
               const chg =
                 displayPrice !== null && prevClose !== null
@@ -152,24 +218,45 @@ export default function Watchlist({ entries, ticks }: Props) {
                   : null;
 
               const isPos = chg !== null && chg >= 0;
-              const color = chg === null ? "#444" : isPos ? "#4ade80" : "#f87171";
+              const chgColor =
+                chg === null ? "#444" : isPos ? "#4ade80" : "#f87171";
+              const borderColor = isOpen ? "#4ade80" : "#f87171";
+              const symColor = isOpen ? "#666" : "#444";
+              const valColor = isOpen ? "#9ca3af" : "#444";
 
               return (
                 <div
                   key={entry.symbol}
-                  className="grid grid-cols-[1fr_80px_60px_64px] gap-x-3 py-1.5 border-b border-[#111]"
+                  className="grid grid-cols-[1fr_80px_60px_64px] gap-x-3 py-1.5 border-b border-[#111] pl-1.5"
+                  style={{ borderLeft: `2px solid ${borderColor}` }}
                 >
-                  <span className="font-mono text-[11px] text-[#666] truncate">
+                  <span
+                    className="font-mono text-[11px] truncate"
+                    style={{ color: symColor }}
+                  >
                     {entry.symbol}
                   </span>
-                  <span className="font-mono text-[11px] text-[#9ca3af] text-right">
+                  <span
+                    className="font-mono text-[11px] text-right"
+                    style={{ color: valColor }}
+                  >
                     {displayPrice !== null ? formatPrice(displayPrice) : "—"}
                   </span>
-                  <span className="font-mono text-[11px] text-right" style={{ color }}>
-                    {chg !== null ? (isPos ? "+" : "") + formatChange(chg) : "—"}
+                  <span
+                    className="font-mono text-[11px] text-right"
+                    style={{ color: isOpen ? chgColor : "#444" }}
+                  >
+                    {chg !== null && isOpen
+                      ? (isPos ? "+" : "") + formatChange(chg)
+                      : "—"}
                   </span>
-                  <span className="font-mono text-[11px] text-right" style={{ color }}>
-                    {chgPct !== null ? (isPos ? "+" : "") + chgPct.toFixed(2) + "%" : "—"}
+                  <span
+                    className="font-mono text-[11px] text-right"
+                    style={{ color: isOpen ? chgColor : "#444" }}
+                  >
+                    {chgPct !== null && isOpen
+                      ? (isPos ? "+" : "") + chgPct.toFixed(2) + "%"
+                      : "—"}
                   </span>
                 </div>
               );
