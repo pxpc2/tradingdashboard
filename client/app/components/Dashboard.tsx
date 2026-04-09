@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import MktView from "./MktView";
 import VolView from "./VolView";
 import PosView from "./PosView";
@@ -32,8 +32,17 @@ function isToday(selectedDate: string): boolean {
 }
 
 function isSpxOpen(): boolean {
-  const day = new Date().toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "short" });
-  const time = new Date().toLocaleTimeString("en-US", { timeZone: "America/New_York", hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const day = new Date().toLocaleDateString("en-US", {
+    timeZone: "America/New_York",
+    weekday: "short",
+  });
+  const time = new Date().toLocaleTimeString("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
   if (["Sat", "Sun"].includes(day)) return false;
   return time >= "09:30:00" && time < "16:00:00";
 }
@@ -52,19 +61,43 @@ function computeOvernightLevels(esData: EsSnapshot[], selectedDate: string) {
   };
 }
 
-export default function Dashboard({ initialStraddleData, initialSmlSession }: Props) {
+function ctTime(): string {
+  return new Date().toLocaleTimeString("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
+export default function Dashboard({
+  initialStraddleData,
+  initialSmlSession,
+}: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("MKT");
   const [selectedDate, setSelectedDate] = useState<string>(
     new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
   );
+  const [nowCt, setNowCt] = useState(ctTime);
 
-  const { straddleData, esBasis } = useStraddleData(selectedDate, initialStraddleData);
-  const { smlSession, setSmlSession, flySnapshots, patchEntryMid } = useFlyData(selectedDate, initialSmlSession);
+  useEffect(() => {
+    const interval = setInterval(() => setNowCt(ctTime()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const { straddleData, esBasis } = useStraddleData(
+    selectedDate,
+    initialStraddleData,
+  );
+  const { smlSession, setSmlSession, flySnapshots, patchEntryMid } = useFlyData(
+    selectedDate,
+    initialSmlSession,
+  );
   const { skewSnapshots } = useSkewData(selectedDate);
   const { esData, lastEsTime } = useEsData(selectedDate);
   const { entries: watchlistEntries } = useWatchlist();
 
-  // Combine core symbols + watchlist streamer symbols, deduplicated
   const allSymbols = useMemo(() => {
     const set = new Set(CORE_SYMBOLS);
     for (const e of watchlistEntries) set.add(e.streamerSymbol);
@@ -106,6 +139,7 @@ export default function Dashboard({ initialStraddleData, initialSmlSession }: Pr
               </button>
             ))}
           </div>
+
           <div className="flex items-center gap-4">
             <input
               type="date"
@@ -113,12 +147,15 @@ export default function Dashboard({ initialStraddleData, initialSmlSession }: Pr
               onChange={(e) => setSelectedDate(e.target.value)}
               className="font-mono bg-transparent text-[#333] text-xs hover:cursor-pointer outline-none border-none"
             />
-            <span className="font-mono text-xs text-[#2a2a2a]">
-              {new Date().toLocaleDateString("en-US", {
-                timeZone: "America/Chicago",
-                weekday: "short", month: "short", day: "numeric", year: "numeric",
-              })}
+
+            {/* CT clock — replaces static date label */}
+            <span
+              className="font-mono text-xs text-[#333]"
+              suppressHydrationWarning
+            >
+              {nowCt} CT
             </span>
+
             <div className="w-px h-4 bg-[#1a1a1a]" />
             <EsSpxConverter initialBasis={liveBasis} compact />
             <div className="w-px h-4 bg-[#1a1a1a]" />
@@ -135,7 +172,13 @@ export default function Dashboard({ initialStraddleData, initialSmlSession }: Pr
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-6">
-        <div style={{ visibility: activeTab === "MKT" ? "visible" : "hidden", height: activeTab === "MKT" ? "auto" : "0", overflow: "hidden" }}>
+        <div
+          style={{
+            visibility: activeTab === "MKT" ? "visible" : "hidden",
+            height: activeTab === "MKT" ? "auto" : "0",
+            overflow: "hidden",
+          }}
+        >
           <MktView
             straddleData={straddleData}
             skewSnapshots={skewSnapshots}
@@ -151,10 +194,26 @@ export default function Dashboard({ initialStraddleData, initialSmlSession }: Pr
             ticks={ticks}
           />
         </div>
-        <div style={{ visibility: activeTab === "VOL" ? "visible" : "hidden", height: activeTab === "VOL" ? "auto" : "0", overflow: "hidden" }}>
-          <VolView straddleData={straddleData} skewSnapshots={skewSnapshots} selectedDate={selectedDate} />
+        <div
+          style={{
+            visibility: activeTab === "VOL" ? "visible" : "hidden",
+            height: activeTab === "VOL" ? "auto" : "0",
+            overflow: "hidden",
+          }}
+        >
+          <VolView
+            straddleData={straddleData}
+            skewSnapshots={skewSnapshots}
+            selectedDate={selectedDate}
+          />
         </div>
-        <div style={{ visibility: activeTab === "POS" ? "visible" : "hidden", height: activeTab === "POS" ? "auto" : "0", overflow: "hidden" }}>
+        <div
+          style={{
+            visibility: activeTab === "POS" ? "visible" : "hidden",
+            height: activeTab === "POS" ? "auto" : "0",
+            overflow: "hidden",
+          }}
+        >
           <PosView
             smlSession={smlSession}
             onSessionCreated={setSmlSession}

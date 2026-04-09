@@ -73,16 +73,6 @@ function pctColor(pct: string | null): string {
   return parseFloat(pct) >= 0 ? "#4ade80" : "#f87171";
 }
 
-function ctTime(): string {
-  return new Date().toLocaleTimeString("en-US", {
-    timeZone: "America/Chicago",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  });
-}
-
 export default function MktView({
   straddleData,
   skewSnapshots,
@@ -104,17 +94,11 @@ export default function MktView({
   const [pdh, setPdh] = useState<number | null>(null);
   const [pdl, setPdl] = useState<number | null>(null);
   const [prevClose, setPrevClose] = useState<number | null>(null);
-  const [nowCt, setNowCt] = useState(ctTime);
 
   const { weeklyLevels, dailyLevels } = usePharmLevels();
 
   const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
   const liveEs = esTick?.mid ?? esData[esData.length - 1]?.es_ref ?? null;
-
-  useEffect(() => {
-    const interval = setInterval(() => setNowCt(ctTime()), 1000);
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
@@ -234,17 +218,6 @@ export default function MktView({
             </div>
           </>
         )}
-
-        {/* Clock — pushed to right end */}
-        <div className="w-px h-4 bg-[#1f1f1f] shrink-0 ml-auto" />
-        <div className="flex items-baseline gap-1.5 shrink-0">
-          <span className="font-mono font-light text-lg text-[#444]">
-            {nowCt}
-          </span>
-          <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">
-            CT
-          </span>
-        </div>
       </div>
 
       {/* SPX chart */}
