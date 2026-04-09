@@ -134,7 +134,7 @@ export default function Dashboard({
                 className={`font-sans h-full px-2 md:px-4 text-xs tracking-widest uppercase transition-colors border-b-2 ${
                   activeTab === tab
                     ? "text-[#888] border-[#555]"
-                    : "text-[#333] border-transparent hover:text-[#555] hover:cursor-pointer"
+                    : "text-[#555] border-transparent hover:text-[#888] hover:cursor-pointer"
                 }`}
               >
                 {tab}
@@ -146,10 +146,10 @@ export default function Dashboard({
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="font-mono bg-transparent text-[#333] text-xs hover:cursor-pointer outline-none border-none"
+              className="font-mono bg-transparent text-[#555]  text-xs hover:cursor-pointer outline-none border-none"
             />
             <span
-              className="font-mono text-xs text-[#333]"
+              className="font-mono text-lg text-[#555]"
               suppressHydrationWarning
             >
               {nowCt} CT
@@ -157,7 +157,7 @@ export default function Dashboard({
 
             {/* Basis — mobile only, replaces converter */}
             {liveBasis !== null && (
-              <span className="font-mono text-xs text-[#333] md:hidden">
+              <span className="font-mono text-xs text-[#555] md:hidden">
                 B {liveBasis > 0 ? "+" : ""}
                 {liveBasis.toFixed(2)}
               </span>
@@ -173,7 +173,7 @@ export default function Dashboard({
             <form action={signOut}>
               <button
                 type="submit"
-                className="font-sans text-xs text-[#2a2a2a] hover:text-[#555] transition-colors hover:cursor-pointer uppercase tracking-widest"
+                className="font-sans text-xs text-[#555] hover:text-[#555] transition-colors hover:cursor-pointer uppercase tracking-widest"
               >
                 out
               </button>

@@ -103,7 +103,7 @@ export default function MacroEvents({ selectedDate }: Props) {
         {userScrolled && nextIndex >= 0 && (
           <button
             onClick={handleGoToNow}
-            className="font-sans text-[10px] text-[#444] uppercase tracking-widest hover:text-[#666] transition-colors hover:cursor-pointer ml-auto"
+            className="font-sans text-[10px] text-[#555] uppercase tracking-widest hover:text-[#666] transition-colors hover:cursor-pointer ml-auto"
           >
             ↓ now
           </button>
@@ -118,19 +118,19 @@ export default function MacroEvents({ selectedDate }: Props) {
         <div className="w-full">
           {/* Header — mobile: time + event only / desktop: full columns */}
           <div className="grid grid-cols-[56px_1fr] md:grid-cols-[64px_1fr_80px_80px_80px] gap-x-4 pb-2 border-b border-[#1a1a1a]">
-            <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">
+            <span className="font-sans text-[10px] text-[#555] uppercase tracking-widest">
               Hora (CT)
             </span>
-            <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">
+            <span className="font-sans text-[10px] text-[#555] uppercase tracking-widest">
               Evento
             </span>
-            <span className="hidden md:block font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
+            <span className="hidden md:block font-sans text-[10px] text-[#555] uppercase tracking-widest text-right">
               Anterior
             </span>
-            <span className="hidden md:block font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
+            <span className="hidden md:block font-sans text-[10px] text-[#555] uppercase tracking-widest text-right">
               Est
             </span>
-            <span className="hidden md:block font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
+            <span className="hidden md:block font-sans text-[10px] text-[#555] uppercase tracking-widest text-right">
               Atual
             </span>
           </div>
@@ -192,7 +192,7 @@ export default function MacroEvents({ selectedDate }: Props) {
                       </span>
                     )}
                   </div>
-                  <span className="hidden md:block font-mono text-[11px] text-[#444] text-right">
+                  <span className="hidden md:block font-mono text-[11px] text-[#555] text-right">
                     {e.previous ?? "—"}
                   </span>
                   <span className="hidden md:block font-mono text-[11px] text-[#555] text-right">
@@ -200,7 +200,7 @@ export default function MacroEvents({ selectedDate }: Props) {
                   </span>
                   <span
                     className="hidden md:block font-mono text-[11px] text-right"
-                    style={{ color: hasActual ? actualColor : "#333" }}
+                    style={{ color: hasActual ? actualColor : "#555" }}
                   >
                     {e.actual ?? "—"}
                   </span>

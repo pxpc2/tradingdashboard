@@ -39,12 +39,12 @@ export default function EsSpxConverter({
     return (
       <div className="flex items-center gap-2">
         {initialBasis !== null && (
-          <span className="font-mono text-[10px] text-[#2a2a2a]">
+          <span className="font-mono text-[10px] text-[#555]">
             Basis {initialBasis.toFixed(2)}
           </span>
         )}
         <div className="w-px h-4 bg-[#1a1a1a]" />
-        <span className="font-sans text-[10px] text-[#333] uppercase tracking-widest">
+        <span className="font-sans text-[10px] text-[#555] uppercase tracking-widest">
           {fromLabel}
         </span>
         <input
@@ -57,16 +57,16 @@ export default function EsSpxConverter({
         />
         <button
           onClick={toggle}
-          className="text-[#333] hover:text-[#555] transition-colors text-sm leading-none hover:cursor-pointer select-none"
+          className="text-[#555] hover:text-[#555] transition-colors text-sm leading-none hover:cursor-pointer select-none"
         >
           ⇄
         </button>
-        <span className="font-sans text-[10px] text-[#333] uppercase tracking-widest">
+        <span className="font-sans text-[10px] text-[#555] uppercase tracking-widest">
           {toLabel}
         </span>
         <span
           className="font-mono text-xs w-20 text-left"
-          style={{ color: outputNum !== null ? outputColor : "#333" }}
+          style={{ color: outputNum !== null ? outputColor : "#555" }}
         >
           {outputNum !== null ? outputNum.toFixed(2) : "—"}
         </span>
