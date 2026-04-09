@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import {
   createChart,
   LineSeries,
@@ -64,6 +64,23 @@ function rangeToSeconds(range: ChartRange): number | null {
   }
 }
 
+function findDayBoundaries(data: StraddleSnapshot[]): UTCTimestamp[] {
+  const boundaries: UTCTimestamp[] = [];
+  let prevDate: string | null = null;
+  for (const s of data) {
+    const etDate = new Date(s.created_at).toLocaleDateString("en-CA", {
+      timeZone: "America/New_York",
+    });
+    if (prevDate !== null && etDate !== prevDate) {
+      boundaries.push(
+        Math.floor(new Date(s.created_at).getTime() / 1000) as UTCTimestamp,
+      );
+    }
+    prevDate = etDate;
+  }
+  return boundaries;
+}
+
 export default function SpxChart({
   data,
   selectedDate,
@@ -73,12 +90,54 @@ export default function SpxChart({
   range,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const upperLineRef = useRef<IPriceLine | null>(null);
   const lowerLineRef = useRef<IPriceLine | null>(null);
   const pdhLineRef = useRef<IPriceLine | null>(null);
   const pdlLineRef = useRef<IPriceLine | null>(null);
+  const boundariesRef = useRef<UTCTimestamp[]>([]);
+  const rangeRef = useRef<ChartRange>(range);
+
+  const drawSeparators = useCallback(() => {
+    if (!overlayRef.current || !chartRef.current || !containerRef.current)
+      return;
+    const canvas = overlayRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const w = containerRef.current.clientWidth;
+    const h = 400;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    if (
+      rangeRef.current === "1H" ||
+      rangeRef.current === "4H" ||
+      rangeRef.current === "1D"
+    )
+      return;
+
+    for (const ts of boundariesRef.current) {
+      const x = chartRef.current.timeScale().timeToCoordinate(ts);
+      if (x === null || x < 0 || x > w) continue;
+      ctx.save();
+      ctx.strokeStyle = "#949494";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -130,30 +189,40 @@ export default function SpxChart({
     seriesRef.current = series;
     chartRef.current = chart;
 
+    chart.timeScale().subscribeVisibleTimeRangeChange(drawSeparators);
+
     const handleResize = () => {
-      if (containerRef.current)
+      if (containerRef.current) {
         chart.applyOptions({ width: containerRef.current.clientWidth });
+        drawSeparators();
+      }
     };
     window.addEventListener("resize", handleResize);
+
     return () => {
       window.removeEventListener("resize", handleResize);
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(drawSeparators);
       chart.remove();
     };
-  }, []);
+  }, [drawSeparators]);
 
-  // Update time formatter when range changes
+  // Update formatter when range changes
   useEffect(() => {
+    rangeRef.current = range;
     if (!chartRef.current) return;
     const fmt = makeTimeFormatter(range);
     chartRef.current.applyOptions({
       localization: { timeFormatter: fmt },
       timeScale: { tickMarkFormatter: fmt },
     });
-  }, [range]);
+    drawSeparators();
+  }, [range, drawSeparators]);
 
-  // Data + implied move lines + zoom
+  // Data + implied lines + zoom
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
+
+    boundariesRef.current = findDayBoundaries(data);
 
     const points = data
       .map((s) => ({
@@ -166,7 +235,6 @@ export default function SpxChart({
 
     seriesRef.current.setData(points);
 
-    // Clear implied lines
     if (upperLineRef.current) {
       try {
         seriesRef.current.removePriceLine(upperLineRef.current);
@@ -180,7 +248,6 @@ export default function SpxChart({
       lowerLineRef.current = null;
     }
 
-    // Only show implied lines on 1D view
     if (data.length > 0 && range === "1D") {
       const openingStraddle = data[0].straddle_mid;
       const openingStrike = data[0].atm_strike;
@@ -207,16 +274,19 @@ export default function SpxChart({
         const secs = rangeToSeconds(range);
         if (secs !== null) {
           const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
-          const from = (now - secs) as UTCTimestamp;
-          chartRef.current.timeScale().setVisibleRange({ from, to: now });
+          chartRef.current
+            .timeScale()
+            .setVisibleRange({ from: (now - secs) as UTCTimestamp, to: now });
         } else {
           chartRef.current.timeScale().fitContent();
         }
       }
     } catch {}
-  }, [data, selectedDate, range]);
 
-  // PDH/PDL lines
+    drawSeparators();
+  }, [data, selectedDate, range, drawSeparators]);
+
+  // PDH/PDL
   useEffect(() => {
     if (!seriesRef.current) return;
     if (pdhLineRef.current) {
@@ -231,7 +301,7 @@ export default function SpxChart({
       } catch {}
       pdlLineRef.current = null;
     }
-    if (pdh) {
+    if (pdh)
       pdhLineRef.current = seriesRef.current.createPriceLine({
         price: pdh,
         color: "#265C4D",
@@ -240,8 +310,7 @@ export default function SpxChart({
         axisLabelVisible: true,
         title: "PDH",
       });
-    }
-    if (pdl) {
+    if (pdl)
       pdlLineRef.current = seriesRef.current.createPriceLine({
         price: pdl,
         color: "#265C4D",
@@ -250,7 +319,6 @@ export default function SpxChart({
         axisLabelVisible: true,
         title: "PDL",
       });
-    }
   }, [pdh, pdl]);
 
   // Live tick
@@ -264,6 +332,18 @@ export default function SpxChart({
   }, [currentPrice, selectedDate]);
 
   return (
-    <div ref={containerRef} className="w-full rounded-sm overflow-hidden" />
+    <div style={{ position: "relative" }}>
+      <div ref={containerRef} className="w-full rounded-sm overflow-hidden" />
+      <canvas
+        ref={overlayRef}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          pointerEvents: "none",
+          zIndex: 10,
+        }}
+      />
+    </div>
   );
 }

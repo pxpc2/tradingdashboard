@@ -98,7 +98,7 @@ function RangeSelector({
           key={r}
           onClick={() => onChange(r)}
           className={`font-mono text-[11px] px-1.5 py-0.5 uppercase tracking-widest transition-colors hover:cursor-pointer ${
-            value === r ? "text-[#888]" : "text-[#333] hover:text-[#555]"
+            value === r ? "text-[#888]" : "text-[#444] hover:text-[#666]"
           }`}
         >
           {r}

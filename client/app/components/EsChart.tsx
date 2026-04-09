@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import {
   createChart,
   LineSeries,
@@ -71,6 +71,35 @@ function rangeToSeconds(range: ChartRange): number | null {
   }
 }
 
+function findDayBoundaries(data: EsSnapshot[]): UTCTimestamp[] {
+  const boundaries: UTCTimestamp[] = [];
+  for (let i = 1; i < data.length; i++) {
+    const prevTime = new Date(data[i - 1].created_at).toLocaleTimeString(
+      "en-US",
+      {
+        timeZone: "America/New_York",
+        hour12: false,
+        hour: "2-digit",
+        minute: "2-digit",
+      },
+    );
+    const currTime = new Date(data[i].created_at).toLocaleTimeString("en-US", {
+      timeZone: "America/New_York",
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    if (prevTime < "16:00" && currTime >= "16:00") {
+      boundaries.push(
+        Math.floor(
+          new Date(data[i].created_at).getTime() / 1000,
+        ) as UTCTimestamp,
+      );
+    }
+  }
+  return boundaries;
+}
+
 export default function EsChart({
   data,
   selectedDate,
@@ -82,11 +111,53 @@ export default function EsChart({
   range,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const pharmLinesRef = useRef<IPriceLine[]>([]);
   const onhLineRef = useRef<IPriceLine | null>(null);
   const onlLineRef = useRef<IPriceLine | null>(null);
+  const boundariesRef = useRef<UTCTimestamp[]>([]);
+  const rangeRef = useRef<ChartRange>(range);
+
+  const drawSeparators = useCallback(() => {
+    if (!overlayRef.current || !chartRef.current || !containerRef.current)
+      return;
+    const canvas = overlayRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const w = containerRef.current.clientWidth;
+    const h = 400;
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    if (
+      rangeRef.current === "1H" ||
+      rangeRef.current === "4H" ||
+      rangeRef.current === "1D"
+    )
+      return;
+
+    for (const ts of boundariesRef.current) {
+      const x = chartRef.current.timeScale().timeToCoordinate(ts);
+      if (x === null || x < 0 || x > w) continue;
+      ctx.save();
+      ctx.strokeStyle = "#949494";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, h);
+      ctx.stroke();
+      ctx.restore();
+    }
+  }, []);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -138,30 +209,40 @@ export default function EsChart({
     seriesRef.current = series;
     chartRef.current = chart;
 
+    chart.timeScale().subscribeVisibleTimeRangeChange(drawSeparators);
+
     const handleResize = () => {
-      if (containerRef.current)
+      if (containerRef.current) {
         chart.applyOptions({ width: containerRef.current.clientWidth });
+        drawSeparators();
+      }
     };
     window.addEventListener("resize", handleResize);
+
     return () => {
       window.removeEventListener("resize", handleResize);
+      chart.timeScale().unsubscribeVisibleTimeRangeChange(drawSeparators);
       chart.remove();
     };
-  }, []);
+  }, [drawSeparators]);
 
-  // Update time formatter when range changes
+  // Update formatter when range changes
   useEffect(() => {
+    rangeRef.current = range;
     if (!chartRef.current) return;
     const fmt = makeTimeFormatter(range);
     chartRef.current.applyOptions({
       localization: { timeFormatter: fmt },
       timeScale: { tickMarkFormatter: fmt },
     });
-  }, [range]);
+    drawSeparators();
+  }, [range, drawSeparators]);
 
   // Historical data + zoom
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
+
+    boundariesRef.current = findDayBoundaries(data);
 
     const points = data
       .map((s) => ({
@@ -179,20 +260,23 @@ export default function EsChart({
         const secs = rangeToSeconds(range);
         if (secs !== null) {
           const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
-          const from = (now - secs) as UTCTimestamp;
-          chartRef.current.timeScale().setVisibleRange({ from, to: now });
+          chartRef.current
+            .timeScale()
+            .setVisibleRange({ from: (now - secs) as UTCTimestamp, to: now });
         } else {
           chartRef.current.timeScale().fitContent();
         }
       } else {
         const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
-        const sixHoursAgo = (now - 6 * 60 * 60) as UTCTimestamp;
-        chartRef.current
-          .timeScale()
-          .setVisibleRange({ from: sixHoursAgo, to: now });
+        chartRef.current.timeScale().setVisibleRange({
+          from: (now - 6 * 60 * 60) as UTCTimestamp,
+          to: now,
+        });
       }
     } catch {}
-  }, [data, selectedDate, range]);
+
+    drawSeparators();
+  }, [data, selectedDate, range, drawSeparators]);
 
   // Pharm levels
   useEffect(() => {
@@ -256,7 +340,7 @@ export default function EsChart({
       onlLineRef.current = null;
     }
     if (!isToday(selectedDate)) return;
-    if (onh) {
+    if (onh)
       onhLineRef.current = seriesRef.current.createPriceLine({
         price: onh,
         color: "#265C4D",
@@ -265,8 +349,7 @@ export default function EsChart({
         axisLabelVisible: true,
         title: "ONH",
       });
-    }
-    if (onl) {
+    if (onl)
       onlLineRef.current = seriesRef.current.createPriceLine({
         price: onl,
         color: "#265C4D",
@@ -275,7 +358,6 @@ export default function EsChart({
         axisLabelVisible: true,
         title: "ONL",
       });
-    }
   }, [onh, onl, selectedDate]);
 
   // Live tick
@@ -289,6 +371,18 @@ export default function EsChart({
   }, [currentPrice, selectedDate]);
 
   return (
-    <div ref={containerRef} className="w-full rounded-sm overflow-hidden" />
+    <div style={{ position: "relative" }}>
+      <div ref={containerRef} className="w-full rounded-sm overflow-hidden" />
+      <canvas
+        ref={overlayRef}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          pointerEvents: "none",
+          zIndex: 10,
+        }}
+      />
+    </div>
   );
 }
