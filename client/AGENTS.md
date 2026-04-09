@@ -224,12 +224,49 @@ and state from resetting on tab switch. Never revert to conditional `{activeTab 
 
 ---
 
+## useLiveTick — Single Instance Rule
+
+`useLiveTick` must only be called once, in `Dashboard.tsx`. It opens one WebSocket for the entire app.
+
+```typescript
+// Dashboard.tsx
+const CORE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL];
+
+const allSymbols = useMemo(() => {
+  const set = new Set(CORE_SYMBOLS);
+  for (const e of watchlistEntries) set.add(e.streamerSymbol);
+  return Array.from(set);
+}, [watchlistEntries]);
+
+const ticks = useLiveTick(allSymbols);
+```
+
+`TickData` type:
+
+```typescript
+export type TickData = {
+  bid: number;
+  ask: number;
+  mid: number;
+  prevClose: number | null;
+  last: number | null;
+};
+```
+
+- `mid` — from Quote events, used for equities and futures
+- `prevClose` — from Summary `prevDayClosePrice`, used for % change calculations
+- `last` — from Trade events, used for VIX and indices that have no bid/ask
+
+Subscriptions per symbol: Quote + Summary + Trade (three event types, one channel).
+
+---
+
 ## Typography Conventions
 
 All UI text follows this pattern:
 
-- **Labels**: `font-sans text-[9px] text-[#444] uppercase tracking-widest`
-- **Values/numbers**: `font-mono font-light text-xl text-[#9ca3af]`
+- **Labels**: `font-sans text-[10px] text-[#666] uppercase tracking-widest`
+- **Values/numbers**: `font-mono font-light text-lg text-[#9ca3af]`
 - **Metric strips**: `flex-nowrap overflow-x-auto` — single line, scrolls horizontally, never wraps
 - **Pipe dividers**: `w-px h-4 bg-[#1f1f1f] shrink-0` between metric groups
 - **Section headers**: left-border accent + label + optional live price + % change
@@ -242,7 +279,7 @@ Section header pattern:
     className="w-0.5 h-4"
     style={{ backgroundColor: isOpen ? "#4ade80" : "#2a2a2a", borderRadius: 0 }}
   />
-  <span className="font-sans text-[9px] text-[#444] uppercase tracking-widest">
+  <span className="font-sans text-[10px] text-[#666] uppercase tracking-widest">
     SYMBOL
   </span>
   <span className="font-mono font-light text-sm text-[#666]">
@@ -253,6 +290,68 @@ Section header pattern:
   </span>
 </div>
 ```
+
+CT clock in metric strip — pushed right with `ml-auto`:
+
+```tsx
+<div className="w-px h-4 bg-[#1f1f1f] shrink-0 ml-auto" />
+<div className="flex items-baseline gap-1.5 shrink-0">
+  <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">CT</span>
+  <span className="font-mono font-light text-lg text-[#444]">{nowCt}</span>
+</div>
+```
+
+---
+
+## Watchlist Route — Auth Pattern
+
+The watchlist route uses the Tastytrade SDK's OAuth flow. Always follow this pattern:
+
+```typescript
+const client = new TastytradeClient({
+  /* config */
+});
+await client.quoteStreamer.connect(); // triggers OAuth
+await client.quoteStreamer.disconnect();
+const token = (client.httpClient as any).accessToken?.token;
+// use: headers: { Authorization: `Bearer ${token}` }
+// or: await client.watchlistsService.getAllWatchlists()  (SDK handles auth internally)
+```
+
+For futures front month resolution:
+
+```typescript
+const activeFuture = futures
+  ?.filter(
+    (f) =>
+      f["active"] === true &&
+      new Date(f["expiration-date"]) > now &&
+      f["future-product"]?.["root-symbol"] === rootSymbol,
+  )
+  ?.sort(
+    (a, b) =>
+      new Date(a["expiration-date"]).getTime() -
+      new Date(b["expiration-date"]).getTime(),
+  )?.[0];
+```
+
+---
+
+## Macro Events Route — Caching Pattern
+
+```typescript
+const isToday =
+  date ===
+  new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/New_York",
+  });
+
+const res = await fetch(fmpUrl, {
+  next: { revalidate: isToday ? 60 : 86400 },
+});
+```
+
+Today revalidates every 60s (actuals fill in during session). Past dates cached 24hrs.
 
 ---
 
@@ -277,6 +376,13 @@ PharmLevel         parsed from pharm_levels content — not a Supabase row type
                    { high, low, label, isKey, source }
 ```
 
+Types exported from API routes (not in types.ts):
+
+```
+MacroEvent         exported from api/macro-events/route.ts
+WatchlistEntry     exported from api/watchlist/route.ts — includes marketSector
+```
+
 If a new Supabase column is added, update `types.ts` first.
 
 ---
@@ -285,17 +391,19 @@ If a new Supabase column is added, update `types.ts` first.
 
 `Dashboard.tsx` is the only file that:
 
-- Calls hooks
-- Owns `selectedDate` state
-- Owns tab state
-- Passes data down as props to view components
-- Imports and calls `signOut` server action
+- Calls all data hooks
+- Owns `selectedDate` state and tab state
+- Calls `useLiveTick` with combined symbol list
+- Calls `useWatchlist` to get entries
 - Computes ONH/ONL inline (pure function, no state/effects)
+- Passes ticks + watchlistEntries down to MktView
+- Imports and calls `signOut` server action
+- Renders `EsSpxConverter` in topbar with `compact` prop
 
 When adding a new view:
 
-1. Create the hook in `hooks/` if new data is needed
-2. Create the view component in `components/`
+1. Create hook in `hooks/` if new data needed
+2. Create view component in `components/`
 3. Import and wire in `Dashboard.tsx` only
 4. Add visibility/height:0 wrapper — never conditional rendering
 
@@ -310,26 +418,25 @@ Backgrounds:
   #1a1a1a   subtle surface, grid lines, chart borders, topbar border
   #1f1f1f   pipe dividers, input background
   #222222   section dividers (border-[#222])
-  #2a2a2a   section header accent (closed state)
+  #2a2a2a   section header accent (closed state), watchlist closed border base
 
 Text:
   #ffffff   primary
   #9ca3af   metric values (gray-400)
   #888888   active tab, secondary labels
-  #666666   chart header prices
-  #444444   metric labels, chart text, inactive tabs
-  #333333   near-invisible hints, inactive tab hover target
-  #222222   very faint labels
+  #666666   metric labels, chart header labels
+  #444444   chart text, inactive tabs, CT clock
+  #333333   near-invisible hints, category labels in watchlist/macro
 
 Chart series / indicators:
   #9CA9FF   straddle series (blue-purple)
-  #60a5fa   fly 10W
+  #60a5fa   fly 10W, auction event dot/text in MacroEvents
   #fb923c   fly 20W
   #34d399   fly 25W, ES output in converter
   #f472b6   fly 30W
-  #4ade80   open state (section header accent, % change positive)
-  #f87171   % change negative, realized >= 100%
-  #f59e0b   realized >= 70%
+  #4ade80   open state (section header accent, % change positive, watchlist open border)
+  #f87171   % change negative, realized >= 100%, watchlist closed border
+  #f59e0b   realized >= 70%, Medium impact dot in MacroEvents
   #265C4D   implied high/low lines, PDH/PDL lines (dark green)
   #737373   SPX/ES price line series color
   #CF7C00   price line color on SPX and ES charts (orange)
@@ -380,10 +487,11 @@ new Date(timestamp).toLocaleTimeString("en-US", {
 - Log format: `[${nowCT()}] message` — CT time, messages in Portuguese
 - Abort early and log rather than inserting bad data
 - `isOpenCycle` flag gates open-cycle-only logic in `runCycle()`
-- Two independent loops: `runAndScheduleNext()` (options, RTH only) and `runOhlcLoop()` (OHLC, ES globex + SPX RTH)
-- OHLC loop: `collectOhlc(symbols, 55000)` collects ticks for 55s tracking open/high/low/close, then inserts, then 5s gap
+- Two independent loops: `runAndScheduleNext()` (options, RTH only) and `runOhlcLoop()` (OHLC)
+- OHLC loop: `collectOhlc(symbols, 55000)` → insert → 5s gap → repeat
 - ES symbol: `/ESM26:XCME` — update quarterly (next: Sep 2026 → `/ESU26:XCME`)
 - Service role key used for all Supabase writes (bypasses RLS)
+- Known issue: DXFeed auth may drop after extended uptime — redeploy to fix, permanent fix pending
 
 ---
 
