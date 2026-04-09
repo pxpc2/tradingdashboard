@@ -175,7 +175,7 @@ export default function EsChart({
         borderColor: "#1f1f1f",
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 60,
+        shiftVisibleRangeOnNewBar: false,
       },
       width: containerRef.current.clientWidth,
       height: 400,

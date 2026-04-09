@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import StraddleChart from "./StraddleChart";
 import SkewChart from "./SkewChart";
 import { StraddleSnapshot, SkewSnapshot } from "../types";
@@ -15,8 +16,19 @@ export default function VolView({
   skewSnapshots,
   selectedDate,
 }: Props) {
-  const latestStraddle = straddleData[straddleData.length - 1];
-  const openingStraddle = straddleData[0];
+  const todayRows = useMemo(
+    () =>
+      straddleData.filter(
+        (s) =>
+          new Date(s.created_at).toLocaleDateString("en-CA", {
+            timeZone: "America/New_York",
+          }) === selectedDate,
+      ),
+    [straddleData, selectedDate],
+  );
+
+  const latestStraddle = todayRows[todayRows.length - 1] ?? null;
+  const openingStraddle = todayRows[0] ?? null;
   const latestSkew = skewSnapshots[skewSnapshots.length - 1];
 
   const realizedPts =
@@ -146,7 +158,7 @@ export default function VolView({
             Mid
           </span>
         </div>
-        {straddleData
+        {todayRows
           .slice(-8)
           .reverse()
           .map((s, i) => (

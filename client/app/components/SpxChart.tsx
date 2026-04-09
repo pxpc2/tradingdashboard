@@ -155,6 +155,7 @@ export default function SpxChart({
         borderColor: "#1f1f1f",
         timeVisible: true,
         secondsVisible: false,
+        shiftVisibleRangeOnNewBar: false,
         rightOffset: 15,
       },
       width: containerRef.current.clientWidth,
@@ -228,6 +229,15 @@ export default function SpxChart({
 
     seriesRef.current.setData(points);
 
+    // Find today's opening row — works correctly regardless of multi-day data
+    const todayOpening =
+      data.find(
+        (s) =>
+          new Date(s.created_at).toLocaleDateString("en-CA", {
+            timeZone: "America/New_York",
+          }) === selectedDate,
+      ) ?? null;
+
     if (upperLineRef.current) {
       try {
         seriesRef.current.removePriceLine(upperLineRef.current);
@@ -241,11 +251,9 @@ export default function SpxChart({
       lowerLineRef.current = null;
     }
 
-    if (data.length > 0 && range === "1D") {
-      const openingStraddle = data[0].straddle_mid;
-      const openingStrike = data[0].atm_strike;
+    if (todayOpening) {
       upperLineRef.current = seriesRef.current.createPriceLine({
-        price: openingStrike + openingStraddle,
+        price: todayOpening.atm_strike + todayOpening.straddle_mid,
         color: "#265C4D",
         lineWidth: 1,
         lineStyle: 2,
@@ -253,7 +261,7 @@ export default function SpxChart({
         title: "Implied High",
       });
       lowerLineRef.current = seriesRef.current.createPriceLine({
-        price: openingStrike - openingStraddle,
+        price: todayOpening.atm_strike - todayOpening.straddle_mid,
         color: "#265C4D",
         lineWidth: 1,
         lineStyle: 2,
@@ -266,13 +274,17 @@ export default function SpxChart({
       if (points.length > 0) {
         const secs = rangeToSeconds(range);
         if (secs !== null) {
+          // 1H/4H — zoom to last N seconds
           const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
-          chartRef.current
-            .timeScale()
-            .setVisibleRange({ from: (now - secs) as UTCTimestamp, to: now });
-        } else {
+          chartRef.current.timeScale().setVisibleRange({
+            from: (now - secs) as UTCTimestamp,
+            to: now,
+          });
+        } else if (range === "1D") {
+          // 1D only — fit today's session
           chartRef.current.timeScale().fitContent();
         }
+        // 3D/5D — do nothing, let user control the view freely
       }
     } catch {}
 
