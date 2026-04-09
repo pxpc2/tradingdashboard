@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import SpxChart from "./SpxChart";
 import EsChart from "./EsChart";
 import { usePharmLevels } from "../hooks/usePharmLevels";
@@ -126,8 +126,19 @@ export default function MktView({
   onSpxRangeChange,
   onEsRangeChange,
 }: Props) {
-  const latest = straddleData[straddleData.length - 1];
-  const opening = straddleData[0];
+  // Memoized filter — only recomputes when data or date changes, not on live tick re-renders
+  const todayRows = useMemo(
+    () =>
+      straddleData.filter(
+        (s) =>
+          new Date(s.created_at).toLocaleDateString("en-CA", {
+            timeZone: "America/New_York",
+          }) === selectedDate,
+      ),
+    [straddleData, selectedDate],
+  );
+  const latest = todayRows[todayRows.length - 1] ?? null;
+  const opening = todayRows[0] ?? null;
   const latestSkew = skewSnapshots[skewSnapshots.length - 1];
 
   const [pdh, setPdh] = useState<number | null>(null);
@@ -221,7 +232,6 @@ export default function MktView({
 
       {/* Metric strip */}
       <div className="flex items-baseline gap-4 flex-nowrap overflow-x-auto pb-1 border-b border-[#222]">
-        {/* SPX price — desktop only, mobile has hero card */}
         <div className="hidden md:flex items-baseline gap-1.5 shrink-0">
           <span className="font-sans text-[10px] text-[#666] uppercase tracking-widest">
             SPX

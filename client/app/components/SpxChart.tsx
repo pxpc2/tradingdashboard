@@ -117,13 +117,6 @@ export default function SpxChart({
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
 
-    if (
-      rangeRef.current === "1H" ||
-      rangeRef.current === "4H" ||
-      rangeRef.current === "1D"
-    )
-      return;
-
     for (const ts of boundariesRef.current) {
       const x = chartRef.current.timeScale().timeToCoordinate(ts);
       if (x === null || x < 0 || x > w) continue;
