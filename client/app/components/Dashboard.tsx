@@ -21,7 +21,6 @@ type Props = {
 
 const TABS = ["MKT", "VOL", "POS"] as const;
 type Tab = (typeof TABS)[number];
-
 const CORE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL];
 
 function isToday(selectedDate: string): boolean {
@@ -29,22 +28,6 @@ function isToday(selectedDate: string): boolean {
     selectedDate ===
     new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" })
   );
-}
-
-function isSpxOpen(): boolean {
-  const day = new Date().toLocaleDateString("en-US", {
-    timeZone: "America/New_York",
-    weekday: "short",
-  });
-  const time = new Date().toLocaleTimeString("en-US", {
-    timeZone: "America/New_York",
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
-  if (["Sat", "Sun"].includes(day)) return false;
-  return time >= "09:30:00" && time < "16:00:00";
 }
 
 function computeOvernightLevels(esData: EsSnapshot[], selectedDate: string) {
@@ -142,13 +125,13 @@ export default function Dashboard({
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
       <div className="border-b border-[#1a1a1a] bg-[#0a0a0a] sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-9">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between h-9">
           <div className="flex items-center h-full">
             {TABS.map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`font-sans h-full px-4 text-xs tracking-widest uppercase transition-colors border-b-2 ${
+                className={`font-sans h-full px-2 md:px-4 text-xs tracking-widest uppercase transition-colors border-b-2 ${
                   activeTab === tab
                     ? "text-[#888] border-[#555]"
                     : "text-[#333] border-transparent hover:text-[#555] hover:cursor-pointer"
@@ -158,7 +141,7 @@ export default function Dashboard({
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             <input
               type="date"
               value={selectedDate}
@@ -171,22 +154,35 @@ export default function Dashboard({
             >
               {nowCt} CT
             </span>
-            <div className="w-px h-4 bg-[#1a1a1a]" />
-            <EsSpxConverter initialBasis={liveBasis} compact />
+
+            {/* Basis — mobile only, replaces converter */}
+            {liveBasis !== null && (
+              <span className="font-mono text-xs text-[#333] md:hidden">
+                B {liveBasis > 0 ? "+" : ""}
+                {liveBasis.toFixed(2)}
+              </span>
+            )}
+
+            {/* Converter — desktop only */}
+            <div className="hidden md:flex items-center gap-4">
+              <div className="w-px h-4 bg-[#1a1a1a]" />
+              <EsSpxConverter initialBasis={liveBasis} compact />
+            </div>
+
             <div className="w-px h-4 bg-[#1a1a1a]" />
             <form action={signOut}>
               <button
                 type="submit"
                 className="font-sans text-xs text-[#2a2a2a] hover:text-[#555] transition-colors hover:cursor-pointer uppercase tracking-widest"
               >
-                log out
+                out
               </button>
             </form>
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-6">
+      <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-6">
         <div
           style={{
             visibility: activeTab === "MKT" ? "visible" : "hidden",

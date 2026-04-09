@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import SpxChart from "./SpxChart";
 import EsChart from "./EsChart";
 import { usePharmLevels } from "../hooks/usePharmLevels";
-import { ES_STREAMER_SYMBOL, TickData } from "../hooks/useLiveTick";
+import { TickData } from "../hooks/useLiveTick";
 import {
   StraddleSnapshot,
   SkewSnapshot,
@@ -92,7 +92,7 @@ function RangeSelector({
   onChange: (r: ChartRange) => void;
 }) {
   return (
-    <div className="flex items-center gap-0 ml-auto">
+    <div className="flex items-center ml-auto">
       {RANGES.map((r) => (
         <button
           key={r}
@@ -180,10 +180,49 @@ export default function MktView({
   const esPct = pctChange(liveEs, esTick?.prevClose ?? null);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 md:gap-6">
+      {/* Mobile hero cards — hidden on desktop */}
+      <div className="grid grid-cols-2 gap-3 md:hidden">
+        <div className="bg-[#111] rounded-sm p-3">
+          <div className="font-sans text-[9px] text-[#555] uppercase tracking-widest mb-1">
+            SPX
+          </div>
+          <div className="font-mono font-light text-2xl text-[#9ca3af]">
+            {liveSpx?.toFixed(0) ?? "—"}
+          </div>
+          {spxPct && (
+            <div
+              className="font-mono text-xs mt-1"
+              style={{ color: pctColor(spxPct) }}
+            >
+              {parseFloat(spxPct) >= 0 ? "+" : ""}
+              {spxPct}%
+            </div>
+          )}
+        </div>
+        <div className="bg-[#111] rounded-sm p-3">
+          <div className="font-sans text-[9px] text-[#555] uppercase tracking-widest mb-1">
+            ES
+          </div>
+          <div className="font-mono font-light text-2xl text-[#9ca3af]">
+            {liveEs?.toFixed(0) ?? "—"}
+          </div>
+          {esPct && (
+            <div
+              className="font-mono text-xs mt-1"
+              style={{ color: pctColor(esPct) }}
+            >
+              {parseFloat(esPct) >= 0 ? "+" : ""}
+              {esPct}%
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Metric strip */}
       <div className="flex items-baseline gap-4 flex-nowrap overflow-x-auto pb-1 border-b border-[#222]">
-        <div className="flex items-baseline gap-1.5 shrink-0">
+        {/* SPX price — desktop only, mobile has hero card */}
+        <div className="hidden md:flex items-baseline gap-1.5 shrink-0">
           <span className="font-sans text-[10px] text-[#666] uppercase tracking-widest">
             SPX
           </span>
@@ -191,7 +230,8 @@ export default function MktView({
             {liveSpx?.toFixed(2) ?? "—"}
           </span>
         </div>
-        <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
+        <div className="hidden md:block w-px h-4 bg-[#1f1f1f] shrink-0" />
+
         <div className="flex items-baseline gap-1.5 shrink-0">
           <span className="font-sans text-[10px] text-[#666] uppercase tracking-widest">
             Straddle
@@ -252,8 +292,8 @@ export default function MktView({
         )}
       </div>
 
-      {/* SPX chart */}
-      <div>
+      {/* SPX chart — desktop only */}
+      <div className="hidden md:block">
         <div className="flex items-center gap-3 mb-3">
           <div
             className="w-0.5 h-4"
@@ -291,10 +331,10 @@ export default function MktView({
         />
       </div>
 
-      <div className="border-t border-[#222]" />
+      <div className="hidden md:block border-t border-[#222]" />
 
-      {/* ES chart */}
-      <div>
+      {/* ES chart — desktop only */}
+      <div className="hidden md:block">
         <div className="flex items-center gap-3 mb-3">
           <div
             className="w-0.5 h-4"
@@ -336,9 +376,9 @@ export default function MktView({
 
       <div className="border-t border-[#222]" />
 
-      {/* Two column: macro + watchlist */}
-      <div className="grid grid-cols-3 gap-8">
-        <div className="col-span-2">
+      {/* Bottom section — stacked on mobile, two-column on desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
+        <div className="md:col-span-2">
           <MacroEvents selectedDate={selectedDate} />
         </div>
         <Watchlist entries={watchlistEntries} ticks={ticks} />
