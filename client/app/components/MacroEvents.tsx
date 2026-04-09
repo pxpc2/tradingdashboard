@@ -14,9 +14,12 @@ function isAuction(event: string): boolean {
 
 function impactColor(impact: MacroEvent["impact"]): string {
   switch (impact) {
-    case "High": return "#f87171";
-    case "Medium": return "#f59e0b";
-    case "Low": return "#333";
+    case "High":
+      return "#f87171";
+    case "Medium":
+      return "#f59e0b";
+    case "Low":
+      return "#333";
   }
 }
 
@@ -61,23 +64,18 @@ export default function MacroEvents({ selectedDate }: Props) {
     });
   }, []);
 
-  // Recompute next event index every 30s
   useEffect(() => {
     if (events.length === 0) return;
     const update = () => {
       const idx = findNextIndex(events);
       setNextIndex(idx);
-      // Only auto-scroll if user hasn't manually scrolled
-      if (!userScrolledRef.current) {
-        scrollToNext(idx);
-      }
+      if (!userScrolledRef.current) scrollToNext(idx);
     };
     update();
     const interval = setInterval(update, 30_000);
     return () => clearInterval(interval);
   }, [events, scrollToNext]);
 
-  // Detect manual scroll
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
@@ -118,16 +116,25 @@ export default function MacroEvents({ selectedDate }: Props) {
         <div className="font-mono text-[11px] text-[#333] py-4">no events</div>
       ) : (
         <div className="w-full">
-          {/* Header — fixed */}
-          <div className="grid grid-cols-[64px_1fr_80px_80px_80px] gap-x-4 pb-2 border-b border-[#1a1a1a]">
-            <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">Time CT</span>
-            <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">Event</span>
-            <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">Prev</span>
-            <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">Est</span>
-            <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">Actual</span>
+          {/* Header — mobile: time + event only / desktop: full columns */}
+          <div className="grid grid-cols-[56px_1fr] md:grid-cols-[64px_1fr_80px_80px_80px] gap-x-4 pb-2 border-b border-[#1a1a1a]">
+            <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">
+              Time CT
+            </span>
+            <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">
+              Event
+            </span>
+            <span className="hidden md:block font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
+              Prev
+            </span>
+            <span className="hidden md:block font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
+              Est
+            </span>
+            <span className="hidden md:block font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
+              Actual
+            </span>
           </div>
 
-          {/* Scrollable rows */}
           <div
             ref={scrollRef}
             className="macro-scroll"
@@ -146,16 +153,18 @@ export default function MacroEvents({ selectedDate }: Props) {
                 return act >= est ? "#4ade80" : "#f87171";
               })();
 
-              const eventTextColor = auction ? "#60a5fa" : "#777";
-
               return (
                 <div
                   key={i}
-                  ref={(el) => { rowRefs.current[i] = el; }}
-                  className="grid grid-cols-[64px_1fr_80px_80px_80px] gap-x-4 py-2 border-b border-[#111] transition-colors"
+                  ref={(el) => {
+                    rowRefs.current[i] = el;
+                  }}
+                  className="grid grid-cols-[56px_1fr] md:grid-cols-[64px_1fr_80px_80px_80px] gap-x-4 py-2 border-b border-[#111] transition-colors"
                   style={{
                     backgroundColor: isNext ? "#212121" : "transparent",
-                    borderLeft: isNext ? "2px solid #555" : "2px solid transparent",
+                    borderLeft: isNext
+                      ? "2px solid #555"
+                      : "2px solid transparent",
                     paddingLeft: isNext ? "6px" : "0",
                   }}
                 >
@@ -169,18 +178,28 @@ export default function MacroEvents({ selectedDate }: Props) {
                     {eventDot(e.event, e.impact)}
                     <span
                       className="font-sans text-[11px] truncate"
+                      style={{ color: auction ? "#60a5fa" : "#777" }}
                     >
                       {e.event}
                     </span>
+                    {/* Actual value shown inline on mobile when available */}
+                    {hasActual && (
+                      <span
+                        className="md:hidden font-mono text-[11px] ml-auto shrink-0"
+                        style={{ color: actualColor }}
+                      >
+                        {e.actual}
+                      </span>
+                    )}
                   </div>
-                  <span className="font-mono text-[11px] text-[#444] text-right">
+                  <span className="hidden md:block font-mono text-[11px] text-[#444] text-right">
                     {e.previous ?? "—"}
                   </span>
-                  <span className="font-mono text-[11px] text-[#555] text-right">
+                  <span className="hidden md:block font-mono text-[11px] text-[#555] text-right">
                     {e.estimate ?? "—"}
                   </span>
                   <span
-                    className="font-mono text-[11px] text-right"
+                    className="hidden md:block font-mono text-[11px] text-right"
                     style={{ color: hasActual ? actualColor : "#333" }}
                   >
                     {e.actual ?? "—"}
