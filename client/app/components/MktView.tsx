@@ -5,7 +5,12 @@ import SpxChart from "./SpxChart";
 import EsChart from "./EsChart";
 import { usePharmLevels } from "../hooks/usePharmLevels";
 import { ES_STREAMER_SYMBOL, TickData } from "../hooks/useLiveTick";
-import { StraddleSnapshot, SkewSnapshot, EsSnapshot } from "../types";
+import {
+  StraddleSnapshot,
+  SkewSnapshot,
+  EsSnapshot,
+  ChartRange,
+} from "../types";
 import MacroEvents from "./MacroEvents";
 import Watchlist from "./Watchlist";
 import { WatchlistEntry } from "../api/watchlist/route";
@@ -23,7 +28,13 @@ type Props = {
   liveBasis: number | null;
   watchlistEntries: WatchlistEntry[];
   ticks: Record<string, TickData>;
+  spxRange: ChartRange;
+  esRange: ChartRange;
+  onSpxRangeChange: (r: ChartRange) => void;
+  onEsRangeChange: (r: ChartRange) => void;
 };
+
+const RANGES: ChartRange[] = ["1H", "4H", "1D", "3D", "5D"];
 
 function isSpxOpen(): boolean {
   const day = new Date().toLocaleDateString("en-US", {
@@ -73,6 +84,30 @@ function pctColor(pct: string | null): string {
   return parseFloat(pct) >= 0 ? "#4ade80" : "#f87171";
 }
 
+function RangeSelector({
+  value,
+  onChange,
+}: {
+  value: ChartRange;
+  onChange: (r: ChartRange) => void;
+}) {
+  return (
+    <div className="flex items-center gap-0 ml-auto">
+      {RANGES.map((r) => (
+        <button
+          key={r}
+          onClick={() => onChange(r)}
+          className={`font-mono text-[11px] px-1.5 py-0.5 uppercase tracking-widest transition-colors hover:cursor-pointer ${
+            value === r ? "text-[#888]" : "text-[#333] hover:text-[#555]"
+          }`}
+        >
+          {r}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function MktView({
   straddleData,
   skewSnapshots,
@@ -86,6 +121,10 @@ export default function MktView({
   liveBasis,
   watchlistEntries,
   ticks,
+  spxRange,
+  esRange,
+  onSpxRangeChange,
+  onEsRangeChange,
 }: Props) {
   const latest = straddleData[straddleData.length - 1];
   const opening = straddleData[0];
@@ -124,12 +163,10 @@ export default function MktView({
 
   const currentMovePts =
     opening && liveSpx ? Math.abs(liveSpx - opening.spx_ref) : null;
-
   const realizedMovePct =
     currentMovePts !== null && opening && opening.straddle_mid > 0
       ? ((currentMovePts / opening.straddle_mid) * 100).toFixed(0)
       : null;
-
   const realizedColor =
     realizedMovePct && parseInt(realizedMovePct) >= 100
       ? "#f87171"
@@ -154,9 +191,7 @@ export default function MktView({
             {liveSpx?.toFixed(2) ?? "—"}
           </span>
         </div>
-
         <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
-
         <div className="flex items-baseline gap-1.5 shrink-0">
           <span className="font-sans text-[10px] text-[#666] uppercase tracking-widest">
             Straddle
@@ -165,7 +200,6 @@ export default function MktView({
             ${latest?.straddle_mid?.toFixed(2) ?? "—"}
           </span>
         </div>
-
         {opening && (
           <>
             <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
@@ -179,7 +213,6 @@ export default function MktView({
             </div>
           </>
         )}
-
         {currentMovePts !== null && (
           <>
             <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
@@ -204,7 +237,6 @@ export default function MktView({
             </div>
           </>
         )}
-
         {latestSkew && (
           <>
             <div className="w-px h-4 bg-[#1f1f1f] shrink-0" />
@@ -247,6 +279,7 @@ export default function MktView({
               {spxPct}%
             </span>
           )}
+          <RangeSelector value={spxRange} onChange={onSpxRangeChange} />
         </div>
         <SpxChart
           data={straddleData}
@@ -254,6 +287,7 @@ export default function MktView({
           pdh={pdh}
           pdl={pdl}
           currentPrice={spxTick?.mid ?? null}
+          range={spxRange}
         />
       </div>
 
@@ -286,6 +320,7 @@ export default function MktView({
               {esPct}%
             </span>
           )}
+          <RangeSelector value={esRange} onChange={onEsRangeChange} />
         </div>
         <EsChart
           data={esData}
@@ -295,6 +330,7 @@ export default function MktView({
           dailyLevels={dailyLevels}
           onh={onh}
           onl={onl}
+          range={esRange}
         />
       </div>
 

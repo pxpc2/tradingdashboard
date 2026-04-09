@@ -12,7 +12,7 @@ import {
   CrosshairMode,
   createTextWatermark,
 } from "lightweight-charts";
-import { StraddleSnapshot } from "../types";
+import { StraddleSnapshot, ChartRange } from "../types";
 
 type Props = {
   data: StraddleSnapshot[];
@@ -20,15 +20,48 @@ type Props = {
   pdh?: number | null;
   pdl?: number | null;
   currentPrice?: number | null;
+  range: ChartRange;
 };
 
 function isToday(selectedDate: string): boolean {
   return (
     selectedDate ===
-    new Date().toLocaleDateString("en-CA", {
-      timeZone: "America/New_York",
-    })
+    new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" })
   );
+}
+
+function makeTimeFormatter(range: ChartRange) {
+  const showDate = range === "3D" || range === "5D";
+  return (time: number) => {
+    const d = new Date(time * 1000);
+    if (showDate) {
+      return d.toLocaleString("en-US", {
+        timeZone: "America/Chicago",
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+    }
+    return d.toLocaleTimeString("en-US", {
+      timeZone: "America/Chicago",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  };
+}
+
+function rangeToSeconds(range: ChartRange): number | null {
+  switch (range) {
+    case "1H":
+      return 3600;
+    case "4H":
+      return 14400;
+    default:
+      return null;
+  }
 }
 
 export default function SpxChart({
@@ -37,6 +70,7 @@ export default function SpxChart({
   pdh,
   pdl,
   currentPrice,
+  range,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
@@ -48,12 +82,8 @@ export default function SpxChart({
 
   useEffect(() => {
     if (!containerRef.current) return;
-
     const chart = createChart(containerRef.current, {
-      layout: {
-        background: { color: "#111111" },
-        textColor: "#444444",
-      },
+      layout: { background: { color: "#111111" }, textColor: "#444444" },
       grid: {
         vertLines: { color: "#1a1a1a" },
         horzLines: { color: "#1a1a1a" },
@@ -67,32 +97,13 @@ export default function SpxChart({
         visible: true,
         borderColor: "#1f1f1f",
         textColor: "#444444",
-        scaleMargins: {
-          top: 0.1,
-          bottom: 0.1,
-        },
-      },
-      localization: {
-        timeFormatter: (time: number) =>
-          new Date(time * 1000).toLocaleTimeString("en-US", {
-            timeZone: "America/Chicago",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-          }),
+        scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       timeScale: {
         borderColor: "#1f1f1f",
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 15,
-        tickMarkFormatter: (time: number) =>
-          new Date(time * 1000).toLocaleTimeString("en-US", {
-            timeZone: "America/Chicago",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-          }),
       },
       width: containerRef.current.clientWidth,
       height: 400,
@@ -112,11 +123,7 @@ export default function SpxChart({
       horzAlign: "center",
       vertAlign: "center",
       lines: [
-        {
-          text: "SPX index",
-          color: "rgba(204, 204, 204, 0.2)",
-          fontSize: 24,
-        },
+        { text: "SPX index", color: "rgba(204, 204, 204, 0.2)", fontSize: 24 },
       ],
     });
 
@@ -128,14 +135,23 @@ export default function SpxChart({
         chart.applyOptions({ width: containerRef.current.clientWidth });
     };
     window.addEventListener("resize", handleResize);
-
     return () => {
       window.removeEventListener("resize", handleResize);
       chart.remove();
     };
   }, []);
 
-  // Data + implied move lines
+  // Update time formatter when range changes
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const fmt = makeTimeFormatter(range);
+    chartRef.current.applyOptions({
+      localization: { timeFormatter: fmt },
+      timeScale: { tickMarkFormatter: fmt },
+    });
+  }, [range]);
+
+  // Data + implied move lines + zoom
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
 
@@ -150,6 +166,7 @@ export default function SpxChart({
 
     seriesRef.current.setData(points);
 
+    // Clear implied lines
     if (upperLineRef.current) {
       try {
         seriesRef.current.removePriceLine(upperLineRef.current);
@@ -163,10 +180,10 @@ export default function SpxChart({
       lowerLineRef.current = null;
     }
 
-    if (data.length > 0) {
+    // Only show implied lines on 1D view
+    if (data.length > 0 && range === "1D") {
       const openingStraddle = data[0].straddle_mid;
       const openingStrike = data[0].atm_strike;
-
       upperLineRef.current = seriesRef.current.createPriceLine({
         price: openingStrike + openingStraddle,
         color: "#265C4D",
@@ -175,7 +192,6 @@ export default function SpxChart({
         axisLabelVisible: true,
         title: "Implied High",
       });
-
       lowerLineRef.current = seriesRef.current.createPriceLine({
         price: openingStrike - openingStraddle,
         color: "#265C4D",
@@ -188,15 +204,21 @@ export default function SpxChart({
 
     try {
       if (points.length > 0) {
-        chartRef.current.timeScale().fitContent();
+        const secs = rangeToSeconds(range);
+        if (secs !== null) {
+          const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
+          const from = (now - secs) as UTCTimestamp;
+          chartRef.current.timeScale().setVisibleRange({ from, to: now });
+        } else {
+          chartRef.current.timeScale().fitContent();
+        }
       }
     } catch {}
-  }, [data, selectedDate]);
+  }, [data, selectedDate, range]);
 
   // PDH/PDL lines
   useEffect(() => {
     if (!seriesRef.current) return;
-
     if (pdhLineRef.current) {
       try {
         seriesRef.current.removePriceLine(pdhLineRef.current);
@@ -209,7 +231,6 @@ export default function SpxChart({
       } catch {}
       pdlLineRef.current = null;
     }
-
     if (pdh) {
       pdhLineRef.current = seriesRef.current.createPriceLine({
         price: pdh,
@@ -232,7 +253,7 @@ export default function SpxChart({
     }
   }, [pdh, pdl]);
 
-  // Live tick — rounded to minute
+  // Live tick
   useEffect(() => {
     if (!seriesRef.current || !currentPrice) return;
     if (!isToday(selectedDate)) return;

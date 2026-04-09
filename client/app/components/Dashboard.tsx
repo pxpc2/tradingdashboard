@@ -12,7 +12,7 @@ import { useEsData } from "../hooks/useEsData";
 import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
 import { useWatchlist } from "../hooks/useWatchlist";
 import { signOut } from "../login/actions";
-import { StraddleSnapshot, RtmSession, EsSnapshot } from "../types";
+import { StraddleSnapshot, RtmSession, EsSnapshot, ChartRange } from "../types";
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
@@ -71,6 +71,19 @@ function ctTime(): string {
   });
 }
 
+function rangeToDays(range: ChartRange): number {
+  switch (range) {
+    case "1H":
+    case "4H":
+    case "1D":
+      return 1;
+    case "3D":
+      return 3;
+    case "5D":
+      return 5;
+  }
+}
+
 export default function Dashboard({
   initialStraddleData,
   initialSmlSession,
@@ -80,22 +93,28 @@ export default function Dashboard({
     new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
   );
   const [nowCt, setNowCt] = useState(ctTime);
+  const [spxRange, setSpxRange] = useState<ChartRange>("1D");
+  const [esRange, setEsRange] = useState<ChartRange>("1D");
 
   useEffect(() => {
     const interval = setInterval(() => setNowCt(ctTime()), 1000);
     return () => clearInterval(interval);
   }, []);
 
+  const spxDays = rangeToDays(spxRange);
+  const esDays = rangeToDays(esRange);
+
   const { straddleData, esBasis } = useStraddleData(
     selectedDate,
     initialStraddleData,
+    spxDays,
   );
   const { smlSession, setSmlSession, flySnapshots, patchEntryMid } = useFlyData(
     selectedDate,
     initialSmlSession,
   );
   const { skewSnapshots } = useSkewData(selectedDate);
-  const { esData, lastEsTime } = useEsData(selectedDate);
+  const { esData, lastEsTime } = useEsData(selectedDate, esDays);
   const { entries: watchlistEntries } = useWatchlist();
 
   const allSymbols = useMemo(() => {
@@ -139,7 +158,6 @@ export default function Dashboard({
               </button>
             ))}
           </div>
-
           <div className="flex items-center gap-4">
             <input
               type="date"
@@ -147,15 +165,12 @@ export default function Dashboard({
               onChange={(e) => setSelectedDate(e.target.value)}
               className="font-mono bg-transparent text-[#333] text-xs hover:cursor-pointer outline-none border-none"
             />
-
-            {/* CT clock — replaces static date label */}
             <span
               className="font-mono text-xs text-[#333]"
               suppressHydrationWarning
             >
               {nowCt} CT
             </span>
-
             <div className="w-px h-4 bg-[#1a1a1a]" />
             <EsSpxConverter initialBasis={liveBasis} compact />
             <div className="w-px h-4 bg-[#1a1a1a]" />
@@ -192,6 +207,10 @@ export default function Dashboard({
             liveBasis={liveBasis}
             watchlistEntries={watchlistEntries}
             ticks={ticks}
+            spxRange={spxRange}
+            esRange={esRange}
+            onSpxRangeChange={setSpxRange}
+            onEsRangeChange={setEsRange}
           />
         </div>
         <div

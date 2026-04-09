@@ -13,7 +13,7 @@ import {
   LineStyle,
   createTextWatermark,
 } from "lightweight-charts";
-import { EsSnapshot } from "../types";
+import { EsSnapshot, ChartRange } from "../types";
 import { PharmLevel } from "../hooks/usePharmLevels";
 
 type Props = {
@@ -24,19 +24,52 @@ type Props = {
   dailyLevels?: PharmLevel[];
   onh?: number | null;
   onl?: number | null;
+  range: ChartRange;
 };
 
 function isToday(selectedDate: string): boolean {
   return (
     selectedDate ===
-    new Date().toLocaleDateString("en-CA", {
-      timeZone: "America/New_York",
-    })
+    new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" })
   );
 }
 
 const WEEKLY = { color: "#3b4f7a", width: 2, style: LineStyle.Dashed };
 const DAILY = { color: "#444444", width: 2, style: LineStyle.Dashed };
+
+function makeTimeFormatter(range: ChartRange) {
+  const showDate = range === "3D" || range === "5D";
+  return (time: number) => {
+    const d = new Date(time * 1000);
+    if (showDate) {
+      return d.toLocaleString("en-US", {
+        timeZone: "America/Chicago",
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+    }
+    return d.toLocaleTimeString("en-US", {
+      timeZone: "America/Chicago",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  };
+}
+
+function rangeToSeconds(range: ChartRange): number | null {
+  switch (range) {
+    case "1H":
+      return 3600;
+    case "4H":
+      return 14400;
+    default:
+      return null;
+  }
+}
 
 export default function EsChart({
   data,
@@ -46,6 +79,7 @@ export default function EsChart({
   dailyLevels = [],
   onh,
   onl,
+  range,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
@@ -56,12 +90,8 @@ export default function EsChart({
 
   useEffect(() => {
     if (!containerRef.current) return;
-
     const chart = createChart(containerRef.current, {
-      layout: {
-        background: { color: "#111111" },
-        textColor: "#444444",
-      },
+      layout: { background: { color: "#111111" }, textColor: "#444444" },
       grid: {
         vertLines: { color: "#1a1a1a" },
         horzLines: { color: "#1a1a1a" },
@@ -77,27 +107,11 @@ export default function EsChart({
         textColor: "#444444",
         scaleMargins: { top: 0.1, bottom: 0.1 },
       },
-      localization: {
-        timeFormatter: (time: number) =>
-          new Date(time * 1000).toLocaleTimeString("en-US", {
-            timeZone: "America/Chicago",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-          }),
-      },
       timeScale: {
         borderColor: "#1f1f1f",
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 60,
-        tickMarkFormatter: (time: number) =>
-          new Date(time * 1000).toLocaleTimeString("en-US", {
-            timeZone: "America/Chicago",
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: false,
-          }),
       },
       width: containerRef.current.clientWidth,
       height: 400,
@@ -117,11 +131,7 @@ export default function EsChart({
       horzAlign: "center",
       vertAlign: "center",
       lines: [
-        {
-          text: "ES futs",
-          color: "rgba(204, 204, 204, 0.2)",
-          fontSize: 24,
-        },
+        { text: "ES futs", color: "rgba(204, 204, 204, 0.2)", fontSize: 24 },
       ],
     });
 
@@ -133,14 +143,23 @@ export default function EsChart({
         chart.applyOptions({ width: containerRef.current.clientWidth });
     };
     window.addEventListener("resize", handleResize);
-
     return () => {
       window.removeEventListener("resize", handleResize);
       chart.remove();
     };
   }, []);
 
-  // Historical data
+  // Update time formatter when range changes
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const fmt = makeTimeFormatter(range);
+    chartRef.current.applyOptions({
+      localization: { timeFormatter: fmt },
+      timeScale: { tickMarkFormatter: fmt },
+    });
+  }, [range]);
+
+  // Historical data + zoom
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
 
@@ -157,7 +176,14 @@ export default function EsChart({
 
     try {
       if (points.length > 0) {
-        chartRef.current.timeScale().fitContent();
+        const secs = rangeToSeconds(range);
+        if (secs !== null) {
+          const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
+          const from = (now - secs) as UTCTimestamp;
+          chartRef.current.timeScale().setVisibleRange({ from, to: now });
+        } else {
+          chartRef.current.timeScale().fitContent();
+        }
       } else {
         const now = Math.floor(Date.now() / 1000) as UTCTimestamp;
         const sixHoursAgo = (now - 6 * 60 * 60) as UTCTimestamp;
@@ -166,19 +192,17 @@ export default function EsChart({
           .setVisibleRange({ from: sixHoursAgo, to: now });
       }
     } catch {}
-  }, [data, selectedDate]);
+  }, [data, selectedDate, range]);
 
-  // Pharm levels — only on today
+  // Pharm levels
   useEffect(() => {
     if (!seriesRef.current) return;
-
     for (const line of pharmLinesRef.current) {
       try {
         seriesRef.current.removePriceLine(line);
       } catch {}
     }
     pharmLinesRef.current = [];
-
     if (!isToday(selectedDate)) return;
 
     const allLevels = [
@@ -188,39 +212,37 @@ export default function EsChart({
 
     for (const level of allLevels) {
       const style = level.source === "weekly" ? WEEKLY : DAILY;
-
       const rangeStr =
         level.low !== null ? `${level.low}-${level.high}` : `${level.high}`;
       const title = level.label ? `${rangeStr} ${level.label}` : rangeStr;
-
-      const topLine = seriesRef.current.createPriceLine({
-        price: level.high,
-        color: style.color,
-        lineWidth: style.width as 1 | 2 | 3 | 4,
-        lineStyle: style.style,
-        axisLabelVisible: false,
-        title,
-      });
-      pharmLinesRef.current.push(topLine);
-
-      if (level.low !== null) {
-        const bottomLine = seriesRef.current.createPriceLine({
-          price: level.low,
+      pharmLinesRef.current.push(
+        seriesRef.current.createPriceLine({
+          price: level.high,
           color: style.color,
           lineWidth: style.width as 1 | 2 | 3 | 4,
           lineStyle: style.style,
           axisLabelVisible: false,
-          title: "",
-        });
-        pharmLinesRef.current.push(bottomLine);
+          title,
+        }),
+      );
+      if (level.low !== null) {
+        pharmLinesRef.current.push(
+          seriesRef.current.createPriceLine({
+            price: level.low,
+            color: style.color,
+            lineWidth: style.width as 1 | 2 | 3 | 4,
+            lineStyle: style.style,
+            axisLabelVisible: false,
+            title: "",
+          }),
+        );
       }
     }
   }, [weeklyLevels, dailyLevels, selectedDate]);
 
-  // ONH/ONL — only on today during RTH
+  // ONH/ONL
   useEffect(() => {
     if (!seriesRef.current) return;
-
     if (onhLineRef.current) {
       try {
         seriesRef.current.removePriceLine(onhLineRef.current);
@@ -233,9 +255,7 @@ export default function EsChart({
       } catch {}
       onlLineRef.current = null;
     }
-
     if (!isToday(selectedDate)) return;
-
     if (onh) {
       onhLineRef.current = seriesRef.current.createPriceLine({
         price: onh,
@@ -246,7 +266,6 @@ export default function EsChart({
         title: "ONH",
       });
     }
-
     if (onl) {
       onlLineRef.current = seriesRef.current.createPriceLine({
         price: onl,

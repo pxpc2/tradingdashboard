@@ -59,3 +59,5 @@ export type SpxSnapshot = {
   low: number;
   close: number;
 };
+
+export type ChartRange = "1H" | "4H" | "1D" | "3D" | "5D";

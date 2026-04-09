@@ -4,19 +4,22 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { EsSnapshot } from "../types";
 
-export function useEsData(selectedDate: string) {
+export function useEsData(selectedDate: string, days: number = 1) {
   const [esData, setEsData] = useState<EsSnapshot[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       const date = new Date(`${selectedDate}T00:00:00Z`);
-      const prevDay = new Date(date);
-      prevDay.setUTCDate(prevDay.getUTCDate() - 1);
+
+      // Start far enough back to capture overnight sessions
+      const startDay = new Date(date);
+      startDay.setUTCDate(startDay.getUTCDate() - days);
+
       const nextDay = new Date(date);
       nextDay.setUTCDate(nextDay.getUTCDate() + 1);
 
-      const from = `${prevDay.toISOString().slice(0, 10)}T06:00:00Z`;
+      const from = `${startDay.toISOString().slice(0, 10)}T06:00:00Z`;
       const to = `${nextDay.toISOString().slice(0, 10)}T06:00:00Z`;
 
       const { data } = await supabase
@@ -31,7 +34,7 @@ export function useEsData(selectedDate: string) {
     return () => {
       cancelled = true;
     };
-  }, [selectedDate]);
+  }, [selectedDate, days]);
 
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
@@ -54,6 +57,5 @@ export function useEsData(selectedDate: string) {
   }, [selectedDate]);
 
   const lastEsTime = esData[esData.length - 1]?.created_at ?? null;
-
   return { esData, lastEsTime };
 }
