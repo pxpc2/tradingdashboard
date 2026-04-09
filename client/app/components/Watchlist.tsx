@@ -177,16 +177,16 @@ export default function Watchlist({ entries, ticks }: Props) {
 
       <div className="grid grid-cols-[1fr_80px_60px_64px] gap-x-3 pb-2 border-b border-[#1a1a1a] pl-1.5">
         <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">
-          Symbol
+          TICKER
         </span>
         <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
-          Last
+          Último
         </span>
         <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
-          Chg
+          Δ pts
         </span>
         <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
-          Chg%
+          Δ %
         </span>
       </div>
 

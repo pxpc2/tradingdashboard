@@ -119,19 +119,19 @@ export default function MacroEvents({ selectedDate }: Props) {
           {/* Header — mobile: time + event only / desktop: full columns */}
           <div className="grid grid-cols-[56px_1fr] md:grid-cols-[64px_1fr_80px_80px_80px] gap-x-4 pb-2 border-b border-[#1a1a1a]">
             <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">
-              Time CT
+              Hora (CT)
             </span>
             <span className="font-sans text-[10px] text-[#444] uppercase tracking-widest">
-              Event
+              Evento
             </span>
             <span className="hidden md:block font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
-              Prev
+              Anterior
             </span>
             <span className="hidden md:block font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
               Est
             </span>
             <span className="hidden md:block font-sans text-[10px] text-[#444] uppercase tracking-widest text-right">
-              Actual
+              Atual
             </span>
           </div>
 
