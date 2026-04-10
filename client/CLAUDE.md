@@ -22,9 +22,9 @@ server/
   poller.mjs              # Main polling loop on Railway
 
 client/app/
-  page.tsx                # SSR initial data fetch, renders Dashboard
+  page.tsx                # SSR initial data fetch, renders LiveDashboard
   layout.tsx              # Loads IBM Plex Sans + Mono, sets --font-sans/--font-mono vars
-  globals.css             # .font-sans, .font-mono, .macro-scroll utility classes + global scrollbar
+  globals.css             # Scrollbar styles, .scrollbar-none utility
   types.ts                # ALL shared types — never redeclare locally
   proxy.ts                # Auth middleware (Next.js 16 uses proxy not middleware)
   lib/
@@ -37,35 +37,47 @@ client/app/
     SubmitButton.tsx      # useFormStatus loading spinner
   hooks/
     useStraddleData.ts    # straddle_snapshots fetch+realtime, exposes esBasis
-    useFlyData.ts         # rtm_sessions + sml_fly_snapshots fetch+realtime, exposes patchEntryMid
-    useSkewData.ts        # skew_snapshots fetch+realtime
-    useEsData.ts          # es_snapshots fetch+realtime, 48hr UTC window, exposes lastEsTime
-    usePharmLevels.ts     # pharm_levels fetch, parses weekly+daily content
+    useFlyData.ts         # rtm_sessions + sml_fly_snapshots fetch+realtime
+    useSkewHistory.ts     # NEW: All skew_snapshots >= April 2, 2026 (skew calc fix date)
+    useEsData.ts          # es_snapshots fetch+realtime, today only
     useLiveTick.ts        # DXFeed WebSocket, Quote+Summary+Trade events, exports TickData
-    useWatchlist.ts       # Fetches Vovonacci watchlist entries from /api/watchlist once on mount
+    useWatchlist.ts       # Fetches Vovonacci watchlist entries from /api/watchlist
     useMacroEvents.ts     # Fetches FMP economic calendar for selected date
   components/
-    Dashboard.tsx         # Orchestrator — topbar, tabs, all hooks, useLiveTick + useWatchlist lifted here
-    MktView.tsx           # SPX+ES charts, metric strip with CT clock, macro+watchlist two-column bottom
-    VolView.tsx           # Straddle chart + skew chart + metrics
-    PosView.tsx           # SML Fly + Scratchpad positions
-    SpxChart.tsx          # Lightweight Charts line, implied H/L, PDH/PDL, live tick, watermark
-    EsChart.tsx           # Lightweight Charts line, pharm levels, ONH/ONL, live tick, watermark
-    StraddleChart.tsx     # Straddle area series (VOL tab)
-    SkewChart.tsx         # Skew area series (VOL tab)
-    FlyChart.tsx          # Fly area series (POS tab)
-    SmlFlyView.tsx        # Fly session creation, per-width underline tabs, inline entry edit
-    PositionsView.tsx     # Scratchpad positions, BSM Greeks, live quotes
-    EsSpxConverter.tsx    # Basis converter, bidirectional, compact prop for topbar mode
-    MacroEvents.tsx       # FMP economic calendar, auto-scroll to next event, CT times, auction blue dot
-    Watchlist.tsx         # Vovonacci watchlist, category grouping, open/closed left border indicator
+    LiveDashboard.tsx     # NEW: Main orchestrator — single-view, always-live dashboard
+    WorldClock.tsx        # NEW: 4-city clock row (Chicago, NY, Brasília, London)
+    StraddleSpxChart.tsx  # NEW: Straddle area + SPX line overlay (dual Y-axis)
+    SkewHistoryChart.tsx  # NEW: All-time 5-min skew history with avg line
+    PositionsPanel.tsx    # NEW: SML Fly / Real toggle, Lightweight Charts mini chart, input form
+    WatchlistStrip.tsx    # NEW: Horizontal compact watchlist for header
+    MacroEvents.tsx       # FMP economic calendar, auto-scroll, CT times, flex height
+    Converter.tsx         # Basis converter, bidirectional, compact prop for topbar
+    FlyChart.tsx          # Fly area series (legacy, replaced by PositionsPanel mini chart)
   api/
     quotes/route.ts       # POST — live quotes via Tastytrade SDK
     chain/route.ts        # GET — SPXW option chain
     pdhl/route.ts         # GET — previous day H/L/close from Tastytrade candles
     dxfeed-token/route.ts # GET — returns dxLinkUrl + dxLinkAuthToken
-    macro-events/route.ts # GET — FMP economic calendar, US only, UTC→CT, cached 60s/24hr
-    watchlist/route.ts    # GET — Vovonacci watchlist, futures resolved to front month streamer symbols
+    macro-events/route.ts # GET — FMP economic calendar, US only, UTC→CT, cached
+    watchlist/route.ts    # GET — Vovonacci watchlist, futures resolved to front month
+```
+
+### Deprecated Files (kept for reference)
+
+```
+components/
+  Dashboard.tsx         # Old tab-based orchestrator
+  MktView.tsx           # Old MKT tab — replaced by LiveDashboard
+  VolView.tsx           # Old VOL tab — merged into LiveDashboard
+  PosView.tsx           # Old POS tab — merged into LiveDashboard
+  SpxChart.tsx          # SPX line chart — no longer used (TradingView handles SPX/ES)
+  EsChart.tsx           # ES line chart — no longer used
+  StraddleChart.tsx     # Old straddle chart — replaced by StraddleSpxChart
+  SkewChart.tsx         # Old skew chart — replaced by SkewHistoryChart
+  Watchlist.tsx         # Old vertical watchlist — replaced by WatchlistStrip
+hooks/
+  usePharmLevels.ts     # Pharm levels — no longer used (no ES chart)
+  useSkewData.ts        # Old skew hook — replaced by useSkewHistory
 ```
 
 ---
@@ -82,28 +94,20 @@ sml_fly_snapshots    id, created_at, session_id, width, mid, bid, ask
 
 skew_snapshots       id, created_at, skew, put_iv, call_iv, atm_iv,
                      expiration_date, put_strike, call_strike
+                     -- NOTE: Only data >= 2026-04-02 is valid (skew calc fixed April 1)
 
 positions            id, created_at, label, is_active, notes
 
 position_legs        id, created_at, position_id, expiration_date, strike,
                      opt_type, action, quantity, entry_price_mid, streamer_symbol
 
-es_snapshots         id, created_at, es_ref (close), open (nullable), high (nullable), low (nullable)
-                     -- es_ref kept as column name for backward compat, represents close price
-                     -- open/high/low populated from OHLC loop, null on old rows
+es_snapshots         id, created_at, es_ref (close), open, high, low
 
 spx_snapshots        id, created_at, open, high, low, close
-                     -- populated by OHLC loop during RTH only
-                     -- not yet used by frontend (future candlestick charts)
-
-pharm_levels         id, created_at, updated_at, weekly_content (text), daily_content (text)
-                     -- single row, edit directly in Supabase table editor
-                     -- paste pharm's message directly, parser handles it client-side
 ```
 
 All tables have RLS enabled. Anon read on all. Auth write on rtm_sessions, sml_fly_snapshots,
-positions, position_legs, pharm_levels. Poller uses service role key (bypasses RLS).
-Supabase project max rows setting: 15,000 (required for ES overnight data).
+positions, position_legs. Poller uses service role key (bypasses RLS).
 
 ---
 
@@ -126,168 +130,142 @@ Two independent loops run in parallel after startup:
 
 - Runs independently, parallel to main cycle
 - Collects 55 seconds of live ticks for active symbols
-- ES (`/ESM26:XCME`): runs during globex hours, inserts into `es_snapshots` with open/high/low/close
+- ES (`/ESM26:XCME`): runs during globex hours, inserts into `es_snapshots`
 - SPX: runs during RTH only, inserts into `spx_snapshots`
-- 5s gap after 55s collection window = ~60s total per cycle
-
-### Known Issue — DXFeed Auth Timeout
-
-The poller's DXFeed connection may drop with UNAUTHORIZED error after extended uptime (token TTL).
-Fix: redeploy on Railway reconnects with fresh token. Permanent fix pending: add `reconnectIfNeeded()`
-at top of each cycle checking `client.quoteStreamer.connectionState`.
 
 ### ES Symbol
 
 - Current: `/ESM26:XCME` (June 2026)
 - Format: `/ES{month}{2-digit-year}:XCME`
 - Month codes: H=Mar, M=Jun, U=Sep, Z=Dec
-- Update quarterly — next roll: September 2026 → `/ESU26:XCME`
-
----
-
-## Auth
-
-- Supabase Auth email+password, single user
-- Server actions for login/signOut in `client/app/login/actions.ts`
-- Session managed via `@supabase/ssr` cookies
-- `proxy.ts` (Next.js 16 middleware convention) checks session on every request
-- Unauthenticated requests redirected to `/login`
-- Frontend Supabase client uses `createBrowserClient` from `@supabase/ssr` — carries session for RLS
+- Next roll: September 2026 → `/ESU26:XCME`
 
 ---
 
 ## UI Architecture
 
-### Layout
+### New LiveDashboard Layout (April 2026)
 
-- Thin 36px topbar (`border-b border-[#1a1a1a]`) — sticky, contains tabs + date + CT clock + converter + sign-out
-- Tabs use underline indicator (`border-b-2 border-[#555]`) not pill/box style
-- Sign-out is plain text "log out"
-- `EsSpxConverter` in topbar via `compact` prop — always visible regardless of tab
-- Content area: `max-w-7xl mx-auto px-6 py-6`
-- All three tab views (MKT/VOL/POS) stay mounted via `visibility/height:0` — never unmount
-- Global custom scrollbar: 3px dark, defined in `globals.css` via `::-webkit-scrollbar`
+Single-view, always-live dashboard. No tabs, no date picker. Designed as companion panel alongside TradingView.
+
+```
+┌──────────────────────────────────────────────────────┐
+│ HEADER: Watchlist (scrollable) | Basis | Converter | out │
+├──────────────────────────────────────────────────────┤
+│ WORLD CLOCK: Chicago | New York | Brasília | London      │
+├──────────────────────────────────────────────────────┤
+│ SPX 6816.87 +0.50%  │  ES 6867.38 +0.06%                 │
+│ STRADDLE $1.20 | IMPLIED $31.30 | REALIZED 41.4pts (132%)│
+│ IV30 15.6 | SKEW 0.4380 | CALL IV / PUT IV 12.0 / 18.9   │
+├──────────────────────┬───────────────────────────────────┤
+│ Straddle + SPX chart │ Skew History (all-time 5-min)     │
+│ (area + line overlay)│ (with avg line)                   │
+├──────────────────────┴───────────────────────────────────┤
+│ Macro Events (CT)    │ Positions (SML Fly / Real)        │
+│ (scrollable, 220px)  │ (Lightweight Charts, 220px)       │
+└──────────────────────────────────────────────────────────┘
+```
+
+### Key Design Decisions
+
+- **No date picker** — always shows live/today data
+- **No tabs** — everything on one scrollable view
+- **Watchlist in header** — horizontal strip with hidden scrollbar
+- **World clock** — hover to highlight any city (no permanent highlight)
+- **Charts** — all Lightweight Charts v5, interactive with crosshair
+- **Positions** — shows SML input form when no session exists
 
 ### Typography
 
-- Labels: `font-sans text-[10px] text-[#666] uppercase tracking-widest`
-- Values: `font-mono font-light text-lg text-[#9ca3af]`
-- Metric strips: `flex-nowrap overflow-x-auto` — single line, scrolls horizontally, never wraps
-- Pipe dividers between metrics: `w-px h-4 bg-[#1f1f1f]`
-- CT clock in metric strip: `font-mono font-light text-lg text-[#444]`, pushed right via `ml-auto`
+- Labels: `font-sans text-xs text-[#555] uppercase tracking-wide`
+- Values: `font-mono text-lg text-[#9ca3af] font-light`
+- Section headers: Bloomberg-style left border accent (`w-0.5 h-5`)
+- Open/closed indicator: `#4ade80` (green) or `#2a2a2a` (dark)
 
-### Section headers
+### Scrollbar Styles
 
-- Bloomberg-style left border accent: `w-0.5 h-4` colored `#4ade80` (open) or `#2a2a2a` (closed)
-- Symbol label + live price + % change inline
-- % change colored green (`#4ade80`) or red (`#f87171`)
-
-### Dividers
-
-- `border-[#222]`
-
-### MKT tab bottom layout
-
-- Two-column grid: `grid-cols-3` — MacroEvents spans `col-span-2`, Watchlist spans 1
-- Both components fixed height 250px with `.macro-scroll` custom scrollbar
+```css
+::-webkit-scrollbar {
+  width: 2px;
+  height: 4px;
+}
+.scrollbar-none {
+  /* hides scrollbar, keeps scroll */
+}
+```
 
 ---
 
 ## Live Ticks — useLiveTick
 
-- Called once in `Dashboard.tsx` — one persistent WebSocket for all symbols
+- Called once in `LiveDashboard.tsx` — one persistent WebSocket for all symbols
 - Subscribes to **Quote + Summary + Trade** for every symbol
-- `TickData` type: `{ bid, ask, mid, prevClose, last }`
-  - `mid`: from Quote `(bidPrice + askPrice) / 2`
-  - `prevClose`: from Summary `prevDayClosePrice`
-  - `last`: from Trade `price` (used for VIX and indices with no bid/ask)
-- No market hours gate at connection — always connects, relies on `bidPrice > 0` to filter noise
+- `TickData`: `{ bid, ask, mid, prevClose, last }`
 - Auto-reconnects every 5s on close
-- Symbols = core (`SPX`, `/ESM26:XCME`) + all watchlist streamer symbols, deduplicated via `useMemo`
+- Symbols = core (`SPX`, `/ESM26:XCME`) + all watchlist streamer symbols
+
+---
+
+## Skew History — useSkewHistory
+
+- Fetches ALL `skew_snapshots` where `created_at >= '2026-04-02'`
+- No date param — always returns full history
+- Realtime subscription appends new rows
+- Returns: `{ skewHistory, latestSkew, avgSkew, isLoading }`
+- Used for all-time skew chart and IV30/Skew/Call IV/Put IV metrics
 
 ---
 
 ## Watchlist
 
-- `GET /api/watchlist` fetches `GET /watchlists/vovonacci` from Tastytrade
-- Auth pattern: `client.quoteStreamer.connect()` triggers OAuth → extract `(client.httpClient as any).accessToken.token` → `Bearer ${token}`
-- Futures resolved to front month: filter `active=true` + `expiration-date > now` + `root-symbol === e.symbol`, sort asc by expiration, take `[0]`
-- `marketSector` from `future-product.market-sector` drives category grouping
-- Categories in order: Vol / Equity Futs / Equities / Energy / Metals / Credit / Rates / FX / Agri / Crypto
-- Symbol overrides (take priority over instrument type):
-  - VIX1D, VVIX, VIX3M, UVXY, VXX, SVXY → Vol
-  - GLD, SLV, IAU → Metals
-  - USO, UNG → Energy
-  - TLT, IEF, SHY → Rates
-  - HYG, LQD, JNK → Credit
-- Open/closed: time-based per category (RTH for equities/vol/credit, globex for futures, 24/7 for crypto)
-- Open rows: green left border (`#4ade80`), normal text
-- Closed rows: red left border (`#f87171`), dimmed text, `—` for change columns
-- Cached 5 min server-side
+- `GET /api/watchlist` → Tastytrade `GET /watchlists/vovonacci`
+- Displayed in header as horizontal `WatchlistStrip`
+- Open/closed: time-based per instrument type. Green/red left border
+- Display: `mid` for equities/futures, `last` for indices (VIX etc)
 
 ---
 
 ## Macro Events
 
-- `GET /api/macro-events?date=YYYY-MM-DD` → FMP `/stable/economic-calendar`
-- FMP API key: `FMP_API_KEY` env var (Starter plan $29/mo required)
-- Filtered to `country === "US"`, sorted ascending, UTC datetime → CT time string
-- `MacroEvent` type exported from route — imported by hook, not redeclared
-- Component auto-scrolls to next event (first with `actual === null` and `timeCt >= nowCT`)
-- Recomputes next index every 30s via `setInterval`
-- "↓ now" button appears only when user has manually scrolled away
-- Auction events: blue dot (`#60a5fa`) + blue text — detected by `event.toLowerCase().includes("auction")`
-- Impact dots: High = `#f87171`, Medium = `#f59e0b`, Low = `#333`
-- Cache: today = 60s revalidate, past dates = 86400s (24hr)
-
----
-
-## PharmDK Levels
-
-- Stored as raw text in `pharm_levels` table (single row)
-- `weekly_content`: updated every Monday, persists all week
-- `daily_content`: updated each morning, replaced daily
-- Parsed client-side in `usePharmLevels` hook
-- Parser handles: ranges (`6639-6645`), single levels (`6469`), asterisks (`*`), notes
-- Weekly: dark blue (`#3b4f7a`) dashed width 2; Daily: gray (`#444444`) dashed width 2
-- Only shown on today's date — hidden on past dates
-
----
-
-## Overnight High/Low (ONH/ONL)
-
-- Computed inline in `Dashboard.tsx` from `esData` — no state/effects needed
-- Overnight window: globex open (23:00 UTC prev day = 18:00 ET) → RTH open (13:30 UTC = 09:30 ET)
-- `rthOpen = selectedDate T13:30:00Z` — 09:30 ET = 13:30 UTC (ET is UTC-4 during DST)
-- `globexOpen = rthOpen - 15.5 * 60 * 60 * 1000`
-- Uses `high` for ONH and `low` for ONL (falls back to `es_ref` for old rows)
-- Only shown during RTH on today's date
-- Displayed as teal dashed lines (`#2a6b6b`) with axis labels ONH/ONL
+- `GET /api/macro-events?date=YYYY-MM-DD` → FMP economic calendar
+- Auto-scrolls to next upcoming event, updates every 30s
+- Auction: blue dot. High: red. Medium: amber. Low: dim.
+- Flex height to match Positions panel
 
 ---
 
 ## % Change
 
-- **SPX %**: `prevClose` from `/api/pdhl` candle close field
-- **ES %**: `esTick.prevClose` from DXFeed Summary event directly (not `prevClose + esBasis`)
-- **Watchlist %**: `tick.prevClose` from Summary event per symbol
-- `/api/pdhl` returns `{ pdh, pdl, close }` — all three fields required
+- **SPX %**: `spxTick.prevClose` from DXFeed Summary
+- **ES %**: `esTick.prevClose` from DXFeed Summary
+- **Watchlist %**: `tick.prevClose` per symbol (TODO: add to WatchlistStrip)
+
+---
+
+## Pending / Planned
+
+### Next up
+
+- **Watchlist % change** — add to WatchlistStrip display
+- **Live straddle ticks** — stream ATM options to frontend for tick-by-tick straddle
+
+### Backlog
+
+- Real Tastytrade positions with live P&L
+- `/history` route for historical analysis (multi-day charts, date picker)
+- Holiday list in poller
+- Poller DXFeed auth reconnect
 
 ---
 
 ## Key Conventions
 
-See AGENTS.md for full coding conventions. Summary:
+See AGENTS.md for full coding conventions. Critical reminders:
 
-- **Timezones**: Supabase stores UTC. Frontend displays CT. Market hours gated in ET. RTH open = `T13:30:00Z`.
-- **Lightweight Charts**: Never use `display:none` on chart containers — use `visibility/height:0`.
-- **Tab switching**: All views mounted at all times — visibility trick prevents chart/WebSocket destruction.
-- **Data flow**: Hooks own all Supabase access. View components receive data as props only.
-- **Types**: All shared types in `types.ts`. Never redeclare inline.
-- **es_basis**: Only non-null on the first `straddle_snapshots` row of each day.
-- **useEsData**: 48hr UTC window, no `.limit()` in code — controlled via Supabase dashboard (15k rows).
-- **createBrowserClient**: Must be used instead of `createClient` for RLS-authenticated browser writes.
-- **ONH/ONL**: Computed inline during render in Dashboard — pure function of esData, no state/effects.
-- **useLiveTick**: Always call at Dashboard level only. One WebSocket for all symbols. Never call inside views.
-- **Watchlist auth**: Always `connect()` streamer first, extract token via `(client.httpClient as any).accessToken.token`.
-- **Futures front month**: Filter by `active=true` + `expiration > now` + `root-symbol match`, sort asc, take first.
+- **Always ask for the current file before modifying** — Pedro makes visual tweaks between sessions
+- **Timezones**: UTC stored, CT displayed, ET for market hours gating
+- **Hooks own data, components own UI**
+- **useLiveTick**: LiveDashboard level only, one WebSocket
+- **todayRows**: always filter by today's date before computing metrics
+- **es_basis**: only non-null on first straddle row of the day
+- **Skew data**: only valid from April 2, 2026 onwards

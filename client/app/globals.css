@@ -13,7 +13,8 @@ body {
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
+  width: 2px;
+  height: 4px;
 }
 
 ::-webkit-scrollbar-track {
@@ -22,9 +23,18 @@ body {
 
 ::-webkit-scrollbar-thumb {
   background: #2a2a2a;
-  border-radius: 5px;
+  border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: #444;
+}
+
+/* Hide scrollbar but keep scrolling */
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
 }

@@ -1,5 +1,5 @@
 import { supabase } from "./lib/supabase";
-import Dashboard from "./components/Dashboard";
+import LiveDashboard from "./components/LiveDashboard";
 
 export default async function Home() {
   const today = new Date().toLocaleDateString("en-CA", {
@@ -23,7 +23,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-white">
-      <Dashboard
+      <LiveDashboard
         initialStraddleData={straddleSnapshots ?? []}
         initialSmlSession={todaySession}
       />

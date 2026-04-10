@@ -94,16 +94,17 @@ export default function MacroEvents({ selectedDate }: Props) {
   }
 
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-3">
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-2 shrink-0">
         <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
-        <span className="font-sans text-[11px] text-[#666] uppercase tracking-widest">
+        <span className="font-sans text-xs text-[#555] uppercase tracking-wide">
           Macro
         </span>
         {userScrolled && nextIndex >= 0 && (
           <button
             onClick={handleGoToNow}
-            className="font-sans text-[10px] text-[#555] uppercase tracking-widest hover:text-[#666] transition-colors hover:cursor-pointer ml-auto"
+            className="font-sans text-xs text-[#555] uppercase tracking-wide hover:text-[#666] transition-colors hover:cursor-pointer ml-auto"
           >
             ↓ now
           </button>
@@ -111,35 +112,32 @@ export default function MacroEvents({ selectedDate }: Props) {
       </div>
 
       {loading ? (
-        <div className="font-mono text-[11px] text-[#333] py-4">loading...</div>
+        <div className="font-mono text-xs text-[#333] py-4">loading...</div>
       ) : events.length === 0 ? (
-        <div className="font-mono text-[11px] text-[#333] py-4">no events</div>
+        <div className="font-mono text-xs text-[#333] py-4">no events</div>
       ) : (
-        <div className="w-full">
-          {/* Header — mobile: time + event only / desktop: full columns */}
-          <div className="grid grid-cols-[56px_1fr] md:grid-cols-[64px_1fr_80px_80px_80px] gap-x-4 pb-2 border-b border-[#1a1a1a]">
-            <span className="font-sans text-[10px] text-[#555] uppercase tracking-widest">
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* Column headers — tighter widths for numbers, more space for event */}
+          <div className="grid grid-cols-[48px_1fr] md:grid-cols-[48px_1fr_56px_56px_56px] gap-x-2 pb-1.5 border-b border-[#1a1a1a] shrink-0">
+            <span className="font-sans text-[10px] text-[#555] uppercase tracking-wide">
               Hora (CT)
             </span>
-            <span className="font-sans text-[10px] text-[#555] uppercase tracking-widest">
+            <span className="font-sans text-[10px] text-[#555] uppercase tracking-wide">
               Evento
             </span>
-            <span className="hidden md:block font-sans text-[10px] text-[#555] uppercase tracking-widest text-right">
+            <span className="hidden md:block font-sans text-[10px] text-[#555] uppercase tracking-wide text-right">
               Anterior
             </span>
-            <span className="hidden md:block font-sans text-[10px] text-[#555] uppercase tracking-widest text-right">
+            <span className="hidden md:block font-sans text-[10px] text-[#555] uppercase tracking-wide text-right">
               Est
             </span>
-            <span className="hidden md:block font-sans text-[10px] text-[#555] uppercase tracking-widest text-right">
+            <span className="hidden md:block font-sans text-[10px] text-[#555] uppercase tracking-wide text-right">
               Atual
             </span>
           </div>
 
-          <div
-            ref={scrollRef}
-            className="macro-scroll"
-            style={{ height: "300px", overflowY: "auto" }}
-          >
+          {/* Scrollable rows — fills remaining height */}
+          <div ref={scrollRef} className="flex-1 overflow-y-auto min-h-0">
             {events.map((e, i) => {
               const auction = isAuction(e.event);
               const isNext = i === nextIndex;
@@ -159,47 +157,48 @@ export default function MacroEvents({ selectedDate }: Props) {
                   ref={(el) => {
                     rowRefs.current[i] = el;
                   }}
-                  className="grid grid-cols-[56px_1fr] md:grid-cols-[64px_1fr_80px_80px_80px] gap-x-4 py-2 border-b border-[#111] transition-colors"
+                  className="grid grid-cols-[48px_1fr] md:grid-cols-[48px_1fr_56px_56px_56px] gap-x-2 py-1.5 border-b border-[#111] transition-colors"
                   style={{
                     backgroundColor: isNext ? "#212121" : "transparent",
                     borderLeft: isNext
                       ? "2px solid #555"
                       : "2px solid transparent",
-                    paddingLeft: isNext ? "6px" : "0",
+                    paddingLeft: isNext ? "4px" : "0",
                   }}
                 >
                   <span
-                    className="font-mono text-[11px]"
+                    className="font-mono text-xs"
                     style={{ color: isNext ? "#888" : "#555" }}
                   >
                     {e.timeCt}
                   </span>
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     {eventDot(e.event, e.impact)}
                     <span
-                      className="font-sans text-[11px] truncate"
+                      className="font-sans text-xs"
                       style={{ color: auction ? "#60a5fa" : "#777" }}
+                      title={e.event}
                     >
                       {e.event}
                     </span>
                     {/* Actual value shown inline on mobile when available */}
                     {hasActual && (
                       <span
-                        className="md:hidden font-mono text-[11px] ml-auto shrink-0"
+                        className="md:hidden font-mono text-xs ml-auto shrink-0"
                         style={{ color: actualColor }}
                       >
                         {e.actual}
                       </span>
                     )}
                   </div>
-                  <span className="hidden md:block font-mono text-[11px] text-[#555] text-right">
+                  <span className="hidden md:block font-mono text-xs text-[#555] text-right truncate">
                     {e.previous ?? "—"}
                   </span>
-                  <span className="hidden md:block font-mono text-[11px] text-[#555] text-right">
+                  <span className="hidden md:block font-mono text-xs text-[#555] text-right truncate">
                     {e.estimate ?? "—"}
                   </span>
                   <span
-                    className="hidden md:block font-mono text-[11px] text-right"
+                    className="hidden md:block font-mono text-xs text-right truncate"
                     style={{ color: hasActual ? actualColor : "#555" }}
                   >
                     {e.actual ?? "—"}
