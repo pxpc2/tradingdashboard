@@ -325,7 +325,7 @@ export default function LiveDashboard({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Macro - single scroll container */}
           <div className="h-[220px]">
-            <MacroEvents selectedDate={today} compact />
+            <MacroEvents selectedDate={today} />
           </div>
 
           {/* Positions */}
