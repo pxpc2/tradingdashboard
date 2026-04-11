@@ -38,21 +38,20 @@ client/app/
   hooks/
     useStraddleData.ts    # straddle_snapshots fetch+realtime, exposes esBasis
     useFlyData.ts         # rtm_sessions + sml_fly_snapshots fetch+realtime
-    useSkewHistory.ts     # NEW: All skew_snapshots >= April 2, 2026 (skew calc fix date)
+    useSkewHistory.ts     # All skew_snapshots >= April 2, 2026 (skew calc fix date)
     useEsData.ts          # es_snapshots fetch+realtime, today only
     useLiveTick.ts        # DXFeed WebSocket, Quote+Summary+Trade events, exports TickData
     useWatchlist.ts       # Fetches Vovonacci watchlist entries from /api/watchlist
     useMacroEvents.ts     # Fetches FMP economic calendar for selected date
   components/
-    LiveDashboard.tsx     # NEW: Main orchestrator — single-view, always-live dashboard
-    WorldClock.tsx        # NEW: 4-city clock row (Chicago, NY, Brasília, London)
-    StraddleSpxChart.tsx  # NEW: Straddle area + SPX line overlay (dual Y-axis)
-    SkewHistoryChart.tsx  # NEW: All-time 5-min skew history with avg line
-    PositionsPanel.tsx    # NEW: SML Fly / Real toggle, Lightweight Charts mini chart, input form
-    WatchlistStrip.tsx    # NEW: Horizontal compact watchlist for header
+    LiveDashboard.tsx     # Main orchestrator — single-view, always-live dashboard
+    WorldClock.tsx        # 4-city clock row (CHI, NY, BSB, LDN) with ET-relative offset
+    StraddleSpxChart.tsx  # Straddle area + SPX line overlay (dual Y-axis)
+    SkewHistoryChart.tsx  # All-time 5-min skew history with avg line + day separators
+    PositionsPanel.tsx    # SML Fly / Real toggle, Lightweight Charts mini chart, input form
+    WatchlistStrip.tsx    # Auto-scrolling ticker strip in header (SPX + ES + watchlist)
     MacroEvents.tsx       # FMP economic calendar, auto-scroll, CT times, flex height
     Converter.tsx         # Basis converter, bidirectional, compact prop for topbar
-    FlyChart.tsx          # Fly area series (legacy, replaced by PositionsPanel mini chart)
   api/
     quotes/route.ts       # POST — live quotes via Tastytrade SDK
     chain/route.ts        # GET — SPXW option chain
@@ -144,36 +143,38 @@ Two independent loops run in parallel after startup:
 
 ## UI Architecture
 
-### New LiveDashboard Layout (April 2026)
+### LiveDashboard Layout (April 2026)
 
 Single-view, always-live dashboard. No tabs, no date picker. Designed as companion panel alongside TradingView.
 
 ```
-┌──────────────────────────────────────────────────────┐
-│ HEADER: Watchlist (scrollable) | Basis | Converter | out │
-├──────────────────────────────────────────────────────┤
-│ WORLD CLOCK: Chicago | New York | Brasília | London      │
-├──────────────────────────────────────────────────────┤
-│ SPX 6816.87 +0.50%  │  ES 6867.38 +0.06%                 │
-│ STRADDLE $1.20 | IMPLIED $31.30 | REALIZED 41.4pts (132%)│
-│ IV30 15.6 | SKEW 0.4380 | CALL IV / PUT IV 12.0 / 18.9   │
-├──────────────────────┬───────────────────────────────────┤
-│ Straddle + SPX chart │ Skew History (all-time 5-min)     │
-│ (area + line overlay)│ (with avg line)                   │
-├──────────────────────┴───────────────────────────────────┤
-│ Macro Events (CT)    │ Positions (SML Fly / Real)        │
-│ (scrollable, 220px)  │ (Lightweight Charts, 220px)       │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│ HEADER: WatchlistStrip ticker (SPX, ES + all) | Basis | OUT  │
+├──────────────────────────────────────────────────────────────┤
+│ WORLD CLOCK: CHI ET-1 | NY ET+0 | BSB ET+1 | LDN ET+5       │
+├──────────────────────────────────────────────────────────────┤
+│ SPX 6819.95 +0.04%  │  ES 6863.88 +0.01%  │  VIX 19.23      │
+│ STRADDLE | IMPLIED | REALIZED | IV30 | SKEW | CALL IV/PUT IV  │
+├──────────────────────┬───────────────────────────────────────┤
+│ Straddle + SPX chart │ Skew History (all-time 5-min)         │
+│ (area + line overlay)│ (avg line + day separators)           │
+├──────────────────────┴───────────────────────────────────────┤
+│ Macro Events (CT)    │ Positions (SML Fly / Real)            │
+│ (scrollable, 220px)  │ (Lightweight Charts, 220px)           │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions
 
 - **No date picker** — always shows live/today data
 - **No tabs** — everything on one scrollable view
-- **Watchlist in header** — horizontal strip with hidden scrollbar
-- **World clock** — hover to highlight any city (no permanent highlight)
+- **Watchlist in header** — auto-scrolling ticker strip, pauses on hover, SPX+ES always first
+- **World clock** — CHI/NY/BSB/LDN abbreviations, ET-relative offset (ET+0, ET+1 etc), hover highlight
+- **VIX** — shown alongside SPX and ES using `tick.last`, same % change logic
 - **Charts** — all Lightweight Charts v5, interactive with crosshair
+- **Skew chart** — day separator lines via canvas overlay, redraws on pan/zoom, right offset
 - **Positions** — shows SML input form when no session exists
+- **UI language** — Portuguese labels supported (e.g. "Calendário Econômico", "Posições", "Iniciar")
 
 ### Typography
 
@@ -203,6 +204,19 @@ Single-view, always-live dashboard. No tabs, no date picker. Designed as compani
 - `TickData`: `{ bid, ask, mid, prevClose, last }`
 - Auto-reconnects every 5s on close
 - Symbols = core (`SPX`, `/ESM26:XCME`) + all watchlist streamer symbols
+- VIX streamer symbol is `"VIX"` — use `tick.last` for display (bid/ask/mid are 0 for indices)
+
+---
+
+## WatchlistStrip
+
+- Auto-scrolling horizontal ticker, pauses on hover
+- SPX and ES always prepended as static entries (not fetched from Tastytrade)
+- All entries show: symbol | price | % change
+- Price logic: `mid === 0 ? last : mid` (consistent for all entries)
+- % change dimmed when market is closed
+- Edge fade via `maskImage` linear gradient
+- Scroll speed controlled by animation duration (currently 80s)
 
 ---
 
@@ -212,16 +226,26 @@ Single-view, always-live dashboard. No tabs, no date picker. Designed as compani
 - No date param — always returns full history
 - Realtime subscription appends new rows
 - Returns: `{ skewHistory, latestSkew, avgSkew, isLoading }`
-- Used for all-time skew chart and IV30/Skew/Call IV/Put IV metrics
+- Chart has day separator lines drawn on canvas overlay, redraws on pan/zoom
+- `rightOffset: 10` on timeScale for breathing room on latest day
 
 ---
 
-## Watchlist
+## WorldClock
+
+- Cities: CHI (America/Chicago), NY (America/New_York), BSB (America/Sao_Paulo), LDN (Europe/London)
+- ET offset computed dynamically via `Intl` — DST-aware, never hardcoded
+- Layout: two-column per card — left col has abbr + ET offset stacked, right col has time
+- Hover highlights card in amber (`#f59e0b`)
+
+---
+
+## Watchlist API
 
 - `GET /api/watchlist` → Tastytrade `GET /watchlists/vovonacci`
-- Displayed in header as horizontal `WatchlistStrip`
-- Open/closed: time-based per instrument type. Green/red left border
-- Display: `mid` for equities/futures, `last` for indices (VIX etc)
+- Futures resolved to front-month active contract
+- WatchlistEntry: `{ symbol, streamerSymbol, instrumentType, marketSector }`
+- Open/closed: time-based per instrument type
 
 ---
 
@@ -238,7 +262,8 @@ Single-view, always-live dashboard. No tabs, no date picker. Designed as compani
 
 - **SPX %**: `spxTick.prevClose` from DXFeed Summary
 - **ES %**: `esTick.prevClose` from DXFeed Summary
-- **Watchlist %**: `tick.prevClose` per symbol (TODO: add to WatchlistStrip)
+- **VIX %**: `vixTick.prevClose` — accurate during RTH, may show 0.00% outside hours
+- **Watchlist %**: `tick.prevClose` per symbol, dimmed when closed
 
 ---
 
@@ -246,15 +271,27 @@ Single-view, always-live dashboard. No tabs, no date picker. Designed as compani
 
 ### Next up
 
-- **Watchlist % change** — add to WatchlistStrip display
 - **Live straddle ticks** — stream ATM options to frontend for tick-by-tick straddle
+- **Poller DXFeed auth reconnect** — stability fix for overnight sessions
+
+### Data collection additions (accumulate for future analysis)
+
+- VIX term structure daily snapshot (VX1–VX4 at close)
+- IV/RV ratio log — daily computed and stored
+- Skew at close — one clean daily value
+- Macro event outcomes — actual vs estimate + SPX move after
 
 ### Backlog
 
 - Real Tastytrade positions with live P&L
 - `/history` route for historical analysis (multi-day charts, date picker)
+- Native GEX calculation — chain + OI, stored every 30min
+- Term structure panel — VX futures curve
+- Skew percentile vs history
+- Realized vol tracker — rolling 5d/10d/21d from ES OHLC vs IV30
 - Holiday list in poller
-- Poller DXFeed auth reconnect
+- Mobile layout polish
+- Threshold alerts (skew spike, straddle crosses level)
 
 ---
 
@@ -269,3 +306,4 @@ See AGENTS.md for full coding conventions. Critical reminders:
 - **todayRows**: always filter by today's date before computing metrics
 - **es_basis**: only non-null on first straddle row of the day
 - **Skew data**: only valid from April 2, 2026 onwards
+- **VIX**: streamer symbol is `"VIX"`, use `tick.last` not `tick.mid`

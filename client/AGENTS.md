@@ -18,7 +18,7 @@ Guidelines for writing code that fits the vovonacci dashboard. Read CLAUDE.md fi
 
 ## CRITICAL: Always Ask for Current File First
 
-Pedro frequently makes his own visual and text tweaks between sessions (font sizes, colors, labels, etc.). **Always request the current file before modifying it.** Never code on top of a file from earlier in the conversation without confirming it's still current. When in doubt, ask.
+Pedro frequently makes his own visual and text tweaks between sessions (font sizes, colors, labels, translations, etc.). **Always request the current file before modifying it.** Never code on top of a file from earlier in the conversation without confirming it's still current. When in doubt, ask.
 
 ---
 
@@ -150,6 +150,67 @@ Rules:
 - Wrap `removePriceLine`, `setVisibleRange`, `fitContent` in try/catch
 - Handle resize: `window.addEventListener("resize", handleResize)` + cleanup
 
+### Day Separator Lines Pattern
+
+For multi-day charts, draw dashed vertical separators via a canvas overlay:
+
+```typescript
+const overlayRef = useRef<HTMLCanvasElement>(null);
+const boundariesRef = useRef<UTCTimestamp[]>([]);
+
+function findDayBoundaries(data: XxxSnapshot[]): UTCTimestamp[] {
+  const boundaries: UTCTimestamp[] = [];
+  let prevDate: string | null = null;
+  for (const s of data) {
+    const etDate = new Date(s.created_at).toLocaleDateString("en-CA", {
+      timeZone: "America/New_York",
+    });
+    if (prevDate !== null && etDate !== prevDate) {
+      boundaries.push(
+        Math.floor(new Date(s.created_at).getTime() / 1000) as UTCTimestamp,
+      );
+    }
+    prevDate = etDate;
+  }
+  return boundaries;
+}
+
+const drawSeparators = useCallback(() => {
+  if (!overlayRef.current || !chartRef.current || !containerRef.current) return;
+  const canvas = overlayRef.current;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = containerRef.current.clientWidth;
+  const h = CHART_HEIGHT; // match chart height
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, w, h);
+  for (const ts of boundariesRef.current) {
+    const x = chartRef.current.timeScale().timeToCoordinate(ts);
+    if (x === null || x < 0 || x > w) continue;
+    ctx.save();
+    ctx.strokeStyle = "#949494";
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, h);
+    ctx.stroke();
+    ctx.restore();
+  }
+}, []);
+```
+
+- Subscribe: `chart.timeScale().subscribeVisibleTimeRangeChange(drawSeparators)`
+- Unsubscribe on cleanup: `chart.timeScale().unsubscribeVisibleTimeRangeChange(drawSeparators)`
+- Call `drawSeparators()` at end of data update effect
+- Canvas overlay positioned absolute, `pointerEvents: "none"`, `zIndex: 10`
+- Add `rightOffset: 10` to timeScale for breathing room on latest day
+
 ---
 
 ## LiveDashboard — The Orchestrator
@@ -169,6 +230,16 @@ const today = new Date().toLocaleDateString("en-CA", {
   timeZone: "America/New_York",
 });
 ```
+
+### VIX in LiveDashboard
+
+```typescript
+const vixTick = ticks["VIX"] ?? null;
+const vixLast = vixTick?.last ?? null;
+const vixPct = pctChange(vixLast, vixTick?.prevClose ?? null);
+```
+
+VIX uses `tick.last` — bid/ask/mid are 0 for indices. % change outside RTH may show 0.00% as last === prevClose.
 
 ---
 
@@ -190,7 +261,49 @@ const ticks = useLiveTick(allSymbols);
 
 - `mid` — Quote events
 - `prevClose` — Summary `prevDayClosePrice`
-- `last` — Trade events (VIX/indices)
+- `last` — Trade events (VIX/indices — use this for display)
+
+---
+
+## WatchlistStrip — Ticker Pattern
+
+Auto-scrolling marquee with seamless loop:
+
+- Render items twice side by side: `[...allEntries, ...allEntries]`
+- Animate `translateX(0)` → `translateX(-50%)` infinitely
+- `:hover` on track pauses animation
+- Edge fade: `maskImage: "linear-gradient(to right, transparent, black 4%, black 96%, transparent)"`
+- SPX and ES always prepended as static entries, filtered from Tastytrade list to avoid duplicates
+- Price logic: `mid === null || mid === 0 ? last : mid` — consistent for all entries
+- Scroll speed: animation duration (currently 80s — increase to slow down)
+
+---
+
+## WorldClock — ET Offset Pattern
+
+```typescript
+function getUTCOffset(timezone: string): number {
+  const now = new Date();
+  const str = now.toLocaleString("en-US", {
+    timeZone: timezone,
+    timeZoneName: "shortOffset",
+  });
+  const match = str.match(/GMT([+-]\d+(?::\d+)?)/);
+  if (!match) return 0;
+  const parts = match[1].split(":");
+  const sign = Math.sign(parseInt(parts[0]));
+  return parseInt(parts[0]) + (parts[1] ? (parseInt(parts[1]) / 60) * sign : 0);
+}
+
+function getETOffset(timezone: string): string {
+  const diff = getUTCOffset(timezone) - getUTCOffset("America/New_York");
+  if (diff === 0) return "ET+0";
+  return diff > 0 ? `ET+${diff}` : `ET${diff}`;
+}
+```
+
+- Always computed at render time — never hardcoded — DST-aware automatically
+- Cities: CHI / NY / BSB / LDN
 
 ---
 
@@ -258,9 +371,10 @@ Chart / indicators:
   #9CA9FF   straddle series
   #60a5fa   skew series, fly 10W, auction dot
   #737373   SPX overlay (dashed)
+  #949494   day separator lines
   #4ade80   open state, positive %
   #f87171   negative %, high impact
-  #f59e0b   amber highlight, medium impact, realized >=70%
+  #f59e0b   amber highlight, medium impact, realized >=70%, clock hover
 ```
 
 ---

@@ -189,10 +189,11 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
       try {
         seriesRef.current.createPriceLine({
           price: avgSkew,
-          color: "#333",
+          color: "#555",
           lineWidth: 1,
           lineStyle: 2,
-          axisLabelVisible: false,
+          axisLabelTextColor: "#111",
+          axisLabelVisible: true,
           title: "",
         });
       } catch {}
