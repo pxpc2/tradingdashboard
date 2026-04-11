@@ -182,7 +182,7 @@ export default function LiveDashboard({
                 type="submit"
                 className="font-sans text-xs text-[#555] hover:text-[#666] transition-colors hover:cursor-pointer uppercase tracking-widest"
               >
-                <FaSignOutAlt className="text-md hover:text-red-400" />
+                <FaSignOutAlt className="text-md hover:text-[#f59e0b]" />
               </button>
             </form>
           </div>
