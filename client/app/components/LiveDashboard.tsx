@@ -16,6 +16,7 @@ import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
 import { useWatchlist } from "../hooks/useWatchlist";
 import { signOut } from "../login/actions";
 import { StraddleSnapshot, RtmSession } from "../types";
+import { FaSignOutAlt } from "react-icons/fa";
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
@@ -184,7 +185,7 @@ export default function LiveDashboard({
                 type="submit"
                 className="font-sans text-xs text-[#555] hover:text-[#666] transition-colors hover:cursor-pointer uppercase tracking-widest"
               >
-                out
+                <FaSignOutAlt className="text-md hover:text-red-400" />
               </button>
             </form>
           </div>
@@ -320,7 +321,7 @@ export default function LiveDashboard({
                 Skew
               </span>
               <div className="font-mono text-lg text-[#9ca3af] font-light">
-                {latestSkew?.skew?.toFixed(4) ?? "—"}
+                {latestSkew?.skew?.toFixed(3) ?? "—"}
               </div>
             </div>
             <div className="w-px bg-[#1f1f1f]" />

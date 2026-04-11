@@ -99,7 +99,7 @@ export default function MacroEvents({ selectedDate }: Props) {
       <div className="flex items-center gap-3 mb-2 shrink-0">
         <div className="w-0.5 h-4 bg-[#2a2a2a]" style={{ borderRadius: 0 }} />
         <span className="font-sans text-xs text-[#555] uppercase tracking-wide">
-          Macro
+          Calendário econômico
         </span>
         {userScrolled && nextIndex >= 0 && (
           <button
@@ -112,9 +112,9 @@ export default function MacroEvents({ selectedDate }: Props) {
       </div>
 
       {loading ? (
-        <div className="font-mono text-xs text-[#333] py-4">loading...</div>
+        <div className="font-mono text-xs text-[#333] py-4">carregando...</div>
       ) : events.length === 0 ? (
-        <div className="font-mono text-xs text-[#333] py-4">no events</div>
+        <div className="font-mono text-xs text-[#333] py-4">sem eventos.</div>
       ) : (
         <div className="flex-1 flex flex-col min-h-0">
           {/* Column headers — tighter widths for numbers, more space for event */}

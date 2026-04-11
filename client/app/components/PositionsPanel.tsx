@@ -53,7 +53,7 @@ export default function PositionsPanel({ smlSession, flySnapshots }: Props) {
       {/* Header with toggle */}
       <div className="flex items-center mb-2">
         <span className="font-sans text-xs text-[#555] uppercase tracking-wide">
-          Positions
+          Posições
         </span>
         <div className="ml-auto flex gap-3 text-xs">
           <button
@@ -123,9 +123,7 @@ export default function PositionsPanel({ smlSession, flySnapshots }: Props) {
                     pnl === null ? "#555" : pnl >= 0 ? "#4ade80" : "#f87171",
                 }}
               >
-                {pnl !== null
-                  ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}`
-                  : "—"}
+                {pnl !== null ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}` : "—"}
               </span>
             </div>
 
@@ -153,13 +151,7 @@ export default function PositionsPanel({ smlSession, flySnapshots }: Props) {
 }
 
 // Lightweight Charts mini chart for fly data
-function FlyMiniChart({
-  data,
-  color,
-}: {
-  data: FlySnapshot[];
-  color: string;
-}) {
+function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
@@ -286,7 +278,7 @@ function SmlInputForm() {
   return (
     <div className="flex-1 bg-[#111] rounded p-3 flex flex-col gap-3">
       <div className="text-xs text-[#555] uppercase tracking-wide">
-        Start SML Fly Session
+        adicionar sml fly do dia
       </div>
 
       {/* SML Reference */}
@@ -354,7 +346,7 @@ function SmlInputForm() {
         disabled={isSubmitting || !smlRef || widths.length === 0}
         className="mt-auto bg-[#222] text-xs text-[#9ca3af] py-1.5 rounded hover:bg-[#2a2a2a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:cursor-pointer"
       >
-        {isSubmitting ? "Creating..." : "Start Session"}
+        {isSubmitting ? "Criando..." : "Iniciar"}
       </button>
     </div>
   );

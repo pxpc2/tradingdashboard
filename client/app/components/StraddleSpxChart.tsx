@@ -130,12 +130,19 @@ export default function StraddleSpxChart({ data, currentSpxPrice }: Props) {
 
   // Data updates
   useEffect(() => {
-    if (!straddleSeriesRef.current || !spxSeriesRef.current || !chartRef.current) return;
+    if (
+      !straddleSeriesRef.current ||
+      !spxSeriesRef.current ||
+      !chartRef.current
+    )
+      return;
 
     // Straddle points
     const straddlePoints = data
       .map((s) => ({
-        time: Math.floor(new Date(s.created_at).getTime() / 1000) as UTCTimestamp,
+        time: Math.floor(
+          new Date(s.created_at).getTime() / 1000,
+        ) as UTCTimestamp,
         value: s.straddle_mid,
       }))
       .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
@@ -143,7 +150,9 @@ export default function StraddleSpxChart({ data, currentSpxPrice }: Props) {
     // SPX points
     const spxPoints = data
       .map((s) => ({
-        time: Math.floor(new Date(s.created_at).getTime() / 1000) as UTCTimestamp,
+        time: Math.floor(
+          new Date(s.created_at).getTime() / 1000,
+        ) as UTCTimestamp,
         value: s.spx_ref,
       }))
       .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
@@ -170,7 +179,7 @@ export default function StraddleSpxChart({ data, currentSpxPrice }: Props) {
     <div>
       <div className="flex justify-between items-center mb-1.5">
         <span className="font-sans text-xs text-[#555] uppercase tracking-wide">
-          0DTE Straddle + SPX
+          IV vs RV
         </span>
         <div className="flex gap-3 text-xs">
           <span className="flex items-center gap-1">
