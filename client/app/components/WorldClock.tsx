@@ -20,6 +20,7 @@ function getTime(timezone: string): string {
     timeZone: timezone,
     hour: "2-digit",
     minute: "2-digit",
+    second: "2-digit",
     hour12: false,
   });
 }
@@ -50,7 +51,9 @@ export default function WorldClock() {
             key={city.id}
             className="flex-1 bg-[#111] rounded px-3 py-2 flex justify-between items-center transition-all cursor-default"
             style={{
-              border: isHovered ? "1px solid rgba(245, 158, 11, 0.3)" : "1px solid transparent",
+              border: isHovered
+                ? "1px solid rgba(245, 158, 11, 0.3)"
+                : "1px solid transparent",
             }}
             onMouseEnter={() => setHovered(city.id)}
             onMouseLeave={() => setHovered(null)}
