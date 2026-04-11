@@ -102,6 +102,9 @@ export default function LiveDashboard({
   const ticks = useLiveTick(allSymbols);
   const spxTick = ticks["SPX"] ?? null;
   const esTick = ticks[ES_STREAMER_SYMBOL] ?? null;
+  const vixTick = ticks["VIX"] ?? null;
+  const vixLast = vixTick?.last ?? null;
+  const vixPct = pctChange(vixLast, vixTick?.prevClose ?? null);
 
   // Computed values
   const todayRows = useMemo(
@@ -194,7 +197,7 @@ export default function LiveDashboard({
           <WorldClock />
         </div>
 
-        {/* SPX + ES row */}
+        {/* SPX + ES + VIX row */}
         <div className="mb-4 pb-4 border-b border-[#222]">
           <div className="flex gap-10 mb-3">
             {/* SPX */}
@@ -239,6 +242,28 @@ export default function LiveDashboard({
                 >
                   {parseFloat(esPct) >= 0 ? "+" : ""}
                   {esPct}%
+                </span>
+              )}
+            </div>
+            {/* VIX */}
+            <div className="flex items-center gap-2">
+              <div
+                className="w-0.5 h-5"
+                style={{ backgroundColor: spxOpen ? "#4ade80" : "#2a2a2a" }}
+              />
+              <span className="font-sans text-xs text-[#666] uppercase">
+                VIX
+              </span>
+              <span className="font-mono text-xl text-[#9ca3af] font-light">
+                {vixLast?.toFixed(2) ?? "—"}
+              </span>
+              {vixPct && (
+                <span
+                  className="font-mono text-sm"
+                  style={{ color: pctColor(vixPct) }}
+                >
+                  {parseFloat(vixPct) >= 0 ? "+" : ""}
+                  {vixPct}%
                 </span>
               )}
             </div>
