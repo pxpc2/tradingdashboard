@@ -4,15 +4,15 @@ import { useState, useEffect } from "react";
 
 type City = {
   id: string;
-  label: string;
+  abbr: string;
   timezone: string;
 };
 
 const CITIES: City[] = [
-  { id: "chi", label: "Chicago", timezone: "America/Chicago" },
-  { id: "nyc", label: "New York", timezone: "America/New_York" },
-  { id: "brt", label: "Brasília", timezone: "America/Sao_Paulo" },
-  { id: "ldn", label: "London", timezone: "Europe/London" },
+  { id: "chi", abbr: "CHI", timezone: "America/Chicago" },
+  { id: "nyc", abbr: "NY", timezone: "America/New_York" },
+  { id: "bsb", abbr: "BSB", timezone: "America/Sao_Paulo" },
+  { id: "ldn", abbr: "LDN", timezone: "Europe/London" },
 ];
 
 function getTime(timezone: string): string {
@@ -23,6 +23,25 @@ function getTime(timezone: string): string {
     second: "2-digit",
     hour12: false,
   });
+}
+
+function getUTCOffset(timezone: string): number {
+  const now = new Date();
+  const str = now.toLocaleString("en-US", {
+    timeZone: timezone,
+    timeZoneName: "shortOffset",
+  });
+  const match = str.match(/GMT([+-]\d+(?::\d+)?)/);
+  if (!match) return 0;
+  const parts = match[1].split(":");
+  const sign = Math.sign(parseInt(parts[0]));
+  return parseInt(parts[0]) + (parts[1] ? (parseInt(parts[1]) / 60) * sign : 0);
+}
+
+function getETOffset(timezone: string): string {
+  const diff = getUTCOffset(timezone) - getUTCOffset("America/New_York");
+  if (diff === 0) return "ET+0";
+  return diff > 0 ? `ET+${diff}` : `ET${diff}`;
 }
 
 export default function WorldClock() {
@@ -58,18 +77,26 @@ export default function WorldClock() {
             onMouseEnter={() => setHovered(city.id)}
             onMouseLeave={() => setHovered(null)}
           >
-            <span
-              className="font-sans text-[11px] uppercase tracking-wide transition-colors"
-              style={{ color: isHovered ? "#f59e0b" : "#555" }}
-            >
-              {city.label}
-            </span>
+            <div className="flex flex-col gap-0.5">
+              <span
+                className="font-sans text-[11px] uppercase tracking-wide transition-colors"
+                style={{ color: isHovered ? "#f59e0b" : "#555" }}
+              >
+                {city.abbr}
+              </span>
+              <span
+                className="font-sans text-[10px] uppercase tracking-wide transition-colors"
+                style={{ color: isHovered ? "#f59e0b" : "#444" }}
+              >
+                {getETOffset(city.timezone)}
+              </span>
+            </div>
             <span
               className="font-mono text-base transition-colors"
               style={{ color: isHovered ? "#f59e0b" : "#9ca3af" }}
               suppressHydrationWarning
             >
-              {times[city.id] ?? "--:--"}
+              {times[city.id] ?? "--:--:--"}
             </span>
           </div>
         );
