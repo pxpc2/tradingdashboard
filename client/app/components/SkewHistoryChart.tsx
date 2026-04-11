@@ -129,7 +129,7 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
     });
 
     const series = chart.addSeries(LineSeries, {
-      color: "#60a5fa",
+      color: "#9CA9FF",
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,

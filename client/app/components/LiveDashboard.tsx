@@ -172,9 +172,6 @@ export default function LiveDashboard({
 
             {/* Converter - desktop */}
             <div className="hidden md:flex items-center gap-3">
-              <span className="font-mono text-xs text-[#555]">
-                Basis {liveBasis?.toFixed(2) ?? "—"}
-              </span>
               <div className="w-px h-4 bg-[#1a1a1a]" />
               <EsSpxConverter initialBasis={liveBasis} compact />
             </div>
