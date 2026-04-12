@@ -53,6 +53,12 @@ export async function GET() {
       ? rawPositions
       : ((rawPositions as any)?.items ?? []);
 
+    console.log("[real-positions] raw count:", positions.length);
+    console.log(
+      "[real-positions] raw positions:",
+      JSON.stringify(positions, null, 2),
+    );
+
     const legs: PositionLeg[] = [];
 
     for (const pos of positions) {
