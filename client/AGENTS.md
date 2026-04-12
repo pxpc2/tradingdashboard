@@ -9,29 +9,25 @@ Guidelines for writing code that fits the vovonacci dashboard. Read CLAUDE.md fi
 **Hooks own data. Components own UI. Never mix.**
 
 - All Supabase calls live in `hooks/` or in Next.js API routes (`api/`)
-- View components receive everything as props — no `supabase` imports inside components
+- View components receive everything as props
 - Chart components receive typed data arrays as props — no business logic inside them
 
-**Exception**: `PositionsPanel.tsx` includes an inline SML input form that writes to Supabase. Acceptable for simple forms tightly coupled to a component.
+**Exception**: `PositionsPanel.tsx` includes an inline SML input form that writes to Supabase.
 
 ---
 
 ## CRITICAL: Always Ask for Current File First
 
-Pedro frequently makes his own visual and text tweaks between sessions (font sizes, colors, labels, translations, etc.). **Always request the current file before modifying it.** Never code on top of a file from earlier in the conversation without confirming it's still current. When in doubt, ask.
+Pedro frequently makes visual and text tweaks between sessions. **Always request the current file before modifying it.** Never code on top of a file from earlier in the conversation without confirming it's still current.
 
 ---
 
 ## Hook Structure
 
-Every data hook follows the same two-effect pattern:
-
 ```typescript
 "use client";
-
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
-import { XxxSnapshot } from "../types";
 
 export function useXxxData(
   selectedDate: string,
@@ -85,23 +81,12 @@ export function useXxxData(
 Rules:
 
 - Always use the `cancelled` flag in fetch effects
-- Always clean up realtime channels in return
-- `initialData` param only on hooks whose data is SSR-fetched in `page.tsx`
-
-### useSkewHistory — Full Historical Data
-
-```typescript
-export function useSkewHistory() {
-  // Fetches ALL skew >= '2026-04-02'
-  // Returns: { skewHistory, latestSkew, avgSkew, isLoading }
-}
-```
+- Always clean up realtime channels
+- `initialData` param only on hooks SSR-fetched in `page.tsx`
 
 ---
 
 ## Lightweight Charts Component Structure
-
-Two effects: creation (deps `[]`), data update (deps `[data]`).
 
 ```typescript
 "use client";
@@ -113,15 +98,21 @@ export default function XxxChart({ data }: Props) {
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
 
+  // Effect 1 — chart creation
   useEffect(() => {
     if (!containerRef.current) return;
     const chart = createChart(containerRef.current, { /* options */ });
     const series = chart.addSeries(LineSeries, { /* options */ });
     chartRef.current = chart;
     seriesRef.current = series;
-    return () => chart.remove();
+    const handleResize = () => {
+      if (containerRef.current) chart.applyOptions({ width: containerRef.current.clientWidth });
+    };
+    window.addEventListener("resize", handleResize);
+    return () => { window.removeEventListener("resize", handleResize); chart.remove(); };
   }, []);
 
+  // Effect 2 — data update
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
     const points = data
@@ -131,7 +122,7 @@ export default function XxxChart({ data }: Props) {
       }))
       .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
     seriesRef.current.setData(points);
-    chartRef.current.timeScale().fitContent();
+    try { chartRef.current.timeScale().fitContent(); } catch {}
   }, [data]);
 
   return <div ref={containerRef} className="w-full h-full" />;
@@ -143,23 +134,18 @@ Rules:
 - Always dedup: `.filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time)`
 - `shiftVisibleRangeOnNewBar: false` on timeScale
 - Wrap `removePriceLine`, `setVisibleRange`, `fitContent` in try/catch
-- Resize: `window.addEventListener("resize", handleResize)` + cleanup
 
 ### Price Line Refs Pattern
 
-When using `createPriceLine` (e.g. skew 1σ levels), always store refs and clear before redrawing:
-
 ```typescript
-const downsideLineRef = useRef<IPriceLine | null>(null);
+const lineRef = useRef<IPriceLine | null>(null);
 
-// In data effect — clear first:
-if (downsideLineRef.current) {
-  try { seriesRef.current.removePriceLine(downsideLineRef.current); } catch {}
-  downsideLineRef.current = null;
+// Clear before redrawing:
+if (lineRef.current) {
+  try { seriesRef.current.removePriceLine(lineRef.current); } catch {}
+  lineRef.current = null;
 }
-
-// Then recreate:
-downsideLineRef.current = seriesRef.current.createPriceLine({ ... });
+lineRef.current = seriesRef.current.createPriceLine({ ... });
 ```
 
 ### Day Separator Lines Pattern
@@ -169,23 +155,6 @@ Canvas overlay for multi-day charts:
 ```typescript
 const overlayRef = useRef<HTMLCanvasElement>(null);
 const boundariesRef = useRef<UTCTimestamp[]>([]);
-
-function findDayBoundaries(data: XxxSnapshot[]): UTCTimestamp[] {
-  const boundaries: UTCTimestamp[] = [];
-  let prevDate: string | null = null;
-  for (const s of data) {
-    const etDate = new Date(s.created_at).toLocaleDateString("en-CA", {
-      timeZone: "America/New_York",
-    });
-    if (prevDate !== null && etDate !== prevDate) {
-      boundaries.push(
-        Math.floor(new Date(s.created_at).getTime() / 1000) as UTCTimestamp,
-      );
-    }
-    prevDate = etDate;
-  }
-  return boundaries;
-}
 
 const drawSeparators = useCallback(() => {
   if (!overlayRef.current || !chartRef.current || !containerRef.current) return;
@@ -219,55 +188,74 @@ const drawSeparators = useCallback(() => {
 
 - Subscribe: `chart.timeScale().subscribeVisibleTimeRangeChange(drawSeparators)`
 - Unsubscribe on cleanup
-- Call `drawSeparators()` at end of data update effect
 - Canvas overlay: `position: absolute`, `pointerEvents: none`, `zIndex: 10`
-- Add `rightOffset: 80` to timeScale (skew chart)
+- `rightOffset: 80` on timeScale (skew chart)
 
 ---
 
-## ECharts — Parked
+## Apache ECharts Pattern
 
-ECharts migration was attempted but parked. The core issue: `xAxis.type: 'time'` renders full 24h timeline including overnight gaps, making RTH data compress into narrow spikes. Switching to `type: 'category'` eliminates gaps but loses proportional time spacing.
+Used in `/analysis` charts only. Two effects: creation + data update.
 
-Revisit when building candlestick charts for ES/SPX/VIX/VIX1D — ECharts has clear advantages there (native candlestick, dataZoom, markLine). For existing line charts, Lightweight Charts stays.
+```typescript
+"use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useRef } from "react";
+import * as echarts from "echarts";
+
+export default function XxxChart({ data }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<echarts.ECharts | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const chart = echarts.init(containerRef.current, null, { renderer: "canvas", height: 280 });
+    chartRef.current = chart;
+    const handleResize = () => chart.resize();
+    window.addEventListener("resize", handleResize);
+    return () => { window.removeEventListener("resize", handleResize); chart.dispose(); };
+  }, []);
+
+  useEffect(() => {
+    if (!chartRef.current) return;
+    chartRef.current.setOption({ /* option */ });
+  }, [data]);
+
+  return <div ref={containerRef} className="w-full rounded overflow-hidden" />;
+}
+```
+
+ECharts notes:
+
+- Always add `/* eslint-disable @typescript-eslint/no-explicit-any */` at top — ECharts callbacks are `any` typed
+- Use `xAxis.type: "category"` not `"time"` for RTH data — time type shows overnight gaps making data compress
+- Only add legend entries for series that actually have data (prevents "series not exists" warnings)
+- `animation: false` always — cleaner for financial data
+- `backgroundColor: "#111111"` on all charts
 
 ---
 
 ## LiveDashboard — The Orchestrator
 
-`LiveDashboard.tsx` is the only file that:
-
-- Calls all data hooks
-- Calls `useLiveTick` with combined symbol list
-- Computes today from ET date (with `?date=` param override for dev)
-- Renders all child components with props
-- Imports and calls `signOut`
+Only file that calls all hooks, calls `useLiveTick`, computes today, renders all components.
 
 ```typescript
-// Normal: uses ET today
-// Dev override: ?date=2026-04-09 in URL
-const searchParams = useSearchParams();
+const searchParams = useSearchParams(); // requires Suspense in page.tsx
 const today =
   searchParams.get("date") ??
   new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 ```
-
-Requires `<Suspense>` wrapper in `page.tsx` due to `useSearchParams`.
 
 ### VIX/VIX1D pattern
 
 ```typescript
 const vixTick = ticks["VIX"] ?? null;
 const vixLast = vixTick?.last ?? null;
-const vixPct = pctChange(vixLast, vixTick?.prevClose ?? null);
-
 const vix1dTick = ticks["VIX1D"] ?? null;
 const vix1dLast = vix1dTick?.last ?? null;
-const vix1dPct = pctChange(vix1dLast, vix1dTick?.prevClose ?? null);
-
 const vixRatio =
   vix1dLast && vixLast && vixLast > 0 ? (vix1dLast / vixLast).toFixed(2) : null;
-// Ratio color: amber (#f59e0b) when >= 1, neutral otherwise
+// Ratio amber when >= 1
 ```
 
 ### Opening skew for 1σ levels
@@ -285,7 +273,23 @@ const openingSkew = useMemo(() => {
 }, [skewHistory, today]);
 ```
 
-Pass as `openingSkew={openingSkew}` to `StraddleSpxChart`.
+### Real positions wiring
+
+```typescript
+const {
+  legs: realLegs,
+  streamerSymbols: realSymbols,
+  isLoading: realIsLoading,
+  error: realError,
+} = useRealPositions();
+
+const allSymbols = useMemo(() => {
+  const set = new Set(CORE_SYMBOLS);
+  for (const e of watchlistEntries) set.add(e.streamerSymbol);
+  for (const s of realSymbols) set.add(s);
+  return Array.from(set);
+}, [watchlistEntries, realSymbols]);
+```
 
 ---
 
@@ -296,8 +300,45 @@ Called once in `LiveDashboard.tsx` only. One WebSocket for the entire app.
 `TickData`: `{ bid, ask, mid, prevClose, last }`
 
 - `mid` — Quote events (futures, equities)
-- `prevClose` — Summary `prevDayClosePrice`
-- `last` — Trade events — use for VIX, VIX1D, and any index
+- `prevClose` — Summary prevDayClosePrice
+- `last` — Trade events — always use for VIX, VIX1D
+
+---
+
+## Analysis Route
+
+- Server component `page.tsx` — auth check via `createSupabaseServerClient`, redirect to `/login` if no user
+- SSR fetches: all `straddle_snapshots` + all `skew_snapshots >= 2026-04-02`
+- Session grouping done client-side in `AnalysisDashboard.tsx`
+- `SessionData` type exported from `AnalysisDashboard.tsx` — used by all chart components
+
+Session grouping logic:
+
+- Group raw snapshots by ET date
+- Skip sessions with < 2 snapshots
+- Opening = first snapshot, closing = last snapshot
+- `realizedMovePct = (realizedMovePts / openingStraddle) * 100`
+- Ratio coloring: red >= 1.0x, amber >= 0.7x, blue < 0.7x
+
+---
+
+## Real Positions API
+
+```typescript
+// client/app/api/real-positions/route.ts
+const rawPositions = await (
+  client as any
+).balancesAndPositionsService.getPositionsList(accountNumber);
+```
+
+OCC symbol parsing: `"SPXW  260417C06820000"` → `{ expiry: "2026-04-17", strike: 6820, optionType: "C" }`
+
+P&L calculation:
+
+```typescript
+const sign = leg.direction === "Long" ? 1 : -1;
+return sign * (mid - leg.averageOpenPrice) * leg.quantity * leg.multiplier;
+```
 
 ---
 
@@ -314,66 +355,43 @@ function currentBarTime() {
 }
 ```
 
-Never use fixed `setTimeout(fn, 60000)`.
-
-### getIndexLast — for VIX/VIX1D spot fetch
+### getIndexLast — spot price for indices
 
 ```js
-// lib/dxfeed.mjs
-export async function getIndexLast(symbol) {
-  // Listens for Trade event with price > 0
-  // Returns the last price or null on timeout
-}
+// lib/dxfeed.mjs — listens for Trade event, returns last price or null
+const vix = await getIndexLast("VIX");
+const vix1d = await getIndexLast("VIX1D");
 ```
-
-Use this whenever you need a spot price for an index (VIX, VIX1D) in the poller.
 
 ### collectOhlc — quote vs trade symbols
 
 ```js
-// quoteSymbols: futures/equities — use Quote bid/ask mid
-// tradeSymbols: indices — use Trade event price
+// quoteSymbols: futures/equities — Quote bid/ask mid
+// tradeSymbols: indices — Trade event price
 const ohlc = await collectOhlc(quoteSymbols, tradeSymbols, COLLECT_MS);
 ```
 
 ### session_summary writes
 
 ```js
-// Always upsert, never insert — safe to re-run
+// Always upsert — safe to re-run
 supabase.from("session_summary").upsert(payload, { onConflict: "date" })
-
-// writeOpenSummary — fire and forget from runAndScheduleNext:
-writeOpenSummary({ today, spxMid, atmStrike, straddleMid, esBasis })
-  .catch((err) => console.error(...));
-
-// writeCloseSummary — fire and forget at 16:00 ET:
-writeCloseSummary(getTodayET())
-  .catch((err) => console.error(...));
+// Both writes are fire-and-forget — never block the main cycle
+writeOpenSummary({ today, spxMid, atmStrike, straddleMid, esBasis }).catch(...)
+writeCloseSummary(getTodayET()).catch(...)
 ```
 
-Opening skew fields may be null at 09:30 (first skew fires at ~09:35). This is expected — raw data is in `skew_snapshots`.
+### Weekly straddle
 
-### Opening price convention
-
-- **ATM strike selection**: uses `DXFeed Summary.openPrice`
-- **spx_ref stored**: uses `DXFeed Quote mid`
-- **FMP 09:30 bar**: logged for comparison only, not used for any decision
-- Do not change the source until validated over multiple sessions
-
-### ES symbol rollover
-
-Current: `/ESM26:XCME`. Next roll September 2026 → `/ESU26:XCME`.
-Update in `loops/ohlc.mjs` (ES_SYMBOL const) and `loops/main.mjs` (ES_SYMBOL import).
+```js
+// captureWeeklyStraddle(options, spxMid) — Monday open cycle only
+// findNearestFriday() — next Friday from ET date, never today
+// Reuses options array from runCycle — no extra chain fetch
+```
 
 ---
 
 ## WatchlistStrip — Ticker Pattern
-
-```typescript
-{[...allEntries, ...allEntries].map((entry, i) => (
-  <TickerItem key={`${entry.symbol}-${i}`} entry={entry} ticks={ticks} />
-))}
-```
 
 ```css
 @keyframes ticker {
@@ -392,6 +410,7 @@ Update in `loops/ohlc.mjs` (ES_SYMBOL const) and `loops/main.mjs` (ES_SYMBOL imp
 }
 ```
 
+Items rendered twice: `[...allEntries, ...allEntries]`
 Edge fade: `maskImage: "linear-gradient(to right, transparent, black 4%, black 96%, transparent)"`
 Price: `mid === null || mid === 0 ? last : mid`
 
@@ -411,25 +430,12 @@ function getUTCOffset(timezone: string): number {
   const sign = Math.sign(parseInt(parts[0]));
   return parseInt(parts[0]) + (parts[1] ? (parseInt(parts[1]) / 60) * sign : 0);
 }
-
 function getETOffset(timezone: string): string {
   const diff = getUTCOffset(timezone) - getUTCOffset("America/New_York");
   if (diff === 0) return "ET+0";
   return diff > 0 ? `ET+${diff}` : `ET${diff}`;
 }
 ```
-
-Always computed at render time — DST-aware automatically.
-
----
-
-## Typography Conventions
-
-- **Labels**: `font-sans text-xs text-[#555] uppercase tracking-wide`
-- **Values**: `font-mono text-lg text-[#9ca3af] font-light`
-- **Small labels**: `font-sans text-[11px] text-[#555] uppercase tracking-wide`
-- **Metric strips**: `flex gap-6 flex-wrap`
-- **Pipe dividers**: `w-px bg-[#1f1f1f]`
 
 ---
 
@@ -438,27 +444,30 @@ Always computed at render time — DST-aware automatically.
 All in `client/app/types.ts`:
 
 ```
-StraddleSnapshot   straddle_snapshots — includes es_basis?: number | null
-RtmSession         rtm_sessions
-FlySnapshot        sml_fly_snapshots
-SkewSnapshot       skew_snapshots
-EsSnapshot         es_snapshots — includes bar_time?: string | null
-SpxSnapshot        spx_snapshots — includes bar_time?: string | null
-SessionSummary     session_summary — add when building /analysis hooks
+StraddleSnapshot   includes es_basis?: number | null
+RtmSession
+FlySnapshot
+SkewSnapshot
+EsSnapshot         includes bar_time?: string | null
+SpxSnapshot        includes bar_time?: string | null
 ```
 
 Add when building new hooks:
 
 ```
 VixSnapshot        vix_snapshots — bar_time, open, high, low, close
-Vix1dSnapshot      vix1d_snapshots — bar_time, open, high, low, close
+Vix1dSnapshot      vix1d_snapshots
+SessionSummary     session_summary
+WeeklyStraddleSnapshot  weekly_straddle_snapshots
 ```
 
-Types from API routes (not in types.ts):
+Types from API routes:
 
 ```
 MacroEvent         api/macro-events/route.ts
 WatchlistEntry     api/watchlist/route.ts
+PositionLeg        api/real-positions/route.ts
+SessionData        analysis/AnalysisDashboard.tsx
 ```
 
 ---
@@ -466,32 +475,11 @@ WatchlistEntry     api/watchlist/route.ts
 ## Dark Theme Color Palette
 
 ```
-Backgrounds:
-  #0a0a0a   page background
-  #111111   component / chart background
-  #1a1a1a   subtle surface, grid lines, topbar border
-  #1f1f1f   pipe dividers
-  #222222   section dividers
-  #2a2a2a   closed state accent
-
-Text:
-  #9ca3af   metric values
-  #888888   active state
-  #666666   labels
-  #555555   secondary labels
-  #444444   tertiary text
-  #333333   near-invisible hints
-
-Chart / indicators:
-  #9CA9FF   straddle series
-  #60a5fa   skew series, fly 10W, auction dot
-  #737373   SPX overlay (dashed)
-  #444       day separator lines (skew chart)
-  #4ade80   open state, positive %, upside 1σ level
-  #f87171   negative %, high impact, downside 1σ level
-  #f59e0b   amber: medium impact, realized ≥70%, clock hover, VIX1D/VIX ≥ 1
-  #4ade8066 upside 1σ line (semi-transparent)
-  #f8717166 downside 1σ line (semi-transparent)
+Backgrounds:  #0a0a0a #111111 #1a1a1a #1f1f1f #222222 #2a2a2a
+Text:         #9ca3af #888888 #666666 #555555 #444444 #333333
+Chart:        #9CA9FF straddle | #60a5fa skew/fly | #737373 SPX dashed
+              #444 day separators | #4ade80 open/positive | #f87171 negative/high
+              #f59e0b amber/medium/hover | #4ade8066 upside 1σ | #f8717166 downside 1σ
 ```
 
 ---
@@ -505,12 +493,11 @@ Chart / indicators:
 | Display             | America/Chicago (CT)  |
 | Date strings        | America/New_York (ET) |
 
-RTH open = 09:30 ET = **13:30 UTC** during DST.
-
 ---
 
 ## Auth Conventions
 
 - `proxy.ts` not `middleware.ts` (Next.js 16)
-- `createSupabaseServerClient()` in server actions
+- `createSupabaseServerClient()` in server components and actions
 - `createBrowserClient` in browser — never plain `createClient`
+- Analysis route: `const { data: { user } } = await supabase.auth.getUser(); if (!user) redirect("/login");`

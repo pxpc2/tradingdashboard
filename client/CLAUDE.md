@@ -26,59 +26,58 @@ server/
     dxfeed.mjs            # getQuotes, getSpxOpenPrice, getSpxQuoteMid, getEsMid, getIndexLast, collectOhlc, withTimeout
     bsm.mjs               # normalCDF, bsmPrice, bsmDelta, invertIV, findDeltaStrike, findTargetExpiry, isValidQuote
   loops/
-    main.mjs              # runCycle, runAndScheduleNext, skew, SML fly, session_summary open/close
+    main.mjs              # runCycle, runAndScheduleNext, skew, SML fly, session_summary, weekly straddle
     ohlc.mjs              # runOhlcLoop — wall-clock anchored, bar_time, ES+SPX+VIX+VIX1D
 
 client/app/
   page.tsx                # SSR initial data fetch, renders LiveDashboard
   layout.tsx              # Loads IBM Plex Sans + Mono, sets --font-sans/--font-mono vars
-  globals.css             # Scrollbar styles, .scrollbar-none utility
+  globals.css             # Scrollbar styles
   types.ts                # ALL shared types — never redeclare locally
   proxy.ts                # Auth middleware (Next.js 16 uses proxy not middleware)
+  loading.tsx             # Route transition loading animation
   lib/
-    supabase.ts           # createBrowserClient — session-aware, used in hooks/components
-    supabase-server.ts    # createSupabaseServerClient — used in server actions + page.tsx
+    supabase.ts           # createBrowserClient
+    supabase-server.ts    # createSupabaseServerClient — used in server components
     supabase-middleware.ts # updateSession — used in proxy.ts
   login/
-    page.tsx              # Server component login page
+    page.tsx              # Login page
     actions.ts            # login() and signOut() server actions
     SubmitButton.tsx      # useFormStatus loading spinner
+  analysis/
+    page.tsx              # Auth-protected SSR fetch, renders AnalysisDashboard
+    loading.tsx           # Route transition loading animation
+    AnalysisDashboard.tsx # Client orchestrator — groups sessions, renders all analysis views
+    components/
+      ImpliedVsRealized.tsx  # Scatter: opening straddle vs realized move (ECharts)
+      RatioHistogram.tsx     # Distribution of realized/implied ratio (ECharts)
+      DecayCurve.tsx         # Normalized straddle decay avg vs today (ECharts)
   hooks/
     useStraddleData.ts    # straddle_snapshots fetch+realtime, exposes esBasis
     useFlyData.ts         # rtm_sessions + sml_fly_snapshots fetch+realtime
-    useSkewHistory.ts     # All skew_snapshots >= April 2, 2026 (skew calc fix date)
+    useSkewHistory.ts     # All skew_snapshots >= April 2, 2026
     useEsData.ts          # es_snapshots fetch+realtime, today only
     useLiveTick.ts        # DXFeed WebSocket, Quote+Summary+Trade events, exports TickData
     useWatchlist.ts       # Fetches Vovonacci watchlist entries from /api/watchlist
     useMacroEvents.ts     # Fetches FMP economic calendar for selected date
+    useRealPositions.ts   # Fetches /api/real-positions every 30s, returns legs + streamerSymbols
   components/
     LiveDashboard.tsx     # Main orchestrator — single-view, always-live dashboard
     WorldClock.tsx        # 4-city clock row (CHI, NY, BSB, LDN) with ET-relative offset
     StraddleSpxChart.tsx  # Straddle area + SPX line overlay + skew-adjusted 1σ levels
     SkewHistoryChart.tsx  # All-time 5-min skew history, avg line, day separators
-    PositionsPanel.tsx    # SML Fly / Real toggle, Lightweight Charts mini chart, input form
-    WatchlistStrip.tsx    # Auto-scrolling ticker strip in header (SPX + ES + watchlist)
-    MacroEvents.tsx       # FMP economic calendar, auto-scroll, CT times, flex height
+    PositionsPanel.tsx    # Real positions (default) + SML Fly toggle
+    WatchlistStrip.tsx    # Auto-scrolling ticker strip in header
+    MacroEvents.tsx       # FMP economic calendar, auto-scroll, CT times
     Converter.tsx         # Basis converter, bidirectional, compact prop for topbar
   api/
     quotes/route.ts       # POST — live quotes via Tastytrade SDK
     chain/route.ts        # GET — SPXW option chain
-    pdhl/route.ts         # GET — previous day H/L/close from Tastytrade candles
+    pdhl/route.ts         # GET — previous day H/L/close
     dxfeed-token/route.ts # GET — returns dxLinkUrl + dxLinkAuthToken
     macro-events/route.ts # GET — FMP economic calendar, US only, UTC→CT, cached
     watchlist/route.ts    # GET — Vovonacci watchlist, futures resolved to front month
-```
-
-### Deprecated Files (kept for reference)
-
-```
-components/
-  Dashboard.tsx         # Old tab-based orchestrator
-  MktView.tsx / VolView.tsx / PosView.tsx  # Old tab views — merged into LiveDashboard
-  SpxChart.tsx          # Contains day separator canvas overlay pattern — reference only
-  EsChart.tsx / StraddleChart.tsx / SkewChart.tsx / Watchlist.tsx  # Replaced
-hooks/
-  usePharmLevels.ts / useSkewData.ts  # No longer used
+    real-positions/route.ts # GET — Tastytrade live positions, parsed OCC symbols
 ```
 
 ---
@@ -90,12 +89,11 @@ straddle_snapshots   id, created_at, spx_ref, atm_strike, call_bid, call_ask,
                      put_bid, put_ask, straddle_mid, es_basis (nullable — only on open cycle row)
 
 rtm_sessions         id, created_at, sml_ref, sal_ref, widths (int[]), type ('call'|'put')
-
 sml_fly_snapshots    id, created_at, session_id, width, mid, bid, ask
 
 skew_snapshots       id, created_at, skew, put_iv, call_iv, atm_iv,
                      expiration_date, put_strike, call_strike
-                     -- NOTE: Only data >= 2026-04-02 is valid (skew calc fixed April 1)
+                     -- Only data >= 2026-04-02 is valid (skew calc fixed April 1)
 
 positions            id, created_at, label, is_active, notes
 position_legs        id, created_at, position_id, expiration_date, strike,
@@ -105,6 +103,9 @@ es_snapshots         id, created_at, bar_time, es_ref (close), open, high, low
 spx_snapshots        id, created_at, bar_time, open, high, low, close
 vix_snapshots        id, created_at, bar_time, open, high, low, close
 vix1d_snapshots      id, created_at, bar_time, open, high, low, close
+
+weekly_straddle_snapshots  id, created_at, expiry_date, spx_ref, atm_strike,
+                           call_bid, call_ask, put_bid, put_ask, straddle_mid
 
 session_summary      id, date (unique), created_at, updated_at
                      -- Opening (written at open cycle ~09:30 ET):
@@ -119,7 +120,6 @@ session_summary      id, date (unique), created_at, updated_at
                      spx_closed_above_open, skew_direction ('up'|'down'|'flat')
 ```
 
-`bar_time` = UTC ISO timestamp of the minute boundary the bar belongs to.
 All tables: RLS enabled, anon read, service role write (poller). Auth write on rtm_sessions, sml_fly_snapshots, positions, position_legs.
 
 ---
@@ -128,78 +128,47 @@ All tables: RLS enabled, anon read, service role write (poller). Auth write on r
 
 Entry point: `server/poller.mjs` — connects DXLink, starts two loops, handles SIGINT.
 
-### Wall-Clock Anchoring (critical)
+### Wall-Clock Anchoring
 
-Both loops use `msUntilNextMinute()` — drift self-corrects every cycle.
-Never use fixed `setTimeout(fn, 60000)`.
-
-`currentBarTime()` snapshots the minute boundary before collection so `bar_time` is always clean.
+Both loops use `msUntilNextMinute()` — drift self-corrects every cycle. Never use fixed `setTimeout(fn, 60000)`. `currentBarTime()` snapshots the minute boundary before collection.
 
 ### `runAndScheduleNext()` — loops/main.mjs
 
 - RTH only (09:30–16:00 ET weekdays)
 - **Open cycle** at 09:30:00–09:30:30 ET:
-  - Fetches SPX open price from both DXFeed (Summary + Quote) and FMP (09:30 1min bar)
-  - Logs both refs + diff + whether ATM strike selection differs — for validation
+  - Fetches SPX open price from both DXFeed (Summary + Quote) and FMP (09:30 1min bar) — logs both for validation
   - Fetches ES basis
-  - After straddle insert: calls `writeOpenSummary()` (fire-and-forget)
+  - Calls `writeOpenSummary()` fire-and-forget
+  - On Mondays: calls `captureWeeklyStraddle()` fire-and-forget
 - Each cycle: chain → SPX quote → ATM straddle → `straddle_snapshots`
 - Skew every 5th cycle (~5 min) → `skew_snapshots`
 - SML Fly if active `rtm_sessions` row exists for today
-- **Close cycle** at 16:00–16:01 ET: calls `writeCloseSummary()` (fire-and-forget)
+- **Close cycle** at 16:00–16:01 ET: calls `writeCloseSummary()` fire-and-forget
 - Schedules next via `msUntilNextMinute()`
 
-### Session Summary — loops/main.mjs
+### Session Summary
 
-**`writeOpenSummary()`** — fires after open cycle:
+- `writeOpenSummary()` — VIX+VIX1D spot via `getIndexLast()`, FMP macro check, upserts opening fields
+- `writeCloseSummary()` — reads today's straddle+skew snapshots, computes realized/max/skew direction, upserts closing fields
+- Always upsert with `onConflict: "date"` — safe to re-run
 
-- Fetches VIX + VIX1D spot via `getIndexLast()` (Trade events)
-- Checks FMP calendar for high-impact US events → `has_high_impact_macro`
-- Queries first skew snapshot of today (may be null at 09:30, populated by ~09:35)
-- Upserts `session_summary` row with all opening fields
+### Weekly Straddle
 
-**`writeCloseSummary()`** — fires at 16:00 ET:
+- `captureWeeklyStraddle(options, spxMid)` — fires Monday open cycle only
+- Finds nearest Friday SPXW expiry from full chain, captures ATM straddle
+- Stores in `weekly_straddle_snapshots`
+- `findNearestFriday()` computes next Friday from ET date — if Monday, that's 4 days out
 
-- Reads today's `straddle_snapshots` → computes realized move, max intraday, closing straddle
-- Reads today's `skew_snapshots` → closing skew, skew direction (up/down/flat, threshold 0.005)
-- Upserts `session_summary` row with all closing fields
+### Opening Price Validation
 
-Both are fire-and-forget (`.catch` wrapped) — never block the main cycle.
-
-### Opening Price Validation (ongoing)
-
-Every open cycle logs:
-
-```
-🔔 OPEN CYCLE — fetching SPX opening price
-   DXFeed Summary.openPrice : 6819.50
-   DXFeed Quote mid         : 6820.25
-   FMP 09:30 bar            : O:6819.75 H:6821.00 L:6818.50 C:6820.00
-   ATM strike (DXFeed)      : 6820
-   FMP open price           : 6819.75
-   DXFeed vs FMP diff       : 0.50 pts
-   ATM strike (FMP)         : 6820 ✓ same
-```
-
-Currently uses DXFeed as before. FMP is observational only — compare after several sessions to decide which is more reliable.
+Every open cycle logs DXFeed Summary, DXFeed Quote mid, and FMP 09:30 bar — including diff and whether ATM strike selection differs. Currently uses DXFeed as before. FMP is observational only — compare after several sessions.
 
 ### `runOhlcLoop()` — loops/ohlc.mjs
 
-- Independent loop, parallel to main
-- 55s collection → insert with `bar_time` → schedule at next minute minus 5s
-- **Quote symbols** (bid/ask mid): ES, SPX
-- **Trade symbols** (Trade event `price`): VIX, VIX1D
+- Quote symbols (bid/ask mid): ES, SPX
+- Trade symbols (Trade event price): VIX, VIX1D
 - ES → `es_snapshots` (globex), SPX → `spx_snapshots` (RTH), VIX+VIX1D → their tables (any open session)
-
-### DXFeed Helpers — lib/dxfeed.mjs
-
-- `getQuotes(symbols)` — Quote events, bid/ask based
-- `getSpxOpenPrice()` — Summary.openPrice + Quote mid at open
-- `getSpxQuoteMid()` — Quote mid
-- `getEsMid(symbol)` — Quote mid for futures
-- `getIndexLast(symbol)` — Trade event last price for indices (VIX, VIX1D)
-- `collectOhlc(quoteSymbols, tradeSymbols, durationMs)` — OHLC collection, split by event type
-- `withTimeout(promise, ms, label)` — wraps any promise with a timeout
+- All inserts include `bar_time`
 
 ### ES Symbol
 
@@ -211,58 +180,59 @@ Currently uses DXFeed as before. FMP is observational only — compare after sev
 
 ## UI Architecture
 
-### LiveDashboard Layout
+### LiveDashboard
 
-Single-view, always-live. No tabs. Date override via `?date=YYYY-MM-DD` URL param (dev only).
+Single-view, always-live. No tabs. `?date=YYYY-MM-DD` URL param overrides today for dev testing (requires Suspense in page.tsx).
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│ HEADER: WatchlistStrip ticker (SPX, ES + all) | Converter | OUT │
+│ HEADER: WatchlistStrip | Converter | Analysis link | OUT     │
 ├──────────────────────────────────────────────────────────────┤
 │ WORLD CLOCK: CHI ET-1 | NY ET+0 | BSB ET+1 | LDN ET+5       │
 ├──────────────────────────────────────────────────────────────┤
-│ SPX +0.04%  │  ES +0.01%  │  VIX  │  VIX1D                  │
-│ STRADDLE | IMPLIED | REALIZED | IV30 | SKEW | CALL/PUT IV | VIX1D/VIX │
+│ SPX +%  │  ES +%  │  VIX  │  VIX1D                          │
+│ STRADDLE | IMPLIED | REALIZED | IV30 | SKEW | CALL/PUT | 1D VOL RATIO │
 ├──────────────────────┬───────────────────────────────────────┤
-│ Straddle+SPX chart   │ Skew History (all-time 5-min)         │
-│ + skew 1σ levels     │ avg line + day separators             │
+│ Straddle+SPX+1σ lvls │ Skew History                         │
 ├──────────────────────┴───────────────────────────────────────┤
-│ Macro Events (CT)    │ Positions (SML Fly / Real)            │
+│ Macro Events         │ Positions (Real default / SML Fly)   │
 └──────────────────────────────────────────────────────────────┘
 ```
 
-### Key Design Decisions
+### Analysis Route (`/analysis`)
 
-- Watchlist: auto-scrolling ticker, SPX+ES first, pauses on hover, 80s cycle
-- World clock: CHI/NY/BSB/LDN, ET-relative offset, DST-aware, hover amber
-- VIX + VIX1D shown alongside SPX/ES — all use `tick.last`
-- VIX1D/VIX ratio in metrics strip — amber when ≥ 1 (today more volatile than 30d baseline)
-- Skew-adjusted 1σ levels on straddle chart — asymmetric upside/downside from opening put_iv/call_iv
-- Skew chart: Lightweight Charts, canvas overlay day separators, `rightOffset: 80`
-- UI language: Portuguese labels
-- `?date=YYYY-MM-DD` param overrides today for dev/testing (requires Suspense boundary in page.tsx)
+Auth-protected SSR page. All data computed client-side from raw snapshots.
 
-### Skew-Adjusted 1σ Levels — StraddleSpxChart
+- **Implied vs Realized** — scatter, dots colored blue/amber/red by ratio, breakeven line
+- **Ratio Histogram** — bins by 0.25x, avg line
+- **Straddle Decay** — normalized to open=100%, avg across all past sessions, today overlay
+- **Session Log** — table of all sessions, sortable by date, with ratio color coding
 
-Computed from the first skew snapshot of today (`openingSkew` prop from LiveDashboard):
+All charts use Apache ECharts. No real-time updates — static analysis on historical data.
+
+### Skew-Adjusted 1σ Levels
 
 ```
 downsidePts = opening.spx_ref * openingSkew.put_iv * sqrt(1/252)
 upsidePts   = opening.spx_ref * openingSkew.call_iv * sqrt(1/252)
-
-Downside level = opening.spx_ref - downsidePts  (red dashed, left axis)
-Upside level   = opening.spx_ref + upsidePts    (green dashed, left axis)
 ```
 
-Lines are fixed at open — anchored to `data[0]`, not updated as skew changes.
-Titles show point distance: `↓65`, `↑38`.
-Lines are semi-transparent (`#f8717166`, `#4ade8066`).
+Lines fixed at open, anchored to first skew snapshot of today. Semi-transparent (`#f8717166`, `#4ade8066`). Titles show point distance: `↓65`, `↑38`.
+
+### Real Positions
+
+- `GET /api/real-positions` → Tastytrade `balancesAndPositionsService.getPositionsList(accountNumber)`
+- Parses OCC-style option symbols → strike, expiry, type
+- `useRealPositions` hook refreshes every 30s
+- Streamer symbols added to `useLiveTick` for live mid prices
+- P&L = `sign * (mid - averageOpenPrice) * quantity * multiplier`
+- Shows "Sem posições abertas" when empty, scrollable leg list when populated
 
 ### Typography
 
 - Labels: `font-sans text-xs text-[#555] uppercase tracking-wide`
 - Values: `font-mono text-lg text-[#9ca3af] font-light`
-- Section headers: Bloomberg-style left border accent (`w-0.5 h-5`)
+- Section headers: Bloomberg-style left border accent (`w-0.5 h-4 bg-[#333]`)
 
 ---
 
@@ -270,18 +240,17 @@ Lines are semi-transparent (`#f8717166`, `#4ade8066`).
 
 - Called once in `LiveDashboard.tsx` only — one WebSocket
 - `TickData`: `{ bid, ask, mid, prevClose, last }`
-- VIX/VIX1D: always use `tick.last` (bid/ask/mid are 0 for indices)
-- Auto-reconnects every 5s on close
+- VIX/VIX1D: always use `tick.last`
+- Symbols = CORE + watchlist streamer symbols + real position streamer symbols
 
 ---
 
 ## WatchlistStrip
 
-- Items rendered twice for seamless loop
-- `translateX(0)` → `translateX(-50%)`, `:hover` pauses, 80s cycle
-- Edge fade via `maskImage` gradient
-- Price: `mid === 0 ? last : mid`
 - SPX and ES always prepended as static entries
+- Items rendered twice for seamless loop, 80s cycle, pauses on hover
+- Price: `mid === 0 ? last : mid`
+- Edge fade via `maskImage` gradient
 
 ---
 
@@ -289,15 +258,14 @@ Lines are semi-transparent (`#f8717166`, `#4ade8066`).
 
 - Fetches ALL `skew_snapshots >= '2026-04-02'`
 - Returns: `{ skewHistory, latestSkew, avgSkew, isLoading }`
-- Realtime appends new rows
 
 ---
 
 ## % Change
 
 - SPX/ES/VIX/VIX1D: `tick.prevClose` from DXFeed Summary
-- VIX/VIX1D % may show 0.00% outside RTH (last === prevClose)
-- Watchlist: per-symbol `tick.prevClose`, dimmed when closed
+- VIX/VIX1D % may show 0.00% outside RTH
+- Watchlist: dimmed when closed
 
 ---
 
@@ -305,50 +273,31 @@ Lines are semi-transparent (`#f8717166`, `#4ade8066`).
 
 ### Verify Monday open
 
-- ES/SPX `bar_time` aligned to clean minute boundaries
-- VIX/VIX1D rows in `vix_snapshots` / `vix1d_snapshots`
-- `session_summary` row written at open and close
-- DXFeed vs FMP open price diff logged — compare over several sessions
-- Skew 1σ levels visible on straddle chart with correct values
+- Open cycle logs both DXFeed and FMP refs cleanly
+- `session_summary` row written at open and 16:00
+- `weekly_straddle_snapshots` row written (Monday only)
+- VIX/VIX1D OHLC tables populating with clean `bar_time`
+- Real positions tab populates when a trade is open
+- Skew 1σ levels visible and correct on straddle chart
 
-### Next — analysis route
+### Next
 
-- `/analysis` route with:
-  - Session summary table (all past sessions, sortable)
-  - Implied vs realized scatter + ratio histogram
-  - Straddle decay curve (avg normalized + live overlay)
-  - IV30 vs realized vol (rolling 5d/10d/21d)
-  - Conditional stats (filtered by skew regime, VIX1D/VIX, day of week, macro)
-
-### Next — data collection
-
-- Weekly straddle capture (Monday 09:30 ET, Friday expiry)
-- ES overnight range + gap at open → add to session_summary
-- Skew fields backfill in session_summary (update at 5th cycle when first skew is available)
-
-### Dashboard features
-
-- Skew percentile vs history
-- Realized vol tracker display
-- Opening range markers on straddle chart
-- Term structure panel (VX curve)
+- Weekly straddle display — after first Monday of data
+- ES overnight range + gap on `session_summary`
+- `/charts` route — continuous time series: SPX/ES/VIX with metrics overlaid
+- Real positions enhancements (multi-leg grouping, delta per leg)
+- Conditional stats in `/analysis` (filter by skew regime, VIX1D/VIX, day of week, macro)
 
 ### Backlog
 
-- Native GEX (chain + OI every 30min)
-- Real Tastytrade positions with P&L
-- `/history` route
-- Holiday list in poller
+- OptionsDepth GEX API integration (when budget allows)
 - DXFeed auth reconnect
-- Mobile polish
-- Threshold alerts (skew spike, straddle crosses level)
-- ECharts migration (parked — revisit when building candle charts)
+- Holiday list in poller
+- Mobile layout polish
 
 ---
 
 ## Key Conventions
-
-See AGENTS.md for full coding conventions. Critical reminders:
 
 - **Always ask for the current file before modifying** — Pedro makes visual tweaks between sessions
 - **Timezones**: UTC stored, CT displayed, ET for market hours gating
@@ -358,8 +307,10 @@ See AGENTS.md for full coding conventions. Critical reminders:
 - **es_basis**: only non-null on first straddle row of the day
 - **Skew data**: only valid from April 2, 2026 onwards
 - **VIX/VIX1D**: symbols `"VIX"` / `"VIX1D"`, always use `tick.last`
-- **bar_time**: use `currentBarTime()` from `lib/market-hours.mjs`, never hardcode
+- **bar_time**: use `currentBarTime()` from `lib/market-hours.mjs`
 - **Scheduling**: always `msUntilNextMinute()`, never fixed 60s timeouts
-- **session_summary**: upsert with `onConflict: "date"` — safe to re-run open/close writes
-- **Opening price**: currently uses DXFeed Summary for ATM selection, Quote mid for spx_ref. FMP logged for comparison only — do not change source until validated over multiple sessions
-- **Skew 1σ levels**: anchored to `data[0]` (opening snapshot) + first skew of today. Fixed for the day.
+- **session_summary**: upsert with `onConflict: "date"` — safe to re-run
+- **Opening price**: DXFeed Summary for ATM selection, Quote mid for spx_ref. FMP logged for comparison only
+- **Real positions**: `balancesAndPositionsService.getPositionsList()` — not `accountsService`
+- **ECharts**: used in `/analysis` charts only. Lightweight Charts used for live dashboard charts
+- **Analysis session grouping**: done client-side in `AnalysisDashboard.tsx` from raw snapshots
