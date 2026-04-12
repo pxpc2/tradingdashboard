@@ -247,11 +247,6 @@ export default function StraddleSpxChart({
             <span className="inline-block w-2.5 h-0.5 bg-[#737373]" />
             <span className="text-[#666]">SPX</span>
           </span>
-          <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-0.5 bg-[#4ade80] opacity-60" />
-            <span className="inline-block w-2.5 h-0.5 bg-[#f87171] opacity-60" />
-            <span className="text-[#666]">Skew 1σ</span>
-          </span>
         </div>
       </div>
       <div ref={containerRef} className="w-full rounded overflow-hidden" />

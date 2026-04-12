@@ -18,6 +18,7 @@ import { signOut } from "../login/actions";
 import { StraddleSnapshot, RtmSession } from "../types";
 import { FaSignOutAlt } from "react-icons/fa";
 import { useSearchParams } from "next/navigation";
+import { useRealPositions } from "../hooks/useRealPositions";
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
@@ -94,6 +95,13 @@ export default function LiveDashboard({
   const { esData } = useEsData(today, 1);
   const { entries: watchlistEntries } = useWatchlist();
 
+  const {
+    legs: realLegs,
+    streamerSymbols: realSymbols,
+    isLoading: realIsLoading,
+    error: realError,
+  } = useRealPositions();
+
   // First skew snapshot of today — used for skew-adjusted levels
   const openingSkew = useMemo(() => {
     return (
@@ -110,8 +118,9 @@ export default function LiveDashboard({
   const allSymbols = useMemo(() => {
     const set = new Set(CORE_SYMBOLS);
     for (const e of watchlistEntries) set.add(e.streamerSymbol);
+    for (const s of realSymbols) set.add(s);
     return Array.from(set);
-  }, [watchlistEntries]);
+  }, [watchlistEntries, realSymbols]); // add realSymbols to deps
 
   const ticks = useLiveTick(allSymbols);
   const spxTick = ticks["SPX"] ?? null;
@@ -419,6 +428,10 @@ export default function LiveDashboard({
             <PositionsPanel
               smlSession={smlSession}
               flySnapshots={flySnapshots}
+              realLegs={realLegs}
+              realTicks={ticks}
+              realIsLoading={realIsLoading}
+              realError={realError}
             />
           </div>
         </div>

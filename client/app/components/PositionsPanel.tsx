@@ -10,11 +10,18 @@ import {
   SeriesType,
 } from "lightweight-charts";
 import { FlySnapshot, RtmSession } from "../types";
+import { TickData } from "../hooks/useLiveTick";
+import { PositionLeg } from "../api/real-positions/route";
 import { supabase } from "../lib/supabase";
 
 type Props = {
   smlSession: RtmSession | null;
   flySnapshots: FlySnapshot[];
+  // Real positions
+  realLegs: PositionLeg[];
+  realTicks: Record<string, TickData>;
+  realIsLoading: boolean;
+  realError: string | null;
 };
 
 const WIDTH_COLORS: Record<number, string> = {
@@ -25,8 +32,28 @@ const WIDTH_COLORS: Record<number, string> = {
   30: "#f472b6",
 };
 
-export default function PositionsPanel({ smlSession, flySnapshots }: Props) {
-  const [view, setView] = useState<"sml" | "real">("sml");
+function formatExpiry(dateStr: string): string {
+  // "2026-04-17" → "Apr 17"
+  const d = new Date(dateStr + "T12:00:00Z");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function calcPnl(leg: PositionLeg, tick: TickData | null): number | null {
+  const mid = tick?.mid ?? null;
+  if (mid === null || mid === 0) return null;
+  const sign = leg.direction === "Long" ? 1 : -1;
+  return sign * (mid - leg.averageOpenPrice) * leg.quantity * leg.multiplier;
+}
+
+export default function PositionsPanel({
+  smlSession,
+  flySnapshots,
+  realLegs,
+  realTicks,
+  realIsLoading,
+  realError,
+}: Props) {
+  const [view, setView] = useState<"sml" | "real">("real");
   const [activeWidth, setActiveWidth] = useState<number | null>(null);
 
   const widths = smlSession?.widths ?? [];
@@ -48,6 +75,22 @@ export default function PositionsPanel({ smlSession, flySnapshots }: Props) {
 
   const hasSession = smlSession?.sml_ref != null;
 
+  // Total real P&L
+  const totalRealPnl = useMemo(() => {
+    if (realLegs.length === 0) return null;
+    let total = 0;
+    let hasAny = false;
+    for (const leg of realLegs) {
+      const tick = realTicks[leg.streamerSymbol] ?? null;
+      const p = calcPnl(leg, tick);
+      if (p !== null) {
+        total += p;
+        hasAny = true;
+      }
+    }
+    return hasAny ? total : null;
+  }, [realLegs, realTicks]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Header with toggle */}
@@ -56,16 +99,6 @@ export default function PositionsPanel({ smlSession, flySnapshots }: Props) {
           Posições
         </span>
         <div className="ml-auto flex gap-3 text-xs">
-          <button
-            onClick={() => setView("sml")}
-            className={`transition-colors hover:cursor-pointer ${
-              view === "sml"
-                ? "text-[#888] border-b border-[#555]"
-                : "text-[#444]"
-            }`}
-          >
-            SML Fly
-          </button>
           <button
             onClick={() => setView("real")}
             className={`transition-colors hover:cursor-pointer ${
@@ -76,13 +109,22 @@ export default function PositionsPanel({ smlSession, flySnapshots }: Props) {
           >
             Real
           </button>
+          <button
+            onClick={() => setView("sml")}
+            className={`transition-colors hover:cursor-pointer ${
+              view === "sml"
+                ? "text-[#888] border-b border-[#555]"
+                : "text-[#444]"
+            }`}
+          >
+            SML Fly
+          </button>
         </div>
       </div>
 
       {view === "sml" ? (
         hasSession ? (
           <div className="flex-1 flex flex-col">
-            {/* Width tabs */}
             {widths.length > 1 && (
               <div className="flex gap-3 mb-2">
                 {widths.map((w) => (
@@ -101,7 +143,6 @@ export default function PositionsPanel({ smlSession, flySnapshots }: Props) {
               </div>
             )}
 
-            {/* Metrics row */}
             <div className="flex gap-3 text-xs mb-2">
               <span className="text-[#555]">{effectiveWidth}W</span>
               <span>
@@ -127,7 +168,6 @@ export default function PositionsPanel({ smlSession, flySnapshots }: Props) {
               </span>
             </div>
 
-            {/* Lightweight Chart */}
             <div className="flex-1 min-h-[80px] bg-[#111] rounded overflow-hidden">
               {widthSnapshots.length > 0 && effectiveWidth !== null ? (
                 <FlyMiniChart data={widthSnapshots} color={color} />
@@ -142,15 +182,135 @@ export default function PositionsPanel({ smlSession, flySnapshots }: Props) {
           <SmlInputForm />
         )
       ) : (
-        <div className="flex-1 bg-[#111] rounded flex items-center justify-center text-xs text-[#333] uppercase tracking-wide">
-          Posições Tastytrade — em breve
-        </div>
+        <RealPositionsView
+          legs={realLegs}
+          ticks={realTicks}
+          isLoading={realIsLoading}
+          error={realError}
+          totalPnl={totalRealPnl}
+        />
       )}
     </div>
   );
 }
 
-// Lightweight Charts mini chart for fly data
+// ─── Real Positions View ──────────────────────────────────────────────────────
+
+function RealPositionsView({
+  legs,
+  ticks,
+  isLoading,
+  error,
+  totalPnl,
+}: {
+  legs: PositionLeg[];
+  ticks: Record<string, TickData>;
+  isLoading: boolean;
+  error: string | null;
+  totalPnl: number | null;
+}) {
+  if (isLoading && legs.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-xs text-[#333]">
+        Carregando...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-xs text-[#f87171]">
+        {error}
+      </div>
+    );
+  }
+
+  if (legs.length === 0) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-xs text-[#333] uppercase tracking-wide">
+        Sem posições abertas
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Total P&L */}
+      {totalPnl !== null && (
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+            Total P&L
+          </span>
+          <span
+            className="font-mono text-base"
+            style={{ color: totalPnl >= 0 ? "#4ade80" : "#f87171" }}
+          >
+            {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(0)}
+          </span>
+        </div>
+      )}
+
+      {/* Legs list */}
+      <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5">
+        {legs.map((leg) => {
+          const tick = ticks[leg.streamerSymbol] ?? null;
+          const mid = tick?.mid ?? null;
+          const legPnl = calcPnl(leg, tick);
+          const pnlColor =
+            legPnl === null ? "#555" : legPnl >= 0 ? "#4ade80" : "#f87171";
+
+          return (
+            <div
+              key={leg.symbol}
+              className="bg-[#111] rounded px-2 py-1.5 flex items-center gap-2"
+            >
+              {/* Direction indicator */}
+              <div
+                className="w-0.5 h-5 shrink-0"
+                style={{
+                  backgroundColor:
+                    leg.direction === "Long" ? "#4ade80" : "#f87171",
+                }}
+              />
+
+              {/* Strike + expiry + type */}
+              <div className="flex-1 min-w-0">
+                <div className="font-mono text-sm text-[#9ca3af]">
+                  {leg.strike.toFixed(0)}
+                  {leg.optionType}{" "}
+                  <span className="text-xs text-[#555]">
+                    {formatExpiry(leg.expiryDate)}
+                  </span>
+                </div>
+                <div className="font-sans text-[10px] text-[#444] uppercase">
+                  {leg.direction} {leg.quantity} × {leg.underlyingSymbol}
+                </div>
+              </div>
+
+              {/* Mid + entry + P&L */}
+              <div className="text-right shrink-0">
+                <div className="font-mono text-xs text-[#9ca3af]">
+                  {mid !== null ? mid.toFixed(2) : "—"}
+                  <span className="text-[#444] ml-1">
+                    / {leg.averageOpenPrice.toFixed(2)}
+                  </span>
+                </div>
+                <div className="font-mono text-xs" style={{ color: pnlColor }}>
+                  {legPnl !== null
+                    ? `${legPnl >= 0 ? "+" : ""}$${legPnl.toFixed(0)}`
+                    : "—"}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Fly Mini Chart ───────────────────────────────────────────────────────────
+
 function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -160,14 +320,8 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
     if (!containerRef.current) return;
 
     const chart = createChart(containerRef.current, {
-      layout: {
-        background: { color: "#111111" },
-        textColor: "#444444",
-      },
-      grid: {
-        vertLines: { visible: false },
-        horzLines: { color: "#1a1a1a" },
-      },
+      layout: { background: { color: "#111111" }, textColor: "#444444" },
+      grid: { vertLines: { visible: false }, horzLines: { color: "#1a1a1a" } },
       crosshair: {
         vertLine: { color: "#333333" },
         horzLine: { color: "#333333" },
@@ -186,13 +340,12 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
     });
 
     const series = chart.addSeries(LineSeries, {
-      color: color,
+      color,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,
     });
 
-    // Add zero line
     series.createPriceLine({
       price: 0,
       color: "#333",
@@ -222,7 +375,6 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
 
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
-
     const points = data
       .map((s) => ({
         time: Math.floor(
@@ -231,9 +383,7 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
         value: s.mid,
       }))
       .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
-
     seriesRef.current.setData(points);
-
     try {
       chartRef.current.timeScale().fitContent();
     } catch {}
@@ -242,7 +392,8 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
   return <div ref={containerRef} className="w-full h-full" />;
 }
 
-// SML Input Form when no session exists
+// ─── SML Input Form ───────────────────────────────────────────────────────────
+
 function SmlInputForm() {
   const [smlRef, setSmlRef] = useState("");
   const [widths, setWidths] = useState<number[]>([15, 20]);
@@ -260,15 +411,13 @@ function SmlInputForm() {
   const handleSubmit = async () => {
     const ref = parseFloat(smlRef);
     if (isNaN(ref) || widths.length === 0) return;
-
     setIsSubmitting(true);
     try {
       await supabase.from("rtm_sessions").insert({
         sml_ref: ref,
-        widths: widths,
+        widths,
         type: optType,
       });
-      // Session will appear via realtime subscription
     } catch (err) {
       console.error("Failed to create session:", err);
     }
@@ -281,7 +430,6 @@ function SmlInputForm() {
         adicionar sml fly do dia
       </div>
 
-      {/* SML Reference */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-[#555] w-12">SML</span>
         <input
@@ -293,7 +441,6 @@ function SmlInputForm() {
         />
       </div>
 
-      {/* Widths */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-[#555] w-12">Width</span>
         <div className="flex gap-1.5">
@@ -313,34 +460,25 @@ function SmlInputForm() {
         </div>
       </div>
 
-      {/* Type */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-[#555] w-12">Type</span>
         <div className="flex gap-1.5">
-          <button
-            onClick={() => setOptType("put")}
-            className={`text-xs px-2 py-0.5 rounded transition-colors hover:cursor-pointer ${
-              optType === "put"
-                ? "bg-[#222] text-[#9ca3af]"
-                : "bg-transparent text-[#444] border border-[#222]"
-            }`}
-          >
-            Put
-          </button>
-          <button
-            onClick={() => setOptType("call")}
-            className={`text-xs px-2 py-0.5 rounded transition-colors hover:cursor-pointer ${
-              optType === "call"
-                ? "bg-[#222] text-[#9ca3af]"
-                : "bg-transparent text-[#444] border border-[#222]"
-            }`}
-          >
-            Call
-          </button>
+          {(["put", "call"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setOptType(t)}
+              className={`text-xs px-2 py-0.5 rounded transition-colors hover:cursor-pointer ${
+                optType === t
+                  ? "bg-[#222] text-[#9ca3af]"
+                  : "bg-transparent text-[#444] border border-[#222]"
+              }`}
+            >
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Submit */}
       <button
         onClick={handleSubmit}
         disabled={isSubmitting || !smlRef || widths.length === 0}
