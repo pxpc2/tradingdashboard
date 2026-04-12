@@ -13,6 +13,7 @@ import {
   getSpxOpenPrice,
   getSpxQuoteMid,
   getEsMid,
+  getIndexLast,
   withTimeout,
 } from "../lib/dxfeed.mjs";
 import {
@@ -24,6 +25,7 @@ import {
 import { ES_SYMBOL } from "./ohlc.mjs";
 
 let openCycleFiredDate = null;
+let closeCycleFiredDate = null;
 let skewCycleCount = 0;
 let lastSkipLog = 0;
 
@@ -36,19 +38,28 @@ function shouldFireOpenCycle() {
   return time >= "09:30:00" && time <= "09:30:30";
 }
 
+function shouldFireCloseCycle() {
+  const day = getETDay();
+  const time = getETTime();
+  const today = getTodayET();
+  if (["Sat", "Sun"].includes(day)) return false;
+  if (closeCycleFiredDate === today) return false;
+  return time >= "16:00:00" && time <= "16:01:00";
+}
+
+// ─── FMP helpers ─────────────────────────────────────────────────────────────
+
 async function getFmpOpenPrice() {
   try {
     const todayET = getTodayET();
-    const fmpUrl = `https://financialmodelingprep.com/api/v3/historical-chart/1min/%5ESPX?apikey=${process.env.FMP_API_KEY}&limit=5`;
-    const res = await withTimeout(fetch(fmpUrl), 8000, "FMP open price");
+    const url = `https://financialmodelingprep.com/api/v3/historical-chart/1min/%5ESPX?apikey=${process.env.FMP_API_KEY}&limit=5`;
+    const res = await withTimeout(fetch(url), 8000, "FMP open price");
     const json = await res.json();
     if (!Array.isArray(json)) return null;
-
-    // FMP returns ET times as "YYYY-MM-DD HH:MM:SS", newest first
     const openBar = json.find((bar) => {
       if (!bar.date) return false;
       const barDay = bar.date.slice(0, 10);
-      const barTime = bar.date.slice(11, 16); // "HH:MM"
+      const barTime = bar.date.slice(11, 16);
       return barDay === todayET && barTime === "09:30";
     });
     return openBar ?? null;
@@ -57,6 +68,182 @@ async function getFmpOpenPrice() {
     return null;
   }
 }
+
+async function hasHighImpactMacro(dateET) {
+  try {
+    const url = `https://financialmodelingprep.com/api/v3/economic_calendar?from=${dateET}&to=${dateET}&apikey=${process.env.FMP_API_KEY}`;
+    const res = await withTimeout(fetch(url), 8000, "FMP macro events");
+    const json = await res.json();
+    return (
+      Array.isArray(json) &&
+      json.some((e) => e.impact === "High" && e.country === "US")
+    );
+  } catch {
+    return false;
+  }
+}
+
+// ─── Session Summary ──────────────────────────────────────────────────────────
+
+async function writeOpenSummary({
+  today,
+  spxMid,
+  atmStrike,
+  straddleMid,
+  esBasis,
+}) {
+  try {
+    const [vix, vix1d] = await Promise.all([
+      getIndexLast("VIX"),
+      getIndexLast("VIX1D"),
+    ]);
+
+    const vix1dVixRatio =
+      vix && vix1d && vix > 0 ? parseFloat((vix1d / vix).toFixed(4)) : null;
+
+    const highImpact = await hasHighImpactMacro(today);
+
+    const dayOfWeek = new Date().toLocaleDateString("en-US", {
+      timeZone: "America/New_York",
+      weekday: "long",
+    });
+
+    // Get first skew snapshot of today if already available
+    const { data: skewRows } = await supabase
+      .from("skew_snapshots")
+      .select("skew, put_iv, call_iv, atm_iv")
+      .gte("created_at", `${today}T00:00:00`)
+      .lt("created_at", `${today}T23:59:59`)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    const skewRow = skewRows?.[0] ?? null;
+
+    const { error } = await withTimeout(
+      supabase.from("session_summary").upsert(
+        {
+          date: today,
+          opening_spx: spxMid,
+          opening_atm_strike: atmStrike,
+          opening_straddle: straddleMid,
+          opening_skew: skewRow?.skew ?? null,
+          opening_put_iv: skewRow?.put_iv ?? null,
+          opening_call_iv: skewRow?.call_iv ?? null,
+          opening_atm_iv: skewRow?.atm_iv ?? null,
+          opening_vix: vix,
+          opening_vix1d: vix1d,
+          opening_vix1d_vix_ratio: vix1dVixRatio,
+          opening_es_basis: esBasis,
+          has_high_impact_macro: highImpact,
+          day_of_week: dayOfWeek,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "date" },
+      ),
+      10000,
+      "session_summary open upsert",
+    );
+
+    if (error) {
+      console.error(`[${nowCT()}] session_summary open error:`, error.message);
+    } else {
+      console.log(
+        `[${nowCT()}] 📋 Open summary | VIX: ${vix?.toFixed(2)} | VIX1D: ${vix1d?.toFixed(2)} | ratio: ${vix1dVixRatio} | macro: ${highImpact} | day: ${dayOfWeek}`,
+      );
+    }
+  } catch (err) {
+    console.error(`[${nowCT()}] writeOpenSummary error:`, err.message);
+  }
+}
+
+async function writeCloseSummary(today) {
+  try {
+    const { data: straddleRows } = await supabase
+      .from("straddle_snapshots")
+      .select("spx_ref, straddle_mid, created_at")
+      .gte("created_at", `${today}T00:00:00`)
+      .lt("created_at", `${today}T23:59:59`)
+      .order("created_at", { ascending: true });
+
+    if (!straddleRows || straddleRows.length === 0) {
+      console.log(`[${nowCT()}] writeCloseSummary: no straddle rows found.`);
+      return;
+    }
+
+    const opening = straddleRows[0];
+    const closing = straddleRows[straddleRows.length - 1];
+    const openSpx = opening.spx_ref;
+    const closeSpx = closing.spx_ref;
+    const openStraddle = opening.straddle_mid;
+
+    const realizedMovePts = Math.abs(closeSpx - openSpx);
+    const realizedMovePct =
+      openStraddle > 0
+        ? parseFloat(((realizedMovePts / openStraddle) * 100).toFixed(1))
+        : null;
+
+    const maxSpx = Math.max(...straddleRows.map((r) => r.spx_ref));
+    const minSpx = Math.min(...straddleRows.map((r) => r.spx_ref));
+    const maxIntradayPts = Math.max(maxSpx - openSpx, openSpx - minSpx);
+    const maxIntradayPct =
+      openStraddle > 0
+        ? parseFloat(((maxIntradayPts / openStraddle) * 100).toFixed(1))
+        : null;
+
+    const { data: skewRows } = await supabase
+      .from("skew_snapshots")
+      .select("skew, created_at")
+      .gte("created_at", `${today}T00:00:00`)
+      .lt("created_at", `${today}T23:59:59`)
+      .order("created_at", { ascending: true });
+
+    let closingSkew = null;
+    let skewDirection = null;
+
+    if (skewRows && skewRows.length >= 2) {
+      const firstSkew = skewRows[0].skew;
+      closingSkew = skewRows[skewRows.length - 1].skew;
+      const diff = closingSkew - firstSkew;
+      skewDirection =
+        Math.abs(diff) < 0.005 ? "flat" : diff > 0 ? "up" : "down";
+    } else if (skewRows && skewRows.length === 1) {
+      closingSkew = skewRows[0].skew;
+      skewDirection = "flat";
+    }
+
+    const { error } = await withTimeout(
+      supabase.from("session_summary").upsert(
+        {
+          date: today,
+          closing_spx: closeSpx,
+          closing_straddle: closing.straddle_mid,
+          closing_skew: closingSkew,
+          realized_move_pts: parseFloat(realizedMovePts.toFixed(2)),
+          realized_move_pct_of_straddle: realizedMovePct,
+          max_intraday_pts: parseFloat(maxIntradayPts.toFixed(2)),
+          max_intraday_pct_of_straddle: maxIntradayPct,
+          spx_closed_above_open: closeSpx > openSpx,
+          skew_direction: skewDirection,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "date" },
+      ),
+      10000,
+      "session_summary close upsert",
+    );
+
+    if (error) {
+      console.error(`[${nowCT()}] session_summary close error:`, error.message);
+    } else {
+      console.log(
+        `[${nowCT()}] 📋 Close summary | realized: ${realizedMovePts.toFixed(1)}pts (${realizedMovePct}%) | max: ${maxIntradayPts.toFixed(1)}pts | skew: ${skewDirection} | spx ${closeSpx > openSpx ? "▲" : "▼"}`,
+      );
+    }
+  } catch (err) {
+    console.error(`[${nowCT()}] writeCloseSummary error:`, err.message);
+  }
+}
+
+// ─── BSM / Skew ──────────────────────────────────────────────────────────────
 
 async function computeAndStoreSkew(allOptions, spxMid) {
   try {
@@ -241,6 +428,9 @@ async function computeAndStoreSkew(allOptions, spxMid) {
   }
 }
 
+// ─── Main cycle ───────────────────────────────────────────────────────────────
+
+// Returns open cycle data if isOpenCycle, otherwise null
 async function runCycle(isOpenCycle = false) {
   if (!isMarketHours()) {
     const now = Date.now();
@@ -248,7 +438,7 @@ async function runCycle(isOpenCycle = false) {
       console.log(`[${nowCT()}] SPX fechado, tentaremos mais tarde.`);
       lastSkipLog = now;
     }
-    return;
+    return null;
   }
 
   try {
@@ -264,7 +454,7 @@ async function runCycle(isOpenCycle = false) {
       console.log(
         `[${nowCT()}] Nenhuma opção SPXW encontrada, tentaremos mais tarde.`,
       );
-      return;
+      return null;
     }
 
     const strikes = [
@@ -286,9 +476,8 @@ async function runCycle(isOpenCycle = false) {
 
     if (isOpenCycle) {
       console.log(`[${nowCT()}] ============================================`);
-      console.log(`[${nowCT()}] *** OPEN CYCLE — fetching SPX opening price`);
+      console.log(`[${nowCT()}] 🔔 OPEN CYCLE — fetching SPX opening price`);
 
-      // DXFeed reference
       const { openPrice: dxSummaryOpen, quoteMid: dxQuoteMid } =
         await getSpxOpenPrice();
       console.log(
@@ -298,7 +487,6 @@ async function runCycle(isOpenCycle = false) {
         `[${nowCT()}]    DXFeed Quote mid         : ${dxQuoteMid?.toFixed(2) ?? "N/A"}`,
       );
 
-      // FMP reference
       const fmpBar = await getFmpOpenPrice();
       const fmpOpenPrice = fmpBar?.open ?? null;
       if (fmpBar) {
@@ -309,7 +497,6 @@ async function runCycle(isOpenCycle = false) {
         console.log(`[${nowCT()}]    FMP 09:30 bar            : N/A`);
       }
 
-      // Use DXFeed as before — log comparison
       spxMid = dxQuoteMid;
       const refForAtm = dxSummaryOpen ?? dxQuoteMid;
       atmStrikePrice = strikes.reduce((prev, curr) =>
@@ -366,7 +553,7 @@ async function runCycle(isOpenCycle = false) {
       console.log(
         `[${nowCT()}] ATM call/put não encontrados para strike ${atmStrikePrice}.`,
       );
-      return;
+      return null;
     }
 
     const straddleSymbols = [
@@ -428,94 +615,115 @@ async function runCycle(isOpenCycle = false) {
       .limit(1);
 
     const session = sessions?.[0] ?? null;
-    if (!session) return;
+    if (session) {
+      const smlStrike = session.sml_ref;
+      const sessionWidths = session.widths ?? [];
+      const optType = session.type === "put" ? "P" : "C";
 
-    const smlStrike = session.sml_ref;
-    const sessionWidths = session.widths ?? [];
-    const optType = session.type === "put" ? "P" : "C";
+      if (smlStrike && sessionWidths.length > 0) {
+        const flyStrikeSet = new Set();
+        for (const width of sessionWidths) {
+          flyStrikeSet.add(smlStrike - width);
+          flyStrikeSet.add(smlStrike);
+          flyStrikeSet.add(smlStrike + width);
+        }
 
-    if (!smlStrike || sessionWidths.length === 0) return;
+        const flySymbols = [...flyStrikeSet]
+          .map((s) => getStreamerSymbol(s, optType))
+          .filter(Boolean);
 
-    const flyStrikeSet = new Set();
-    for (const width of sessionWidths) {
-      flyStrikeSet.add(smlStrike - width);
-      flyStrikeSet.add(smlStrike);
-      flyStrikeSet.add(smlStrike + width);
-    }
+        if (flySymbols.length > 0) {
+          const flyQuotes = await getQuotes(flySymbols);
 
-    const flySymbols = [...flyStrikeSet]
-      .map((s) => getStreamerSymbol(s, optType))
-      .filter(Boolean);
-    if (flySymbols.length === 0) {
-      console.log(
-        `[${nowCT()}] Nenhum 'fly symbol' encontrado, tentaremos mais tarde.`,
-      );
-      return;
-    }
+          function getFlyLegPrices(strike) {
+            const symbol = getStreamerSymbol(strike, optType);
+            const quote = flyQuotes[symbol];
+            if (!quote) return null;
+            return {
+              bid: quote.bidPrice,
+              ask: quote.askPrice,
+              mid: (quote.bidPrice + quote.askPrice) / 2,
+            };
+          }
 
-    const flyQuotes = await getQuotes(flySymbols);
+          for (const width of sessionWidths) {
+            const lower = getFlyLegPrices(smlStrike - width);
+            const center = getFlyLegPrices(smlStrike);
+            const upper = getFlyLegPrices(smlStrike + width);
 
-    function getFlyLegPrices(strike) {
-      const symbol = getStreamerSymbol(strike, optType);
-      const quote = flyQuotes[symbol];
-      if (!quote) return null;
-      return {
-        bid: quote.bidPrice,
-        ask: quote.askPrice,
-        mid: (quote.bidPrice + quote.askPrice) / 2,
-      };
-    }
+            if (!lower || !center || !upper) {
+              console.log(
+                `[${nowCT()}] Quotes para ${width}W fly não encontradas.`,
+              );
+              continue;
+            }
 
-    for (const width of sessionWidths) {
-      const lower = getFlyLegPrices(smlStrike - width);
-      const center = getFlyLegPrices(smlStrike);
-      const upper = getFlyLegPrices(smlStrike + width);
+            const flyMid = lower.mid + upper.mid - 2 * center.mid;
+            const flyBid = lower.bid + upper.bid - 2 * center.ask;
+            const flyAsk = lower.ask + upper.ask - 2 * center.bid;
 
-      if (!lower || !center || !upper) {
-        console.log(
-          `[${nowCT()}] Quotes para ${width}W fly não encontradas, tentaremos mais tarde.`,
-        );
-        continue;
-      }
+            const { error: flyError } = await withTimeout(
+              supabase.from("sml_fly_snapshots").insert({
+                session_id: session.id,
+                width,
+                mid: flyMid,
+                bid: flyBid,
+                ask: flyAsk,
+              }),
+              10000,
+              `fly insert ${width}W`,
+            );
 
-      const flyMid = lower.mid + upper.mid - 2 * center.mid;
-      const flyBid = lower.bid + upper.bid - 2 * center.ask;
-      const flyAsk = lower.ask + upper.ask - 2 * center.bid;
-
-      const { error: flyError } = await withTimeout(
-        supabase.from("sml_fly_snapshots").insert({
-          session_id: session.id,
-          width,
-          mid: flyMid,
-          bid: flyBid,
-          ask: flyAsk,
-        }),
-        10000,
-        `fly insert ${width}W`,
-      );
-
-      if (flyError) {
-        console.error(
-          `[${nowCT()}] Fly insert error (${width}W):`,
-          flyError.message,
-        );
-      } else {
-        console.log(
-          `[${nowCT()}] Fly ${width}W | bid: ${flyBid.toFixed(2)} | mid: ${flyMid.toFixed(2)} | ask: ${flyAsk.toFixed(2)}`,
-        );
+            if (flyError) {
+              console.error(
+                `[${nowCT()}] Fly insert error (${width}W):`,
+                flyError.message,
+              );
+            } else {
+              console.log(
+                `[${nowCT()}] Fly ${width}W | bid: ${flyBid.toFixed(2)} | mid: ${flyMid.toFixed(2)} | ask: ${flyAsk.toFixed(2)}`,
+              );
+            }
+          }
+        }
       }
     }
+
+    // Return open cycle data for session summary
+    if (isOpenCycle) {
+      return { spxMid, atmStrike: atmStrikePrice, straddleMid, esBasis };
+    }
+    return null;
   } catch (err) {
     console.error(`[${nowCT()}] Cycle error:`, err.message);
+    return null;
   }
 }
+
+// ─── Scheduler ───────────────────────────────────────────────────────────────
 
 export async function runAndScheduleNext() {
   if (shouldFireOpenCycle()) {
     openCycleFiredDate = getTodayET();
     skewCycleCount = 0;
     console.log(`[${nowCT()}] 🔔 Disparando ciclo de abertura...`);
-    await runCycle(true);
+    const openData = await runCycle(true);
+    if (openData) {
+      // Write session summary open — fire and forget, don't block next cycle
+      writeOpenSummary({
+        today: getTodayET(),
+        ...openData,
+      }).catch((err) =>
+        console.error(`[${nowCT()}] writeOpenSummary failed:`, err.message),
+      );
+    }
+  } else if (shouldFireCloseCycle()) {
+    closeCycleFiredDate = getTodayET();
+    console.log(`[${nowCT()}] 🔔 Disparando ciclo de fechamento...`);
+    await runCycle(false);
+    writeCloseSummary(getTodayET()).catch((err) =>
+      console.error(`[${nowCT()}] writeCloseSummary failed:`, err.message),
+    );
   } else {
     await runCycle(false);
   }

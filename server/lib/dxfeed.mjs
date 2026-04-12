@@ -164,3 +164,34 @@ export async function collectOhlc(quoteSymbols, tradeSymbols, durationMs) {
     }, durationMs);
   });
 }
+
+// Fetch last trade price for an index symbol (VIX, VIX1D etc)
+// Uses Trade event — bid/ask are 0 for indices
+export async function getIndexLast(symbol) {
+  try {
+    return await withTimeout(
+      new Promise((resolve) => {
+        const listener = (events) => {
+          const trade = events.find(
+            (e) =>
+              e.eventSymbol === symbol &&
+              e.eventType === "Trade" &&
+              e.price > 0,
+          );
+          if (trade) {
+            client.quoteStreamer.removeEventListener(listener);
+            client.quoteStreamer.unsubscribe([symbol]);
+            resolve(trade.price);
+          }
+        };
+        client.quoteStreamer.addEventListener(listener);
+        client.quoteStreamer.subscribe([symbol]);
+      }),
+      10000,
+      `${symbol} last`,
+    );
+  } catch {
+    console.log(`[${nowCT()}] ${symbol} Trade timeout/error — skipping.`);
+    return null;
+  }
+}
