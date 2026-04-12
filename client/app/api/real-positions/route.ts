@@ -12,6 +12,7 @@ export type PositionLeg = {
   direction: "Long" | "Short";
   quantity: number;
   multiplier: number;
+  createdAt: string;
   averageOpenPrice: number;
 };
 
@@ -70,12 +71,6 @@ export async function GET() {
       ? rawPositions
       : ((rawPositions as any)?.items ?? []);
 
-    console.log("[real-positions] raw count:", positions.length);
-    console.log(
-      "[real-positions] raw positions:",
-      JSON.stringify(positions, null, 2),
-    );
-
     const legs: PositionLeg[] = [];
 
     for (const pos of positions) {
@@ -96,6 +91,7 @@ export async function GET() {
       const averageOpenPrice: number = parseFloat(
         pos["average-open-price"] ?? "0",
       );
+      const createdAt: string = pos["created-at"] ?? new Date().toISOString();
 
       const parsed = parseOptionSymbol(symbol);
       if (!parsed) continue;
@@ -110,6 +106,7 @@ export async function GET() {
         direction,
         quantity,
         multiplier,
+        createdAt,
         averageOpenPrice,
       });
     }

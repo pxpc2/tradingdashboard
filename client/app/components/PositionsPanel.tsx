@@ -17,7 +17,6 @@ import { supabase } from "../lib/supabase";
 type Props = {
   smlSession: RtmSession | null;
   flySnapshots: FlySnapshot[];
-  // Real positions
   realLegs: PositionLeg[];
   realTicks: Record<string, TickData>;
   realIsLoading: boolean;
@@ -32,8 +31,130 @@ const WIDTH_COLORS: Record<number, string> = {
   30: "#f472b6",
 };
 
+// ─── Trade Grouping ───────────────────────────────────────────────────────────
+
+type TradeStructure =
+  | "Naked"
+  | "Call Spread"
+  | "Put Spread"
+  | "Call Butterfly"
+  | "Put Butterfly"
+  | "Unknown";
+
+type TradeGroup = {
+  id: string;
+  structure: TradeStructure;
+  underlyingSymbol: string;
+  expiryDate: string;
+  optionType: "C" | "P";
+  label: string;
+  legs: PositionLeg[];
+  totalPnl: number | null;
+};
+
+function groupLegs(
+  legs: PositionLeg[],
+  ticks: Record<string, TickData>,
+): TradeGroup[] {
+  if (legs.length === 0) return [];
+
+  const sorted = [...legs].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+
+  // Cluster by 10s window + same underlying + expiry + optionType
+  const clusters: PositionLeg[][] = [];
+  let current: PositionLeg[] = [sorted[0]];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+    const timeDiff = Math.abs(
+      new Date(curr.createdAt).getTime() - new Date(prev.createdAt).getTime(),
+    );
+    const sameGroup =
+      timeDiff <= 10000 &&
+      curr.underlyingSymbol === prev.underlyingSymbol &&
+      curr.expiryDate === prev.expiryDate &&
+      curr.optionType === prev.optionType;
+
+    if (sameGroup) {
+      current.push(curr);
+    } else {
+      clusters.push(current);
+      current = [curr];
+    }
+  }
+  clusters.push(current);
+
+  return clusters.map((cluster, idx) => {
+    const underlying = cluster[0].underlyingSymbol;
+    const expiry = cluster[0].expiryDate;
+    const optType = cluster[0].optionType;
+    const typeName = optType === "P" ? "Put" : "Call";
+
+    const legPnls = cluster.map((leg) => {
+      const tick = ticks[leg.streamerSymbol] ?? null;
+      const mid = tick?.mid ?? null;
+      if (mid === null || mid === 0) return null;
+      const sign = leg.direction === "Long" ? 1 : -1;
+      return (
+        sign * (mid - leg.averageOpenPrice) * leg.quantity * leg.multiplier
+      );
+    });
+
+    const allHavePnl = legPnls.every((p) => p !== null);
+    const totalPnl = allHavePnl ? legPnls.reduce((a, b) => a! + b!, 0) : null;
+
+    let structure: TradeStructure = "Unknown";
+    let label = `${typeName} (${cluster.length} legs)`;
+
+    if (cluster.length === 1) {
+      structure = "Naked";
+      const leg = cluster[0];
+      label = `${leg.strike}${optType} ${typeName}`;
+    } else if (cluster.length === 2) {
+      const [l0, l1] = [...cluster].sort((a, b) => a.strike - b.strike);
+      const oppDirs = l0.direction !== l1.direction;
+      const eqQty = l0.quantity === l1.quantity;
+      if (oppDirs && eqQty) {
+        structure = optType === "P" ? "Put Spread" : "Call Spread";
+        label = `${l0.strike}/${l1.strike} ${typeName} Spread`;
+      }
+    } else if (cluster.length === 3) {
+      const [low, mid2, high] = [...cluster].sort(
+        (a, b) => a.strike - b.strike,
+      );
+      const wingWidth1 = mid2.strike - low.strike;
+      const wingWidth2 = high.strike - mid2.strike;
+      const symmetric = Math.abs(wingWidth1 - wingWidth2) < 0.01;
+      const centerDouble = Math.abs(mid2.quantity - low.quantity * 2) < 0.01;
+      const centerOpp =
+        mid2.direction !== low.direction && mid2.direction !== high.direction;
+      const wingsMatch = low.direction === high.direction;
+
+      if (symmetric && centerDouble && centerOpp && wingsMatch) {
+        structure = optType === "P" ? "Put Butterfly" : "Call Butterfly";
+        label = `${low.strike}/${mid2.strike}/${high.strike} ${typeName} Fly`;
+      }
+    }
+
+    return {
+      id: `group-${idx}`,
+      structure,
+      underlyingSymbol: underlying,
+      expiryDate: expiry,
+      optionType: optType,
+      label,
+      legs: cluster,
+      totalPnl: totalPnl ?? null,
+    };
+  });
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function formatExpiry(dateStr: string): string {
-  // "2026-04-17" → "Apr 17"
   const d = new Date(dateStr + "T12:00:00Z");
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
@@ -44,6 +165,8 @@ function calcPnl(leg: PositionLeg, tick: TickData | null): number | null {
   const sign = leg.direction === "Long" ? 1 : -1;
   return sign * (mid - leg.averageOpenPrice) * leg.quantity * leg.multiplier;
 }
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function PositionsPanel({
   smlSession,
@@ -72,28 +195,28 @@ export default function PositionsPanel({
   const pnl = latest && entry ? latest.mid - entry.mid : null;
   const color =
     effectiveWidth !== null ? (WIDTH_COLORS[effectiveWidth] ?? "#888") : "#888";
-
   const hasSession = smlSession?.sml_ref != null;
 
-  // Total real P&L
+  const groups = useMemo(
+    () => groupLegs(realLegs, realTicks),
+    [realLegs, realTicks],
+  );
+
   const totalRealPnl = useMemo(() => {
-    if (realLegs.length === 0) return null;
+    if (groups.length === 0) return null;
     let total = 0;
     let hasAny = false;
-    for (const leg of realLegs) {
-      const tick = realTicks[leg.streamerSymbol] ?? null;
-      const p = calcPnl(leg, tick);
-      if (p !== null) {
-        total += p;
+    for (const g of groups) {
+      if (g.totalPnl !== null) {
+        total += g.totalPnl;
         hasAny = true;
       }
     }
     return hasAny ? total : null;
-  }, [realLegs, realTicks]);
+  }, [groups]);
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header with toggle */}
       <div className="flex items-center mb-2">
         <span className="font-sans text-xs text-[#555] uppercase tracking-wide">
           Posições
@@ -101,21 +224,13 @@ export default function PositionsPanel({
         <div className="ml-auto flex gap-3 text-xs">
           <button
             onClick={() => setView("real")}
-            className={`transition-colors hover:cursor-pointer ${
-              view === "real"
-                ? "text-[#888] border-b border-[#555]"
-                : "text-[#444]"
-            }`}
+            className={`transition-colors hover:cursor-pointer ${view === "real" ? "text-[#888] border-b border-[#555]" : "text-[#444]"}`}
           >
             Real
           </button>
           <button
             onClick={() => setView("sml")}
-            className={`transition-colors hover:cursor-pointer ${
-              view === "sml"
-                ? "text-[#888] border-b border-[#555]"
-                : "text-[#444]"
-            }`}
+            className={`transition-colors hover:cursor-pointer ${view === "sml" ? "text-[#888] border-b border-[#555]" : "text-[#444]"}`}
           >
             SML Fly
           </button>
@@ -131,18 +246,13 @@ export default function PositionsPanel({
                   <button
                     key={w}
                     onClick={() => setActiveWidth(w)}
-                    className={`font-mono text-xs px-2 py-0.5 transition-colors hover:cursor-pointer ${
-                      effectiveWidth === w
-                        ? "text-[#888] border-b border-[#555]"
-                        : "text-[#444]"
-                    }`}
+                    className={`font-mono text-xs px-2 py-0.5 transition-colors hover:cursor-pointer ${effectiveWidth === w ? "text-[#888] border-b border-[#555]" : "text-[#444]"}`}
                   >
                     {w}W
                   </button>
                 ))}
               </div>
             )}
-
             <div className="flex gap-3 text-xs mb-2">
               <span className="text-[#555]">{effectiveWidth}W</span>
               <span>
@@ -167,7 +277,6 @@ export default function PositionsPanel({
                 {pnl !== null ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}` : "—"}
               </span>
             </div>
-
             <div className="flex-1 min-h-[80px] bg-[#111] rounded overflow-hidden">
               {widthSnapshots.length > 0 && effectiveWidth !== null ? (
                 <FlyMiniChart data={widthSnapshots} color={color} />
@@ -183,7 +292,7 @@ export default function PositionsPanel({
         )
       ) : (
         <RealPositionsView
-          legs={realLegs}
+          groups={groups}
           ticks={realTicks}
           isLoading={realIsLoading}
           error={realError}
@@ -197,26 +306,35 @@ export default function PositionsPanel({
 // ─── Real Positions View ──────────────────────────────────────────────────────
 
 function RealPositionsView({
-  legs,
+  groups,
   ticks,
   isLoading,
   error,
   totalPnl,
 }: {
-  legs: PositionLeg[];
+  groups: TradeGroup[];
   ticks: Record<string, TickData>;
   isLoading: boolean;
   error: string | null;
   totalPnl: number | null;
 }) {
-  if (isLoading && legs.length === 0) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggleExpand(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  if (isLoading && groups.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-xs text-[#333]">
         Carregando...
       </div>
     );
   }
-
   if (error) {
     return (
       <div className="flex-1 flex items-center justify-center text-xs text-[#f87171]">
@@ -224,8 +342,7 @@ function RealPositionsView({
       </div>
     );
   }
-
-  if (legs.length === 0) {
+  if (groups.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-xs text-[#333] uppercase tracking-wide">
         Sem posições abertas
@@ -235,7 +352,6 @@ function RealPositionsView({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* Total P&L */}
       {totalPnl !== null && (
         <div className="flex items-center justify-between mb-2">
           <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
@@ -250,57 +366,154 @@ function RealPositionsView({
         </div>
       )}
 
-      {/* Legs list */}
       <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5">
-        {legs.map((leg) => {
-          const tick = ticks[leg.streamerSymbol] ?? null;
-          const mid = tick?.mid ?? null;
-          const legPnl = calcPnl(leg, tick);
+        {groups.map((group) => {
+          if (group.structure === "Unknown") {
+            // Fall back to individual legs
+            return group.legs.map((leg) => {
+              const tick = ticks[leg.streamerSymbol] ?? null;
+              const mid = tick?.mid ?? null;
+              const legPnl = calcPnl(leg, tick);
+              const pnlColor =
+                legPnl === null ? "#555" : legPnl >= 0 ? "#4ade80" : "#f87171";
+              return (
+                <div
+                  key={leg.symbol}
+                  className="bg-[#111] rounded px-2 py-1.5 flex items-center gap-2"
+                >
+                  <div
+                    className="w-0.5 h-5 shrink-0"
+                    style={{
+                      backgroundColor:
+                        leg.direction === "Long" ? "#4ade80" : "#f87171",
+                    }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-mono text-sm text-[#9ca3af]">
+                      {leg.strike}
+                      {leg.optionType}{" "}
+                      <span className="text-xs text-[#555]">
+                        {formatExpiry(leg.expiryDate)}
+                      </span>
+                    </div>
+                    <div className="font-sans text-[10px] text-[#444] uppercase">
+                      {leg.direction} {leg.quantity} × {leg.underlyingSymbol}
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="font-mono text-xs text-[#9ca3af]">
+                      {mid !== null ? mid.toFixed(2) : "—"}
+                      <span className="text-[#444] ml-1">
+                        / {leg.averageOpenPrice.toFixed(2)}
+                      </span>
+                    </div>
+                    <div
+                      className="font-mono text-xs"
+                      style={{ color: pnlColor }}
+                    >
+                      {legPnl !== null
+                        ? `${legPnl >= 0 ? "+" : ""}$${legPnl.toFixed(2)}`
+                        : "—"}
+                    </div>
+                  </div>
+                </div>
+              );
+            });
+          }
+
+          const isExp = expanded.has(group.id);
           const pnlColor =
-            legPnl === null ? "#555" : legPnl >= 0 ? "#4ade80" : "#f87171";
+            group.totalPnl === null
+              ? "#555"
+              : group.totalPnl >= 0
+                ? "#4ade80"
+                : "#f87171";
 
           return (
-            <div
-              key={leg.symbol}
-              className="bg-[#111] rounded px-2 py-1.5 flex items-center gap-2"
-            >
-              {/* Direction indicator */}
+            <div key={group.id} className="bg-[#111] rounded overflow-hidden">
+              {/* Group header */}
               <div
-                className="w-0.5 h-5 shrink-0"
-                style={{
-                  backgroundColor:
-                    leg.direction === "Long" ? "#4ade80" : "#f87171",
-                }}
-              />
-
-              {/* Strike + expiry + type */}
-              <div className="flex-1 min-w-0">
-                <div className="font-mono text-sm text-[#9ca3af]">
-                  {leg.strike.toFixed(2)}
-                  {leg.optionType}{" "}
-                  <span className="text-xs text-[#555]">
-                    {formatExpiry(leg.expiryDate)}
-                  </span>
+                className="px-2 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-[#151515] transition-colors"
+                onClick={() => toggleExpand(group.id)}
+              >
+                <div className="w-0.5 h-5 shrink-0 bg-[#333]" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-mono text-sm text-[#9ca3af]">
+                    {group.label}
+                  </div>
+                  <div className="font-sans text-[10px] text-[#444] uppercase">
+                    {formatExpiry(group.expiryDate)} · {group.underlyingSymbol}
+                  </div>
                 </div>
-                <div className="font-sans text-[10px] text-[#444] uppercase">
-                  {leg.direction} {leg.quantity} × {leg.underlyingSymbol}
+                <div className="text-right shrink-0 flex items-center gap-2">
+                  <div
+                    className="font-mono text-xs"
+                    style={{ color: pnlColor }}
+                  >
+                    {group.totalPnl !== null
+                      ? `${group.totalPnl >= 0 ? "+" : ""}$${group.totalPnl.toFixed(2)}`
+                      : "—"}
+                  </div>
+                  <span className="text-[#333] text-[10px]">
+                    {isExp ? "▲" : "▼"}
+                  </span>
                 </div>
               </div>
 
-              {/* Mid + entry + P&L */}
-              <div className="text-right shrink-0">
-                <div className="font-mono text-xs text-[#9ca3af]">
-                  {mid !== null ? mid.toFixed(2) : "—"}
-                  <span className="text-[#444] ml-1">
-                    / {leg.averageOpenPrice.toFixed(2)}
-                  </span>
-                </div>
-                <div className="font-mono text-xs" style={{ color: pnlColor }}>
-                  {legPnl !== null
-                    ? `${legPnl >= 0 ? "+" : ""}$${legPnl.toFixed(2)}`
-                    : "—"}
-                </div>
-              </div>
+              {/* Expanded legs */}
+              {isExp &&
+                group.legs.map((leg) => {
+                  const tick = ticks[leg.streamerSymbol] ?? null;
+                  const mid = tick?.mid ?? null;
+                  const legPnl = calcPnl(leg, tick);
+                  const legPnlColor =
+                    legPnl === null
+                      ? "#555"
+                      : legPnl >= 0
+                        ? "#4ade80"
+                        : "#f87171";
+                  return (
+                    <div
+                      key={leg.symbol}
+                      className="px-2 py-1.5 flex items-center gap-2 border-t border-[#1a1a1a]"
+                    >
+                      <div
+                        className="w-0.5 h-4 shrink-0"
+                        style={{
+                          backgroundColor:
+                            leg.direction === "Long"
+                              ? "#4ade8066"
+                              : "#f8717166",
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-mono text-xs text-[#666]">
+                          {leg.strike}
+                          {leg.optionType}
+                          <span className="text-[#444] ml-1">
+                            {leg.direction} {leg.quantity}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-mono text-xs text-[#666]">
+                          {mid !== null ? mid.toFixed(2) : "—"}
+                          <span className="text-[#444] ml-1">
+                            / {leg.averageOpenPrice.toFixed(2)}
+                          </span>
+                        </div>
+                        <div
+                          className="font-mono text-[11px]"
+                          style={{ color: legPnlColor }}
+                        >
+                          {legPnl !== null
+                            ? `${legPnl >= 0 ? "+" : ""}$${legPnl.toFixed(2)}`
+                            : "—"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           );
         })}
@@ -318,7 +531,6 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
 
   useEffect(() => {
     if (!containerRef.current) return;
-
     const chart = createChart(containerRef.current, {
       layout: { background: { color: "#111111" }, textColor: "#444444" },
       grid: { vertLines: { visible: false }, horzLines: { color: "#1a1a1a" } },
@@ -338,14 +550,12 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,
     });
-
     const series = chart.addSeries(LineSeries, {
       color,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,
     });
-
     series.createPriceLine({
       price: 0,
       color: "#333",
@@ -353,10 +563,8 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
       lineStyle: 2,
       axisLabelVisible: false,
     });
-
     chartRef.current = chart;
     seriesRef.current = series;
-
     const handleResize = () => {
       if (containerRef.current) {
         chart.applyOptions({
@@ -366,7 +574,6 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
       }
     };
     window.addEventListener("resize", handleResize);
-
     return () => {
       window.removeEventListener("resize", handleResize);
       chart.remove();
@@ -401,11 +608,8 @@ function SmlInputForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const toggleWidth = (w: number) => {
-    if (widths.includes(w)) {
-      setWidths(widths.filter((x) => x !== w));
-    } else {
-      setWidths([...widths, w].sort((a, b) => a - b));
-    }
+    if (widths.includes(w)) setWidths(widths.filter((x) => x !== w));
+    else setWidths([...widths, w].sort((a, b) => a - b));
   };
 
   const handleSubmit = async () => {
@@ -413,11 +617,9 @@ function SmlInputForm() {
     if (isNaN(ref) || widths.length === 0) return;
     setIsSubmitting(true);
     try {
-      await supabase.from("rtm_sessions").insert({
-        sml_ref: ref,
-        widths,
-        type: optType,
-      });
+      await supabase
+        .from("rtm_sessions")
+        .insert({ sml_ref: ref, widths, type: optType });
     } catch (err) {
       console.error("Failed to create session:", err);
     }
@@ -429,7 +631,6 @@ function SmlInputForm() {
       <div className="text-xs text-[#555] uppercase tracking-wide">
         adicionar sml fly do dia
       </div>
-
       <div className="flex items-center gap-2">
         <span className="text-xs text-[#555] w-12">SML</span>
         <input
@@ -440,7 +641,6 @@ function SmlInputForm() {
           className="flex-1 bg-[#0a0a0a] border border-[#222] rounded px-2 py-1 font-mono text-sm text-[#9ca3af] placeholder-[#333] focus:border-[#444] focus:outline-none"
         />
       </div>
-
       <div className="flex items-center gap-2">
         <span className="text-xs text-[#555] w-12">Width</span>
         <div className="flex gap-1.5">
@@ -448,18 +648,13 @@ function SmlInputForm() {
             <button
               key={w}
               onClick={() => toggleWidth(w)}
-              className={`font-mono text-xs px-2 py-0.5 rounded transition-colors hover:cursor-pointer ${
-                widths.includes(w)
-                  ? "bg-[#222] text-[#9ca3af]"
-                  : "bg-transparent text-[#444] border border-[#222]"
-              }`}
+              className={`font-mono text-xs px-2 py-0.5 rounded transition-colors hover:cursor-pointer ${widths.includes(w) ? "bg-[#222] text-[#9ca3af]" : "bg-transparent text-[#444] border border-[#222]"}`}
             >
               {w}
             </button>
           ))}
         </div>
       </div>
-
       <div className="flex items-center gap-2">
         <span className="text-xs text-[#555] w-12">Type</span>
         <div className="flex gap-1.5">
@@ -467,18 +662,13 @@ function SmlInputForm() {
             <button
               key={t}
               onClick={() => setOptType(t)}
-              className={`text-xs px-2 py-0.5 rounded transition-colors hover:cursor-pointer ${
-                optType === t
-                  ? "bg-[#222] text-[#9ca3af]"
-                  : "bg-transparent text-[#444] border border-[#222]"
-              }`}
+              className={`text-xs px-2 py-0.5 rounded transition-colors hover:cursor-pointer ${optType === t ? "bg-[#222] text-[#9ca3af]" : "bg-transparent text-[#444] border border-[#222]"}`}
             >
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
           ))}
         </div>
       </div>
-
       <button
         onClick={handleSubmit}
         disabled={isSubmitting || !smlRef || widths.length === 0}
