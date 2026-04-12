@@ -114,7 +114,7 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
     if (!containerRef.current) return;
     const chart = echarts.init(containerRef.current, null, {
       renderer: "canvas",
-      height: 220,
+      height: 420,
     });
     chartRef.current = chart;
     const handleResize = () => chart.resize();

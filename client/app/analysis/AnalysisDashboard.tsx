@@ -123,7 +123,7 @@ export default function AnalysisDashboard({
               href="/"
               className="font-sans text-xs text-[#555] hover:text-[#f59e0b] transition-colors uppercase tracking-widest"
             >
-              ← BACK TO Live
+              ← voltar p/ home
             </Link>
             <div className="w-px h-4 bg-[#1a1a1a]" />
           </div>
@@ -166,7 +166,7 @@ export default function AnalysisDashboard({
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-0.5 h-4 bg-[#333]" />
                   <span className="font-sans text-xs text-[#666] uppercase tracking-wide">
-                    Realized / Implied Distribution
+                    DISTRIBUIÇÃO Realized / Implied
                   </span>
                 </div>
                 <RatioHistogram sessions={sessions} />
@@ -178,7 +178,7 @@ export default function AnalysisDashboard({
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-0.5 h-4 bg-[#333]" />
                 <span className="font-sans text-xs text-[#666] uppercase tracking-wide">
-                  Straddle Decay — Avg vs Today
+                  Straddle Decay — média (avg) vs hoje
                 </span>
               </div>
               <DecayCurve
@@ -192,7 +192,7 @@ export default function AnalysisDashboard({
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-0.5 h-4 bg-[#333]" />
                 <span className="font-sans text-xs text-[#666] uppercase tracking-wide">
-                  Session Log
+                  Tabela sessões
                 </span>
               </div>
               <div className="bg-[#111] rounded overflow-hidden">
@@ -200,12 +200,12 @@ export default function AnalysisDashboard({
                   <thead>
                     <tr className="border-b border-[#1a1a1a]">
                       {[
-                        "Date",
-                        "Day",
+                        "Data",
+                        "Dia",
                         "Implied",
                         "Realized",
                         "Max",
-                        "R/I",
+                        "RV/IV",
                         "Skew",
                       ].map((h) => (
                         <th
@@ -250,7 +250,7 @@ export default function AnalysisDashboard({
                             className="font-mono text-sm px-4 py-2.5"
                             style={{ color: ratioColor }}
                           >
-                            {ratio.toFixed(2)}x
+                            {s.realizedMovePct.toFixed(1)}%
                           </td>
                           <td className="font-mono text-sm text-[#9ca3af] px-4 py-2.5">
                             {s.openingSkew?.toFixed(3) ?? "—"}

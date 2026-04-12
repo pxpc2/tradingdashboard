@@ -115,6 +115,12 @@ export default function LiveDashboard({
     );
   }, [skewHistory, today]);
 
+  const skewPctile = useMemo(() => {
+    if (!latestSkew || skewHistory.length === 0) return null;
+    const below = skewHistory.filter((s) => s.skew <= latestSkew.skew).length;
+    return Math.round((below / skewHistory.length) * 100);
+  }, [latestSkew, skewHistory]);
+
   // Live ticks
   const allSymbols = useMemo(() => {
     const set = new Set(CORE_SYMBOLS);
@@ -211,7 +217,7 @@ export default function LiveDashboard({
             <div className="w-px h-4 bg-[#1a1a1a]" />
             <Link href="/analysis">
               <span className="font-sans text-xs text-[#555] hover:text-[#f59e0b] transition-colors uppercase tracking-widest">
-                GO TO Analysis
+                aba /Analysis
               </span>
             </Link>
             <form action={signOut}>
@@ -379,6 +385,11 @@ export default function LiveDashboard({
               <div className="font-mono text-lg text-[#9ca3af] font-light">
                 {latestSkew?.skew?.toFixed(3) ?? "—"}
               </div>
+              {skewPctile !== null && (
+                <div className="font-mono text-[10px] text-[#444]">
+                  {skewPctile}th %ile
+                </div>
+              )}
             </div>
             <div className="w-px bg-[#1f1f1f]" />
             <div>
