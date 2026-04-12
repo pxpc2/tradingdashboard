@@ -22,14 +22,31 @@ function parseOptionSymbol(symbol: string): {
   strike: number;
   optionType: "C" | "P";
 } | null {
-  const match = symbol
+  // OCC equity option: "SPXW  260417C06820000"
+  const occMatch = symbol
     .trim()
     .match(/^(\S+)\s+(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/);
-  if (!match) return null;
-  const [, , yy, mm, dd, type, strikeRaw] = match;
-  const strike = parseInt(strikeRaw) / 1000;
-  const expiry = `20${yy}-${mm}-${dd}`;
-  return { expiry, strike, optionType: type as "C" | "P" };
+  if (occMatch) {
+    const [, , yy, mm, dd, type, strikeRaw] = occMatch;
+    return {
+      expiry: `20${yy}-${mm}-${dd}`,
+      strike: parseInt(strikeRaw) / 1000,
+      optionType: type as "C" | "P",
+    };
+  }
+
+  // Future option: "./ESM6 E2AJ6 260413P6750"
+  const futMatch = symbol.trim().match(/\s(\d{2})(\d{2})(\d{2})([CP])(\d+)$/);
+  if (futMatch) {
+    const [, yy, mm, dd, type, strikeRaw] = futMatch;
+    return {
+      expiry: `20${yy}-${mm}-${dd}`,
+      strike: parseFloat(strikeRaw),
+      optionType: type as "C" | "P",
+    };
+  }
+
+  return null;
 }
 
 export async function GET() {
