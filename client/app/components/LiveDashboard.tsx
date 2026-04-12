@@ -19,6 +19,7 @@ import { StraddleSnapshot, RtmSession } from "../types";
 import { FaSignOutAlt } from "react-icons/fa";
 import { useSearchParams } from "next/navigation";
 import { useRealPositions } from "../hooks/useRealPositions";
+import Link from "next/link";
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
@@ -208,6 +209,11 @@ export default function LiveDashboard({
             </div>
 
             <div className="w-px h-4 bg-[#1a1a1a]" />
+            <Link href="/analysis">
+              <span className="font-sans text-xs text-[#555] hover:text-[#f59e0b] transition-colors uppercase tracking-widest">
+                GO TO Analysis
+              </span>
+            </Link>
             <form action={signOut}>
               <button
                 type="submit"
