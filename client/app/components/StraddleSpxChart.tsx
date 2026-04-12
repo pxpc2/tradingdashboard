@@ -9,20 +9,28 @@ import {
   ISeriesApi,
   SeriesType,
   IChartApi,
+  IPriceLine,
   createTextWatermark,
 } from "lightweight-charts";
-import { StraddleSnapshot } from "../types";
+import { StraddleSnapshot, SkewSnapshot } from "../types";
 
 type Props = {
   data: StraddleSnapshot[];
   currentSpxPrice: number | null;
+  openingSkew: SkewSnapshot | null;
 };
 
-export default function StraddleSpxChart({ data, currentSpxPrice }: Props) {
+export default function StraddleSpxChart({
+  data,
+  currentSpxPrice,
+  openingSkew,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const straddleSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
   const spxSeriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
+  const downsideLineRef = useRef<IPriceLine | null>(null);
+  const upsideLineRef = useRef<IPriceLine | null>(null);
 
   // Chart creation
   useEffect(() => {
@@ -92,7 +100,7 @@ export default function StraddleSpxChart({ data, currentSpxPrice }: Props) {
     const spxSeries = chart.addSeries(LineSeries, {
       color: "#737373",
       lineWidth: 1,
-      lineStyle: 2, // dashed
+      lineStyle: 2,
       priceLineVisible: false,
       lastValueVisible: true,
       title: "SPX",
@@ -128,7 +136,7 @@ export default function StraddleSpxChart({ data, currentSpxPrice }: Props) {
     };
   }, []);
 
-  // Data updates
+  // Data + skew-adjusted levels
   useEffect(() => {
     if (
       !straddleSeriesRef.current ||
@@ -137,7 +145,6 @@ export default function StraddleSpxChart({ data, currentSpxPrice }: Props) {
     )
       return;
 
-    // Straddle points
     const straddlePoints = data
       .map((s) => ({
         time: Math.floor(
@@ -147,7 +154,6 @@ export default function StraddleSpxChart({ data, currentSpxPrice }: Props) {
       }))
       .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
 
-    // SPX points
     const spxPoints = data
       .map((s) => ({
         time: Math.floor(
@@ -160,11 +166,62 @@ export default function StraddleSpxChart({ data, currentSpxPrice }: Props) {
     straddleSeriesRef.current.setData(straddlePoints);
     spxSeriesRef.current.setData(spxPoints);
 
-    // Fit to today's session
+    // Clear existing level lines
+    if (downsideLineRef.current) {
+      try {
+        spxSeriesRef.current.removePriceLine(downsideLineRef.current);
+      } catch {}
+      downsideLineRef.current = null;
+    }
+    if (upsideLineRef.current) {
+      try {
+        spxSeriesRef.current.removePriceLine(upsideLineRef.current);
+      } catch {}
+      upsideLineRef.current = null;
+    }
+
+    // Skew-adjusted levels from opening snapshot
+    const opening = data[0] ?? null;
+    if (opening && openingSkew) {
+      // T = 1 trading day = 1/252 of a year
+      const T = 1 / 252;
+      const spxRef = opening.spx_ref;
+      const downsidePts = spxRef * openingSkew.put_iv * Math.sqrt(T);
+      const upsidePts = spxRef * openingSkew.call_iv * Math.sqrt(T);
+      const downsideLevel = spxRef - downsidePts;
+      const upsideLevel = spxRef + upsidePts;
+
+      try {
+        downsideLineRef.current = spxSeriesRef.current.createPriceLine({
+          price: downsideLevel,
+          color: "#f8717166",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          axisLabelColor: "#f87171",
+          axisLabelTextColor: "#111",
+          title: `↓${downsidePts.toFixed(0)}`,
+        });
+      } catch {}
+
+      try {
+        upsideLineRef.current = spxSeriesRef.current.createPriceLine({
+          price: upsideLevel,
+          color: "#4ade8066",
+          lineWidth: 1,
+          lineStyle: 2,
+          axisLabelVisible: true,
+          axisLabelColor: "#4ade80",
+          axisLabelTextColor: "#111",
+          title: `↑${upsidePts.toFixed(0)}`,
+        });
+      } catch {}
+    }
+
     try {
       chartRef.current.timeScale().fitContent();
     } catch {}
-  }, [data]);
+  }, [data, openingSkew]);
 
   // Live SPX tick
   useEffect(() => {
@@ -189,6 +246,11 @@ export default function StraddleSpxChart({ data, currentSpxPrice }: Props) {
           <span className="flex items-center gap-1">
             <span className="inline-block w-2.5 h-0.5 bg-[#737373]" />
             <span className="text-[#666]">SPX</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <span className="inline-block w-2.5 h-0.5 bg-[#4ade80] opacity-60" />
+            <span className="inline-block w-2.5 h-0.5 bg-[#f87171] opacity-60" />
+            <span className="text-[#666]">Skew 1σ</span>
           </span>
         </div>
       </div>

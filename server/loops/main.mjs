@@ -17,7 +17,6 @@ import {
 } from "../lib/dxfeed.mjs";
 import {
   invertIV,
-  bsmDelta,
   findDeltaStrike,
   findTargetExpiry,
   isValidQuote,
@@ -35,6 +34,28 @@ function shouldFireOpenCycle() {
   if (["Sat", "Sun"].includes(day)) return false;
   if (openCycleFiredDate === today) return false;
   return time >= "09:30:00" && time <= "09:30:30";
+}
+
+async function getFmpOpenPrice() {
+  try {
+    const todayET = getTodayET();
+    const fmpUrl = `https://financialmodelingprep.com/api/v3/historical-chart/1min/%5ESPX?apikey=${process.env.FMP_API_KEY}&limit=5`;
+    const res = await withTimeout(fetch(fmpUrl), 8000, "FMP open price");
+    const json = await res.json();
+    if (!Array.isArray(json)) return null;
+
+    // FMP returns ET times as "YYYY-MM-DD HH:MM:SS", newest first
+    const openBar = json.find((bar) => {
+      if (!bar.date) return false;
+      const barDay = bar.date.slice(0, 10);
+      const barTime = bar.date.slice(11, 16); // "HH:MM"
+      return barDay === todayET && barTime === "09:30";
+    });
+    return openBar ?? null;
+  } catch (err) {
+    console.log(`[${nowCT()}]    FMP fetch failed: ${err.message}`);
+    return null;
+  }
 }
 
 async function computeAndStoreSkew(allOptions, spxMid) {
@@ -264,25 +285,65 @@ async function runCycle(isOpenCycle = false) {
     let esBasis = null;
 
     if (isOpenCycle) {
+      console.log(`[${nowCT()}] ============================================`);
+      console.log(`[${nowCT()}] *** OPEN CYCLE — fetching SPX opening price`);
+
+      // DXFeed reference
+      const { openPrice: dxSummaryOpen, quoteMid: dxQuoteMid } =
+        await getSpxOpenPrice();
       console.log(
-        `[${nowCT()}] 🔔 Ciclo de abertura — buscando preço de abertura do SPX...`,
+        `[${nowCT()}]    DXFeed Summary.openPrice : ${dxSummaryOpen?.toFixed(2) ?? "N/A"}`,
       );
-      const { openPrice, quoteMid } = await getSpxOpenPrice();
-      spxMid = quoteMid;
+      console.log(
+        `[${nowCT()}]    DXFeed Quote mid         : ${dxQuoteMid?.toFixed(2) ?? "N/A"}`,
+      );
+
+      // FMP reference
+      const fmpBar = await getFmpOpenPrice();
+      const fmpOpenPrice = fmpBar?.open ?? null;
+      if (fmpBar) {
+        console.log(
+          `[${nowCT()}]    FMP 09:30 bar            : O:${fmpBar.open} H:${fmpBar.high} L:${fmpBar.low} C:${fmpBar.close}`,
+        );
+      } else {
+        console.log(`[${nowCT()}]    FMP 09:30 bar            : N/A`);
+      }
+
+      // Use DXFeed as before — log comparison
+      spxMid = dxQuoteMid;
+      const refForAtm = dxSummaryOpen ?? dxQuoteMid;
       atmStrikePrice = strikes.reduce((prev, curr) =>
-        Math.abs(curr - openPrice) < Math.abs(prev - openPrice) ? curr : prev,
+        Math.abs(curr - refForAtm) < Math.abs(prev - refForAtm) ? curr : prev,
       );
+
       console.log(
-        `[${nowCT()}] SPX open price: ${openPrice?.toFixed(2)} | ATM strike: ${atmStrikePrice}`,
+        `[${nowCT()}]    ATM strike (DXFeed)      : ${atmStrikePrice}`,
       );
+
+      if (fmpOpenPrice !== null && dxSummaryOpen !== null) {
+        const diff = Math.abs(fmpOpenPrice - dxSummaryOpen).toFixed(2);
+        const fmpAtm = strikes.reduce((prev, curr) =>
+          Math.abs(curr - fmpOpenPrice) < Math.abs(prev - fmpOpenPrice)
+            ? curr
+            : prev,
+        );
+        console.log(
+          `[${nowCT()}]    FMP open price           : ${fmpOpenPrice.toFixed(2)}`,
+        );
+        console.log(`[${nowCT()}]    DXFeed vs FMP diff       : ${diff} pts`);
+        console.log(
+          `[${nowCT()}]    ATM strike (FMP)         : ${fmpAtm}${fmpAtm !== atmStrikePrice ? " ⚠️  DIFFERENT" : " ✓ same"}`,
+        );
+      }
 
       const esMid = await getEsMid(ES_SYMBOL);
       if (esMid !== null && spxMid > 0) {
         esBasis = parseFloat((esMid - spxMid).toFixed(2));
         console.log(
-          `[${nowCT()}] ES mid: ${esMid.toFixed(2)} | SPX mid: ${spxMid.toFixed(2)} | Basis: ${esBasis}`,
+          `[${nowCT()}]    ES mid: ${esMid.toFixed(2)} | SPX mid: ${spxMid.toFixed(2)} | Basis: ${esBasis}`,
         );
       }
+      console.log(`[${nowCT()}] ============================================`);
     } else {
       spxMid = await getSpxQuoteMid();
       atmStrikePrice = strikes.reduce((prev, curr) =>
@@ -459,6 +520,5 @@ export async function runAndScheduleNext() {
     await runCycle(false);
   }
 
-  // Anchor to next wall-clock minute boundary
   setTimeout(runAndScheduleNext, msUntilNextMinute());
 }

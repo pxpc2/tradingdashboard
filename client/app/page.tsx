@@ -1,5 +1,6 @@
 import { supabase } from "./lib/supabase";
 import LiveDashboard from "./components/LiveDashboard";
+import { Suspense } from "react";
 
 export default async function Home() {
   const today = new Date().toLocaleDateString("en-CA", {
@@ -23,10 +24,12 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-white">
-      <LiveDashboard
-        initialStraddleData={straddleSnapshots ?? []}
-        initialSmlSession={todaySession}
-      />
+      <Suspense>
+        <LiveDashboard
+          initialStraddleData={straddleSnapshots ?? []}
+          initialSmlSession={todaySession}
+        />
+      </Suspense>
     </main>
   );
 }

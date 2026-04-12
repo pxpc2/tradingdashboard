@@ -17,6 +17,7 @@ import { useWatchlist } from "../hooks/useWatchlist";
 import { signOut } from "../login/actions";
 import { StraddleSnapshot, RtmSession } from "../types";
 import { FaSignOutAlt } from "react-icons/fa";
+import { useSearchParams } from "next/navigation";
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
@@ -77,10 +78,10 @@ export default function LiveDashboard({
   initialStraddleData,
   initialSmlSession,
 }: Props) {
-  // Always use today's date
-  const today = new Date().toLocaleDateString("en-CA", {
-    timeZone: "America/New_York",
-  });
+  const searchParams = useSearchParams();
+  const today =
+    searchParams.get("date") ??
+    new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
   // Data hooks - all simplified to today only
   const { straddleData, esBasis } = useStraddleData(
@@ -92,6 +93,18 @@ export default function LiveDashboard({
   const { smlSession, flySnapshots } = useFlyData(today, initialSmlSession);
   const { esData } = useEsData(today, 1);
   const { entries: watchlistEntries } = useWatchlist();
+
+  // First skew snapshot of today — used for skew-adjusted levels
+  const openingSkew = useMemo(() => {
+    return (
+      skewHistory.find(
+        (s) =>
+          new Date(s.created_at).toLocaleDateString("en-CA", {
+            timeZone: "America/New_York",
+          }) === today,
+      ) ?? null
+    );
+  }, [skewHistory, today]);
 
   // Live ticks
   const allSymbols = useMemo(() => {
@@ -389,6 +402,7 @@ export default function LiveDashboard({
           <StraddleSpxChart
             data={todayRows}
             currentSpxPrice={spxTick?.mid ?? null}
+            openingSkew={openingSkew}
           />
           <SkewHistoryChart data={skewHistory} avgSkew={avgSkew} />
         </div>
