@@ -107,6 +107,15 @@ export default function LiveDashboard({
   const vixLast = vixTick?.last ?? null;
   const vixPct = pctChange(vixLast, vixTick?.prevClose ?? null);
 
+  const vix1dTick = ticks["VIX1D"] ?? null;
+  const vix1dLast = vix1dTick?.last ?? null;
+  const vix1dPct = pctChange(vix1dLast, vix1dTick?.prevClose ?? null);
+
+  const vixRatio =
+    vix1dLast && vixLast && vixLast > 0
+      ? (vix1dLast / vixLast).toFixed(2)
+      : null;
+
   // Computed values
   const todayRows = useMemo(
     () =>
@@ -265,6 +274,28 @@ export default function LiveDashboard({
                 </span>
               )}
             </div>
+            {/* VIX1D */}
+            <div className="flex items-center gap-2">
+              <div
+                className="w-0.5 h-5"
+                style={{ backgroundColor: spxOpen ? "#4ade80" : "#2a2a2a" }}
+              />
+              <span className="font-sans text-xs text-[#666] uppercase">
+                VIX1D
+              </span>
+              <span className="font-mono text-xl text-[#9ca3af] font-light">
+                {vix1dLast?.toFixed(2) ?? "—"}
+              </span>
+              {vix1dPct && (
+                <span
+                  className="font-mono text-sm"
+                  style={{ color: pctColor(vix1dPct) }}
+                >
+                  {parseFloat(vix1dPct) >= 0 ? "+" : ""}
+                  {vix1dPct}%
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Metrics strip */}
@@ -330,6 +361,24 @@ export default function LiveDashboard({
                 {latestSkew
                   ? `${(latestSkew.call_iv * 100).toFixed(1)} / ${(latestSkew.put_iv * 100).toFixed(1)}`
                   : "—"}
+              </div>
+            </div>
+            <div className="w-px bg-[#1f1f1f]" />
+            <div>
+              <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+                1D VOL ratio
+              </span>
+              <div
+                className="font-mono text-lg font-light"
+                style={{
+                  color: vixRatio
+                    ? parseFloat(vixRatio) >= 1
+                      ? "#f59e0b"
+                      : "#9ca3af"
+                    : "#9ca3af",
+                }}
+              >
+                {vixRatio ?? "—"}
               </div>
             </div>
           </div>
