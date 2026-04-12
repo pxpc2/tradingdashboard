@@ -245,7 +245,7 @@ function RealPositionsView({
             className="font-mono text-base"
             style={{ color: totalPnl >= 0 ? "#4ade80" : "#f87171" }}
           >
-            {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(0)}
+            {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
           </span>
         </div>
       )}
@@ -276,7 +276,7 @@ function RealPositionsView({
               {/* Strike + expiry + type */}
               <div className="flex-1 min-w-0">
                 <div className="font-mono text-sm text-[#9ca3af]">
-                  {leg.strike.toFixed(0)}
+                  {leg.strike.toFixed(2)}
                   {leg.optionType}{" "}
                   <span className="text-xs text-[#555]">
                     {formatExpiry(leg.expiryDate)}
@@ -297,7 +297,7 @@ function RealPositionsView({
                 </div>
                 <div className="font-mono text-xs" style={{ color: pnlColor }}>
                   {legPnl !== null
-                    ? `${legPnl >= 0 ? "+" : ""}$${legPnl.toFixed(0)}`
+                    ? `${legPnl >= 0 ? "+" : ""}$${legPnl.toFixed(2)}`
                     : "—"}
                 </div>
               </div>
