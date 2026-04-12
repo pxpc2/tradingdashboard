@@ -19,7 +19,15 @@ Personal SPX options monitoring dashboard. Real-time data from Tastytrade/DXFeed
 
 ```
 server/
-  poller.mjs              # Main polling loop on Railway
+  poller.mjs              # Entry point only — startup, signal handlers
+  lib/
+    clients.mjs           # Supabase + Tastytrade client singletons
+    market-hours.mjs      # isMarketHours, isGlobexHours, time utils, msUntilNextMinute, currentBarTime
+    dxfeed.mjs            # getQuotes, getSpxOpenPrice, getSpxQuoteMid, getEsMid, collectOhlc, withTimeout
+    bsm.mjs               # normalCDF, bsmPrice, bsmDelta, invertIV, findDeltaStrike, findTargetExpiry, isValidQuote
+  loops/
+    main.mjs              # runCycle, runAndScheduleNext, skew logic, SML fly
+    ohlc.mjs              # runOhlcLoop — wall-clock anchored, bar_time, ES+SPX+VIX+VIX1D
 
 client/app/
   page.tsx                # SSR initial data fetch, renders LiveDashboard
@@ -46,8 +54,8 @@ client/app/
   components/
     LiveDashboard.tsx     # Main orchestrator — single-view, always-live dashboard
     WorldClock.tsx        # 4-city clock row (CHI, NY, BSB, LDN) with ET-relative offset
-    StraddleSpxChart.tsx  # Straddle area + SPX line overlay (dual Y-axis)
-    SkewHistoryChart.tsx  # All-time 5-min skew history with avg line + day separators
+    StraddleSpxChart.tsx  # Straddle area + SPX line overlay — pending ECharts migration
+    SkewHistoryChart.tsx  # All-time 5-min skew history, avg line, day separators — pending ECharts migration
     PositionsPanel.tsx    # SML Fly / Real toggle, Lightweight Charts mini chart, input form
     WatchlistStrip.tsx    # Auto-scrolling ticker strip in header (SPX + ES + watchlist)
     MacroEvents.tsx       # FMP economic calendar, auto-scroll, CT times, flex height
@@ -69,13 +77,13 @@ components/
   MktView.tsx           # Old MKT tab — replaced by LiveDashboard
   VolView.tsx           # Old VOL tab — merged into LiveDashboard
   PosView.tsx           # Old POS tab — merged into LiveDashboard
-  SpxChart.tsx          # SPX line chart — no longer used (TradingView handles SPX/ES)
+  SpxChart.tsx          # Contains day separator canvas overlay pattern — reference only
   EsChart.tsx           # ES line chart — no longer used
   StraddleChart.tsx     # Old straddle chart — replaced by StraddleSpxChart
   SkewChart.tsx         # Old skew chart — replaced by SkewHistoryChart
   Watchlist.tsx         # Old vertical watchlist — replaced by WatchlistStrip
 hooks/
-  usePharmLevels.ts     # Pharm levels — no longer used (no ES chart)
+  usePharmLevels.ts     # Pharm levels — no longer used
   useSkewData.ts        # Old skew hook — replaced by useSkewHistory
 ```
 
@@ -100,52 +108,62 @@ positions            id, created_at, label, is_active, notes
 position_legs        id, created_at, position_id, expiration_date, strike,
                      opt_type, action, quantity, entry_price_mid, streamer_symbol
 
-es_snapshots         id, created_at, es_ref (close), open, high, low
-
-spx_snapshots        id, created_at, open, high, low, close
+es_snapshots         id, created_at, bar_time, es_ref (close), open, high, low
+spx_snapshots        id, created_at, bar_time, open, high, low, close
+vix_snapshots        id, created_at, bar_time, open, high, low, close
+vix1d_snapshots      id, created_at, bar_time, open, high, low, close
 ```
 
+`bar_time` = UTC ISO timestamp of the minute boundary the bar belongs to.
 All tables have RLS enabled. Anon read on all. Auth write on rtm_sessions, sml_fly_snapshots,
 positions, position_legs. Poller uses service role key (bypasses RLS).
 
 ---
 
-## Poller Behavior
+## Poller Architecture
 
-Two independent loops run in parallel after startup:
+Entry point: `server/poller.mjs` — connects DXLink, starts two loops, handles SIGINT.
 
-### `runAndScheduleNext()` — main options cycle, every 60s
+### Wall-Clock Anchoring (critical)
+
+Both loops use `msUntilNextMinute()` to anchor scheduling to wall-clock boundaries.
+This means drift self-corrects every cycle — never use fixed `setTimeout(fn, 60000)`.
+
+`currentBarTime()` snapshots the minute boundary before collection begins so `bar_time`
+is always a clean UTC minute regardless of how long the cycle takes.
+
+### `runAndScheduleNext()` — loops/main.mjs
 
 - RTH only (09:30–16:00 ET weekdays)
-- **Open cycle** fires once per day at 09:30:00–09:30:30 ET:
-  - Uses SPX `Summary.openPrice` for ATM strike reference
-  - Fetches ES basis (`ES_mid - SPX_mid`), stored on first straddle row
-  - Resets `skewCycleCount`
-- Each cycle: fetches option chain, SPX quote, ATM straddle quotes → inserts `straddle_snapshots`
-- Skew computed every 5th cycle (~5 min) → inserts `skew_snapshots`
-- SML Fly quotes fetched and inserted if active `rtm_sessions` row exists for today
+- **Open cycle** at 09:30:00–09:30:30 ET: SPX open price, ES basis, resets skewCycleCount
+- Each cycle: chain fetch → SPX quote → ATM straddle → `straddle_snapshots` insert
+- Skew every 5th cycle (~5 min) → `skew_snapshots` insert
+- SML Fly if active `rtm_sessions` row exists for today
+- Schedules next via `msUntilNextMinute()`
 
-### `runOhlcLoop()` — OHLC collection, every ~60s
+### `runOhlcLoop()` — loops/ohlc.mjs
 
 - Runs independently, parallel to main cycle
-- Collects 55 seconds of live ticks for active symbols
-- ES (`/ESM26:XCME`): runs during globex hours, inserts into `es_snapshots`
-- SPX: runs during RTH only, inserts into `spx_snapshots`
+- Collects 55s of ticks, inserts with `bar_time`, schedules at next minute minus 5s
+- **Quote symbols** (bid/ask mid): ES (`/ESM26:XCME`), SPX
+- **Trade symbols** (Trade event `price`): VIX, VIX1D — bid/ask are 0 for indices
+- ES → `es_snapshots` (globex hours)
+- SPX → `spx_snapshots` (RTH only)
+- VIX + VIX1D → `vix_snapshots` / `vix1d_snapshots` (any open session)
 
 ### ES Symbol
 
 - Current: `/ESM26:XCME` (June 2026)
-- Format: `/ES{month}{2-digit-year}:XCME`
-- Month codes: H=Mar, M=Jun, U=Sep, Z=Dec
 - Next roll: September 2026 → `/ESU26:XCME`
+- Format: `/ES{month}{2-digit-year}:XCME` (H=Mar, M=Jun, U=Sep, Z=Dec)
 
 ---
 
 ## UI Architecture
 
-### LiveDashboard Layout (April 2026)
+### LiveDashboard Layout
 
-Single-view, always-live dashboard. No tabs, no date picker. Designed as companion panel alongside TradingView.
+Single-view, always-live. No tabs, no date picker.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
@@ -157,141 +175,119 @@ Single-view, always-live dashboard. No tabs, no date picker. Designed as compani
 │ STRADDLE | IMPLIED | REALIZED | IV30 | SKEW | CALL IV/PUT IV  │
 ├──────────────────────┬───────────────────────────────────────┤
 │ Straddle + SPX chart │ Skew History (all-time 5-min)         │
-│ (area + line overlay)│ (avg line + day separators)           │
 ├──────────────────────┴───────────────────────────────────────┤
 │ Macro Events (CT)    │ Positions (SML Fly / Real)            │
-│ (scrollable, 220px)  │ (Lightweight Charts, 220px)           │
 └──────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Design Decisions
 
-- **No date picker** — always shows live/today data
-- **No tabs** — everything on one scrollable view
-- **Watchlist in header** — auto-scrolling ticker strip, pauses on hover, SPX+ES always first
-- **World clock** — CHI/NY/BSB/LDN abbreviations, ET-relative offset (ET+0, ET+1 etc), hover highlight
-- **VIX** — shown alongside SPX and ES using `tick.last`, same % change logic
-- **Charts** — all Lightweight Charts v5, interactive with crosshair
-- **Skew chart** — day separator lines via canvas overlay, redraws on pan/zoom, right offset
-- **Positions** — shows SML input form when no session exists
-- **UI language** — Portuguese labels supported (e.g. "Calendário Econômico", "Posições", "Iniciar")
+- Watchlist: auto-scrolling ticker, SPX+ES first, pauses on hover
+- World clock: CHI/NY/BSB/LDN, ET-relative offset, DST-aware
+- VIX: `tick.last`, same % change logic as SPX/ES
+- Charts: pending migration to Apache ECharts (currently Lightweight Charts v5)
+- Skew chart: canvas overlay day separators, `rightOffset: 10`
+- UI language: Portuguese labels
+
+### Planned Chart Migration — Apache ECharts
+
+`StraddleSpxChart` and `SkewHistoryChart` migrating to ECharts for:
+
+- Candlestick support (future 1-min charts)
+- Cleaner dual Y-axis
+- Native markLine/markArea (replaces canvas separator hack)
+- Built-in DataZoom
+
+Migration order: SkewHistoryChart → StraddleSpxChart → new candle charts (ES, SPX, VIX, VIX1D)
 
 ### Typography
 
 - Labels: `font-sans text-xs text-[#555] uppercase tracking-wide`
 - Values: `font-mono text-lg text-[#9ca3af] font-light`
 - Section headers: Bloomberg-style left border accent (`w-0.5 h-5`)
-- Open/closed indicator: `#4ade80` (green) or `#2a2a2a` (dark)
-
-### Scrollbar Styles
-
-```css
-::-webkit-scrollbar {
-  width: 2px;
-  height: 4px;
-}
-.scrollbar-none {
-  /* hides scrollbar, keeps scroll */
-}
-```
 
 ---
 
 ## Live Ticks — useLiveTick
 
-- Called once in `LiveDashboard.tsx` — one persistent WebSocket for all symbols
-- Subscribes to **Quote + Summary + Trade** for every symbol
+- Called once in `LiveDashboard.tsx` only — one WebSocket
 - `TickData`: `{ bid, ask, mid, prevClose, last }`
+- VIX/VIX1D: use `tick.last` (bid/ask/mid are 0 for indices)
 - Auto-reconnects every 5s on close
-- Symbols = core (`SPX`, `/ESM26:XCME`) + all watchlist streamer symbols
-- VIX streamer symbol is `"VIX"` — use `tick.last` for display (bid/ask/mid are 0 for indices)
 
 ---
 
 ## WatchlistStrip
 
-- Auto-scrolling horizontal ticker, pauses on hover
-- SPX and ES always prepended as static entries (not fetched from Tastytrade)
-- All entries show: symbol | price | % change
-- Price logic: `mid === 0 ? last : mid` (consistent for all entries)
-- % change dimmed when market is closed
-- Edge fade via `maskImage` linear gradient
-- Scroll speed controlled by animation duration (currently 80s)
+- Items rendered twice for seamless loop: `[...entries, ...entries]`
+- `translateX(0)` → `translateX(-50%)` animation, `:hover` pauses
+- Edge fade via `maskImage` gradient
+- Price: `mid === 0 ? last : mid`
+- Speed: animation duration (80s currently)
 
 ---
 
 ## Skew History — useSkewHistory
 
-- Fetches ALL `skew_snapshots` where `created_at >= '2026-04-02'`
-- No date param — always returns full history
-- Realtime subscription appends new rows
+- Fetches ALL `skew_snapshots >= '2026-04-02'`
 - Returns: `{ skewHistory, latestSkew, avgSkew, isLoading }`
-- Chart has day separator lines drawn on canvas overlay, redraws on pan/zoom
-- `rightOffset: 10` on timeScale for breathing room on latest day
+- Realtime appends new rows
 
 ---
 
 ## WorldClock
 
-- Cities: CHI (America/Chicago), NY (America/New_York), BSB (America/Sao_Paulo), LDN (Europe/London)
-- ET offset computed dynamically via `Intl` — DST-aware, never hardcoded
-- Layout: two-column per card — left col has abbr + ET offset stacked, right col has time
-- Hover highlights card in amber (`#f59e0b`)
-
----
-
-## Watchlist API
-
-- `GET /api/watchlist` → Tastytrade `GET /watchlists/vovonacci`
-- Futures resolved to front-month active contract
-- WatchlistEntry: `{ symbol, streamerSymbol, instrumentType, marketSector }`
-- Open/closed: time-based per instrument type
-
----
-
-## Macro Events
-
-- `GET /api/macro-events?date=YYYY-MM-DD` → FMP economic calendar
-- Auto-scrolls to next upcoming event, updates every 30s
-- Auction: blue dot. High: red. Medium: amber. Low: dim.
-- Flex height to match Positions panel
+- CHI / NY / BSB / LDN
+- ET offset via `Intl` — DST-aware, never hardcoded
+- Hover highlights amber (`#f59e0b`)
 
 ---
 
 ## % Change
 
-- **SPX %**: `spxTick.prevClose` from DXFeed Summary
-- **ES %**: `esTick.prevClose` from DXFeed Summary
-- **VIX %**: `vixTick.prevClose` — accurate during RTH, may show 0.00% outside hours
-- **Watchlist %**: `tick.prevClose` per symbol, dimmed when closed
+- SPX/ES/VIX: `tick.prevClose` from DXFeed Summary
+- VIX % may show 0.00% outside RTH (last === prevClose at that point)
+- Watchlist: per-symbol `tick.prevClose`, dimmed when closed
 
 ---
 
 ## Pending / Planned
 
-### Next up
+### Verify Monday open
 
-- **Live straddle ticks** — stream ATM options to frontend for tick-by-tick straddle
-- **Poller DXFeed auth reconnect** — stability fix for overnight sessions
+- ES/SPX `bar_time` aligned to clean minute boundaries in Railway logs
+- VIX/VIX1D rows appearing in `vix_snapshots` / `vix1d_snapshots`
+- Main loop cycles aligning to wall-clock minutes
+- Skew every 5th cycle still firing
 
-### Data collection additions (accumulate for future analysis)
+### Next — frontend
 
-- VIX term structure daily snapshot (VX1–VX4 at close)
-- IV/RV ratio log — daily computed and stored
-- Skew at close — one clean daily value
-- Macro event outcomes — actual vs estimate + SPX move after
+- ECharts migration: SkewHistoryChart first, then StraddleSpxChart
+- 1-min candle charts: ES, SPX, VIX, VIX1D
+
+### Next — poller
+
+- `session_summary` table — one row per trading day (open straddle, skew, realized move, etc.)
+- VIX1D/VIX ratio at open
+- ES overnight range + gap
+
+### Dashboard features
+
+- VIX1D/VIX ratio in metrics strip
+- Skew percentile vs history
+- Realized vol tracker (5d/10d/21d vs IV30)
+- Opening range markers on straddle chart
+- Term structure panel (VX curve)
 
 ### Backlog
 
-- Real Tastytrade positions with live P&L
-- `/history` route for historical analysis (multi-day charts, date picker)
-- Native GEX calculation — chain + OI, stored every 30min
-- Term structure panel — VX futures curve
-- Skew percentile vs history
-- Realized vol tracker — rolling 5d/10d/21d from ES OHLC vs IV30
+- Native GEX (chain + OI every 30min)
+- Real Tastytrade positions with P&L
+- `/history` route
 - Holiday list in poller
-- Mobile layout polish
-- Threshold alerts (skew spike, straddle crosses level)
+- DXFeed auth reconnect
+- Mobile polish
+- Threshold alerts
 
 ---
 
@@ -303,7 +299,9 @@ See AGENTS.md for full coding conventions. Critical reminders:
 - **Timezones**: UTC stored, CT displayed, ET for market hours gating
 - **Hooks own data, components own UI**
 - **useLiveTick**: LiveDashboard level only, one WebSocket
-- **todayRows**: always filter by today's date before computing metrics
+- **todayRows**: always filter by today's ET date before computing metrics
 - **es_basis**: only non-null on first straddle row of the day
 - **Skew data**: only valid from April 2, 2026 onwards
-- **VIX**: streamer symbol is `"VIX"`, use `tick.last` not `tick.mid`
+- **VIX/VIX1D**: symbols `"VIX"` / `"VIX1D"`, always use `tick.last`
+- **bar_time**: use `currentBarTime()` from `lib/market-hours.mjs`, never hardcode
+- **Scheduling**: always `msUntilNextMinute()`, never fixed 60s timeouts
