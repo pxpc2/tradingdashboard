@@ -26,6 +26,7 @@ import { ES_SYMBOL } from "./ohlc.mjs";
 
 let openCycleFiredDate = null;
 let closeCycleFiredDate = null;
+let weeklyOpenCycleFiredDate = null;
 let skewCycleCount = 0;
 let lastSkipLog = 0;
 
@@ -45,6 +46,15 @@ function shouldFireCloseCycle() {
   if (["Sat", "Sun"].includes(day)) return false;
   if (closeCycleFiredDate === today) return false;
   return time >= "16:00:00" && time <= "16:01:00";
+}
+
+// Weekly straddle fires on Monday open cycle only, once per week
+function shouldFireWeeklyOpenCycle() {
+  const day = getETDay();
+  const today = getTodayET();
+  if (day !== "Mon") return false;
+  if (weeklyOpenCycleFiredDate === today) return false;
+  return true;
 }
 
 // ─── FMP helpers ─────────────────────────────────────────────────────────────
@@ -83,6 +93,110 @@ async function hasHighImpactMacro(dateET) {
   }
 }
 
+// ─── Weekly Straddle ─────────────────────────────────────────────────────────
+
+function findNearestFriday() {
+  const now = new Date();
+  const etNow = new Date(
+    now.toLocaleString("en-US", { timeZone: "America/New_York" }),
+  );
+  const day = etNow.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri
+  const daysUntilFriday = (5 - day + 7) % 7 || 7; // if today is Friday, get next Friday
+  const friday = new Date(etNow);
+  friday.setDate(etNow.getDate() + daysUntilFriday);
+  return friday.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+}
+
+async function captureWeeklyStraddle(options, spxMid) {
+  try {
+    const targetFriday = findNearestFriday();
+    console.log(
+      `[${nowCT()}] 📅 Weekly straddle — target expiry: ${targetFriday}`,
+    );
+
+    // Find SPXW options expiring on that Friday
+    const weeklyOptions = options.filter(
+      (o) =>
+        o["expiration-date"] === targetFriday && o["root-symbol"] === "SPXW",
+    );
+
+    if (weeklyOptions.length === 0) {
+      console.log(
+        `[${nowCT()}] Weekly straddle: no SPXW options found for ${targetFriday}.`,
+      );
+      return;
+    }
+
+    const strikes = [
+      ...new Set(weeklyOptions.map((o) => parseFloat(o["strike-price"]))),
+    ].sort((a, b) => a - b);
+
+    const atmStrike = strikes.reduce((prev, curr) =>
+      Math.abs(curr - spxMid) < Math.abs(prev - spxMid) ? curr : prev,
+    );
+
+    function getWeeklySymbol(strike, optType) {
+      const opt = weeklyOptions.find(
+        (o) =>
+          parseFloat(o["strike-price"]) === strike &&
+          o["option-type"] === optType,
+      );
+      return opt?.["streamer-symbol"] ?? null;
+    }
+
+    const callSymbol = getWeeklySymbol(atmStrike, "C");
+    const putSymbol = getWeeklySymbol(atmStrike, "P");
+
+    if (!callSymbol || !putSymbol) {
+      console.log(
+        `[${nowCT()}] Weekly straddle: ATM symbols not found for strike ${atmStrike}.`,
+      );
+      return;
+    }
+
+    const quotes = await getQuotes([callSymbol, putSymbol]);
+    const callQ = quotes[callSymbol];
+    const putQ = quotes[putSymbol];
+
+    if (!isValidQuote(callQ) || !isValidQuote(putQ)) {
+      console.log(`[${nowCT()}] Weekly straddle: invalid quotes, aborting.`);
+      return;
+    }
+
+    const callMid = (callQ.bidPrice + callQ.askPrice) / 2;
+    const putMid = (putQ.bidPrice + putQ.askPrice) / 2;
+    const straddleMid = callMid + putMid;
+
+    const { error } = await withTimeout(
+      supabase.from("weekly_straddle_snapshots").insert({
+        expiry_date: targetFriday,
+        spx_ref: spxMid,
+        atm_strike: atmStrike,
+        call_bid: callQ.bidPrice,
+        call_ask: callQ.askPrice,
+        put_bid: putQ.bidPrice,
+        put_ask: putQ.askPrice,
+        straddle_mid: straddleMid,
+      }),
+      10000,
+      "weekly straddle insert",
+    );
+
+    if (error) {
+      console.error(
+        `[${nowCT()}] Weekly straddle insert error:`,
+        error.message,
+      );
+    } else {
+      console.log(
+        `[${nowCT()}] 📅 Weekly straddle | expiry: ${targetFriday} | SPX: ${spxMid.toFixed(2)} | ATM: ${atmStrike} | straddle: ${straddleMid.toFixed(2)}`,
+      );
+    }
+  } catch (err) {
+    console.error(`[${nowCT()}] captureWeeklyStraddle error:`, err.message);
+  }
+}
+
 // ─── Session Summary ──────────────────────────────────────────────────────────
 
 async function writeOpenSummary({
@@ -108,7 +222,6 @@ async function writeOpenSummary({
       weekday: "long",
     });
 
-    // Get first skew snapshot of today if already available
     const { data: skewRows } = await supabase
       .from("skew_snapshots")
       .select("skew, put_iv, call_iv, atm_iv")
@@ -430,7 +543,6 @@ async function computeAndStoreSkew(allOptions, spxMid) {
 
 // ─── Main cycle ───────────────────────────────────────────────────────────────
 
-// Returns open cycle data if isOpenCycle, otherwise null
 async function runCycle(isOpenCycle = false) {
   if (!isMarketHours()) {
     const now = Date.now();
@@ -689,9 +801,15 @@ async function runCycle(isOpenCycle = false) {
       }
     }
 
-    // Return open cycle data for session summary
+    // Return open cycle data for session summary + weekly straddle
     if (isOpenCycle) {
-      return { spxMid, atmStrike: atmStrikePrice, straddleMid, esBasis };
+      return {
+        spxMid,
+        atmStrike: atmStrikePrice,
+        straddleMid,
+        esBasis,
+        options,
+      };
     }
     return null;
   } catch (err) {
@@ -708,14 +826,28 @@ export async function runAndScheduleNext() {
     skewCycleCount = 0;
     console.log(`[${nowCT()}] 🔔 Disparando ciclo de abertura...`);
     const openData = await runCycle(true);
+
     if (openData) {
-      // Write session summary open — fire and forget, don't block next cycle
       writeOpenSummary({
         today: getTodayET(),
-        ...openData,
+        spxMid: openData.spxMid,
+        atmStrike: openData.atmStrike,
+        straddleMid: openData.straddleMid,
+        esBasis: openData.esBasis,
       }).catch((err) =>
         console.error(`[${nowCT()}] writeOpenSummary failed:`, err.message),
       );
+
+      // Weekly straddle — Monday only
+      if (shouldFireWeeklyOpenCycle()) {
+        weeklyOpenCycleFiredDate = getTodayET();
+        captureWeeklyStraddle(openData.options, openData.spxMid).catch((err) =>
+          console.error(
+            `[${nowCT()}] captureWeeklyStraddle failed:`,
+            err.message,
+          ),
+        );
+      }
     }
   } else if (shouldFireCloseCycle()) {
     closeCycleFiredDate = getTodayET();
