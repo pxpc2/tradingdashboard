@@ -90,8 +90,6 @@ Rules:
 
 ### useSkewHistory — Full Historical Data
 
-No date param. Always fetches all skew data from April 2, 2026 onwards.
-
 ```typescript
 export function useSkewHistory() {
   // Fetches ALL skew >= '2026-04-02'
@@ -147,9 +145,26 @@ Rules:
 - Wrap `removePriceLine`, `setVisibleRange`, `fitContent` in try/catch
 - Resize: `window.addEventListener("resize", handleResize)` + cleanup
 
-### Day Separator Lines Pattern (Lightweight Charts)
+### Price Line Refs Pattern
 
-For multi-day charts, draw dashed vertical lines via canvas overlay:
+When using `createPriceLine` (e.g. skew 1σ levels), always store refs and clear before redrawing:
+
+```typescript
+const downsideLineRef = useRef<IPriceLine | null>(null);
+
+// In data effect — clear first:
+if (downsideLineRef.current) {
+  try { seriesRef.current.removePriceLine(downsideLineRef.current); } catch {}
+  downsideLineRef.current = null;
+}
+
+// Then recreate:
+downsideLineRef.current = seriesRef.current.createPriceLine({ ... });
+```
+
+### Day Separator Lines Pattern
+
+Canvas overlay for multi-day charts:
 
 ```typescript
 const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -190,7 +205,7 @@ const drawSeparators = useCallback(() => {
     const x = chartRef.current.timeScale().timeToCoordinate(ts);
     if (x === null || x < 0 || x > w) continue;
     ctx.save();
-    ctx.strokeStyle = "#949494";
+    ctx.strokeStyle = "#444";
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.beginPath();
@@ -206,53 +221,15 @@ const drawSeparators = useCallback(() => {
 - Unsubscribe on cleanup
 - Call `drawSeparators()` at end of data update effect
 - Canvas overlay: `position: absolute`, `pointerEvents: none`, `zIndex: 10`
-- Add `rightOffset: 10` to timeScale
+- Add `rightOffset: 80` to timeScale (skew chart)
 
 ---
 
-## Apache ECharts — Planned Migration
+## ECharts — Parked
 
-`StraddleSpxChart` and `SkewHistoryChart` are being migrated to ECharts. Future candle charts (ES, SPX, VIX, VIX1D) will be built in ECharts from the start.
+ECharts migration was attempted but parked. The core issue: `xAxis.type: 'time'` renders full 24h timeline including overnight gaps, making RTH data compress into narrow spikes. Switching to `type: 'category'` eliminates gaps but loses proportional time spacing.
 
-General ECharts component pattern:
-
-```typescript
-"use client";
-import { useEffect, useRef } from "react";
-import * as echarts from "echarts";
-
-export default function XxxChart({ data }: Props) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<echarts.ECharts | null>(null);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const chart = echarts.init(containerRef.current, null, { renderer: "canvas" });
-    chartRef.current = chart;
-    const handleResize = () => chart.resize();
-    window.addEventListener("resize", handleResize);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      chart.dispose();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!chartRef.current) return;
-    chartRef.current.setOption({ /* option */ });
-  }, [data]);
-
-  return <div ref={containerRef} className="w-full h-full" />;
-}
-```
-
-ECharts advantages over Lightweight Charts for this use case:
-
-- First-class candlestick series
-- Cleaner dual Y-axis (yAxis array)
-- Native `markLine` / `markArea` for day separators and level lines (no canvas hack)
-- Built-in `dataZoom` for brush/scroll zoom
-- Richer crosshair tooltip
+Revisit when building candlestick charts for ES/SPX/VIX/VIX1D — ECharts has clear advantages there (native candlestick, dataZoom, markLine). For existing line charts, Lightweight Charts stays.
 
 ---
 
@@ -262,25 +239,53 @@ ECharts advantages over Lightweight Charts for this use case:
 
 - Calls all data hooks
 - Calls `useLiveTick` with combined symbol list
-- Computes today from ET date
+- Computes today from ET date (with `?date=` param override for dev)
 - Renders all child components with props
 - Imports and calls `signOut`
 
 ```typescript
-const today = new Date().toLocaleDateString("en-CA", {
-  timeZone: "America/New_York",
-});
+// Normal: uses ET today
+// Dev override: ?date=2026-04-09 in URL
+const searchParams = useSearchParams();
+const today =
+  searchParams.get("date") ??
+  new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 ```
 
-### VIX/VIX1D in LiveDashboard
+Requires `<Suspense>` wrapper in `page.tsx` due to `useSearchParams`.
+
+### VIX/VIX1D pattern
 
 ```typescript
 const vixTick = ticks["VIX"] ?? null;
 const vixLast = vixTick?.last ?? null;
 const vixPct = pctChange(vixLast, vixTick?.prevClose ?? null);
+
+const vix1dTick = ticks["VIX1D"] ?? null;
+const vix1dLast = vix1dTick?.last ?? null;
+const vix1dPct = pctChange(vix1dLast, vix1dTick?.prevClose ?? null);
+
+const vixRatio =
+  vix1dLast && vixLast && vixLast > 0 ? (vix1dLast / vixLast).toFixed(2) : null;
+// Ratio color: amber (#f59e0b) when >= 1, neutral otherwise
 ```
 
-Always use `tick.last` — bid/ask/mid are 0 for indices.
+### Opening skew for 1σ levels
+
+```typescript
+const openingSkew = useMemo(() => {
+  return (
+    skewHistory.find(
+      (s) =>
+        new Date(s.created_at).toLocaleDateString("en-CA", {
+          timeZone: "America/New_York",
+        }) === today,
+    ) ?? null
+  );
+}, [skewHistory, today]);
+```
+
+Pass as `openingSkew={openingSkew}` to `StraddleSpxChart`.
 
 ---
 
@@ -292,52 +297,83 @@ Called once in `LiveDashboard.tsx` only. One WebSocket for the entire app.
 
 - `mid` — Quote events (futures, equities)
 - `prevClose` — Summary `prevDayClosePrice`
-- `last` — Trade events (VIX, VIX1D, SPX index — use this for display)
+- `last` — Trade events — use for VIX, VIX1D, and any index
 
 ---
 
 ## Poller Conventions
 
-### Wall-clock anchoring — always use these, never fixed timeouts
+### Wall-clock anchoring
 
 ```js
-// msUntilNextMinute — from lib/market-hours.mjs
 function msUntilNextMinute() {
-  const now = Date.now();
-  return Math.ceil(now / 60000) * 60000 - now;
+  return Math.ceil(Date.now() / 60000) * 60000 - Date.now();
 }
-
-// currentBarTime — snapshot before collection begins
 function currentBarTime() {
   return new Date(Math.floor(Date.now() / 60000) * 60000).toISOString();
 }
 ```
 
+Never use fixed `setTimeout(fn, 60000)`.
+
+### getIndexLast — for VIX/VIX1D spot fetch
+
+```js
+// lib/dxfeed.mjs
+export async function getIndexLast(symbol) {
+  // Listens for Trade event with price > 0
+  // Returns the last price or null on timeout
+}
+```
+
+Use this whenever you need a spot price for an index (VIX, VIX1D) in the poller.
+
 ### collectOhlc — quote vs trade symbols
 
 ```js
 // quoteSymbols: futures/equities — use Quote bid/ask mid
-// tradeSymbols: indices (VIX, VIX1D) — use Trade event price
+// tradeSymbols: indices — use Trade event price
 const ohlc = await collectOhlc(quoteSymbols, tradeSymbols, COLLECT_MS);
 ```
+
+### session_summary writes
+
+```js
+// Always upsert, never insert — safe to re-run
+supabase.from("session_summary").upsert(payload, { onConflict: "date" })
+
+// writeOpenSummary — fire and forget from runAndScheduleNext:
+writeOpenSummary({ today, spxMid, atmStrike, straddleMid, esBasis })
+  .catch((err) => console.error(...));
+
+// writeCloseSummary — fire and forget at 16:00 ET:
+writeCloseSummary(getTodayET())
+  .catch((err) => console.error(...));
+```
+
+Opening skew fields may be null at 09:30 (first skew fires at ~09:35). This is expected — raw data is in `skew_snapshots`.
+
+### Opening price convention
+
+- **ATM strike selection**: uses `DXFeed Summary.openPrice`
+- **spx_ref stored**: uses `DXFeed Quote mid`
+- **FMP 09:30 bar**: logged for comparison only, not used for any decision
+- Do not change the source until validated over multiple sessions
 
 ### ES symbol rollover
 
 Current: `/ESM26:XCME`. Next roll September 2026 → `/ESU26:XCME`.
-Update in `loops/ohlc.mjs` and `loops/main.mjs`. Format: `/ES{H|M|U|Z}{2-digit-year}:XCME`.
+Update in `loops/ohlc.mjs` (ES_SYMBOL const) and `loops/main.mjs` (ES_SYMBOL import).
 
 ---
 
 ## WatchlistStrip — Ticker Pattern
 
 ```typescript
-// Render twice for seamless loop
 {[...allEntries, ...allEntries].map((entry, i) => (
   <TickerItem key={`${entry.symbol}-${i}`} entry={entry} ticks={ticks} />
 ))}
 ```
-
-CSS:
 
 ```css
 @keyframes ticker {
@@ -357,8 +393,6 @@ CSS:
 ```
 
 Edge fade: `maskImage: "linear-gradient(to right, transparent, black 4%, black 96%, transparent)"`
-
-SPX and ES always prepended as static entries, filtered from Tastytrade list to avoid duplicates.
 Price: `mid === null || mid === 0 ? last : mid`
 
 ---
@@ -399,14 +433,6 @@ Always computed at render time — DST-aware automatically.
 
 ---
 
-## Mobile Responsive Conventions
-
-- Base = mobile, `md:` = desktop (768px)
-- Watchlist: `hidden md:block` in header
-- Padding: `px-4 md:px-6`, `py-4 md:py-5`
-
----
-
 ## Types
 
 All in `client/app/types.ts`:
@@ -418,6 +444,7 @@ FlySnapshot        sml_fly_snapshots
 SkewSnapshot       skew_snapshots
 EsSnapshot         es_snapshots — includes bar_time?: string | null
 SpxSnapshot        spx_snapshots — includes bar_time?: string | null
+SessionSummary     session_summary — add when building /analysis hooks
 ```
 
 Add when building new hooks:
@@ -427,11 +454,11 @@ VixSnapshot        vix_snapshots — bar_time, open, high, low, close
 Vix1dSnapshot      vix1d_snapshots — bar_time, open, high, low, close
 ```
 
-Types exported from API routes (not in types.ts):
+Types from API routes (not in types.ts):
 
 ```
-MacroEvent         from api/macro-events/route.ts
-WatchlistEntry     from api/watchlist/route.ts
+MacroEvent         api/macro-events/route.ts
+WatchlistEntry     api/watchlist/route.ts
 ```
 
 ---
@@ -441,7 +468,7 @@ WatchlistEntry     from api/watchlist/route.ts
 ```
 Backgrounds:
   #0a0a0a   page background
-  #111111   component background, chart background
+  #111111   component / chart background
   #1a1a1a   subtle surface, grid lines, topbar border
   #1f1f1f   pipe dividers
   #222222   section dividers
@@ -459,10 +486,12 @@ Chart / indicators:
   #9CA9FF   straddle series
   #60a5fa   skew series, fly 10W, auction dot
   #737373   SPX overlay (dashed)
-  #949494   day separator lines
-  #4ade80   open state, positive %
-  #f87171   negative %, high impact
-  #f59e0b   amber highlight, medium impact, realized >=70%, clock hover
+  #444       day separator lines (skew chart)
+  #4ade80   open state, positive %, upside 1σ level
+  #f87171   negative %, high impact, downside 1σ level
+  #f59e0b   amber: medium impact, realized ≥70%, clock hover, VIX1D/VIX ≥ 1
+  #4ade8066 upside 1σ line (semi-transparent)
+  #f8717166 downside 1σ line (semi-transparent)
 ```
 
 ---
