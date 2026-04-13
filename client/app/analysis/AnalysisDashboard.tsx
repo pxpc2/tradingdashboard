@@ -3,10 +3,14 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { signOut } from "../login/actions";
+import { FaSignOutAlt } from "react-icons/fa";
 import ImpliedVsRealized from "./components/ImpliedVsRealized";
 import RatioHistogram from "./components/RatioHistogram";
 import DecayCurve from "./components/DecayCurve";
-import { FaSignOutAlt } from "react-icons/fa";
+import StraddleHistory from "./components/StraddleHistory";
+import DayOfWeekBreakdown from "./components/DayOfWeekBreakdown";
+import MaxVsEod from "./components/MaxVsEod";
+import SkewVsRealized from "./components/SkewVsRealized";
 
 type StraddleSnapshot = {
   created_at: string;
@@ -53,6 +57,17 @@ function getDayOfWeek(dateStr: string): string {
   return new Date(dateStr + "T12:00:00Z").toLocaleDateString("en-US", {
     weekday: "short",
   });
+}
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 mb-3">
+      <div className="w-0.5 h-4 bg-[#333]" />
+      <span className="font-sans text-xs text-[#666] uppercase tracking-wide">
+        {label}
+      </span>
+    </div>
+  );
 }
 
 export default function AnalysisDashboard({
@@ -115,7 +130,6 @@ export default function AnalysisDashboard({
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
-      {/* Header */}
       <div className="border-b border-[#1a1a1a] bg-[#0a0a0a] sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between h-10">
           <div className="flex items-center gap-4">
@@ -135,7 +149,7 @@ export default function AnalysisDashboard({
             <form action={signOut}>
               <button
                 type="submit"
-                className="font-sans text-xs text-[#555] hover:text-[#666] transition-colors hover:cursor-pointer uppercase tracking-widest"
+                className="text-[#555] hover:cursor-pointer"
               >
                 <FaSignOutAlt className="text-md hover:text-[#f59e0b]" />
               </button>
@@ -151,50 +165,54 @@ export default function AnalysisDashboard({
           </div>
         ) : (
           <>
-            {/* Row 1: Scatter + Histogram */}
+            {/* Row 1: Implied vs Realized + Ratio Histogram */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-0.5 h-4 bg-[#333]" />
-                  <span className="font-sans text-xs text-[#666] uppercase tracking-wide">
-                    Implied vs Realized
-                  </span>
-                </div>
+                <SectionHeader label="Implied vs Realized" />
                 <ImpliedVsRealized sessions={sessions} />
               </div>
               <div>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-0.5 h-4 bg-[#333]" />
-                  <span className="font-sans text-xs text-[#666] uppercase tracking-wide">
-                    DISTRIBUIÇÃO Realized / Implied
-                  </span>
-                </div>
+                <SectionHeader label="Distribuição RV/IV" />
                 <RatioHistogram sessions={sessions} />
               </div>
             </div>
 
-            {/* Row 2: Decay curve */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-0.5 h-4 bg-[#333]" />
-                <span className="font-sans text-xs text-[#666] uppercase tracking-wide">
-                  Straddle Decay — média (avg) vs hoje
-                </span>
+            {/* Row 2: Straddle history + Day of week */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <SectionHeader label="Straddle abertura histórico" />
+                <StraddleHistory sessions={sessions} />
               </div>
+              <div>
+                <SectionHeader label="RV/IV por dia da semana" />
+                <DayOfWeekBreakdown sessions={sessions} />
+              </div>
+            </div>
+
+            {/* Row 3: Max intraday vs EOD + Skew vs Realized */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <SectionHeader label="Max intraday vs EOD — trending vs reverting" />
+                <MaxVsEod sessions={sessions} />
+              </div>
+              <div>
+                <SectionHeader label="Skew vs movimento realizado" />
+                <SkewVsRealized sessions={sessions} />
+              </div>
+            </div>
+
+            {/* Row 4: Decay curve full width */}
+            <div>
+              <SectionHeader label="Straddle Decay — média (avg) vs hoje" />
               <DecayCurve
                 sessions={sessions}
                 straddleSnapshots={straddleSnapshots}
               />
             </div>
 
-            {/* Row 3: Session table */}
+            {/* Row 5: Session table */}
             <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-0.5 h-4 bg-[#333]" />
-                <span className="font-sans text-xs text-[#666] uppercase tracking-wide">
-                  Tabela sessões
-                </span>
-              </div>
+              <SectionHeader label="Tabela sessões" />
               <div className="bg-[#111] rounded overflow-hidden">
                 <table className="w-full">
                   <thead>
