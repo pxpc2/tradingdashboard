@@ -281,6 +281,7 @@ const skewPctile = useMemo(() => {
 - DXFeed auth reconnect
 - Holiday list in poller
 - Mobile polish
+- **Skew change z-score in `/analysis`** — replace threshold classification (±0.005) with z-score of daily skew change vs rolling distribution. Currently using threshold approach (Fell/Flat/Rose zones) which is stable with small samples. Switch to z-score once 60+ sessions accumulated. Formula: `(todayChange - mean(changes)) / std(changes)` over trailing N sessions.
 
 ---
 

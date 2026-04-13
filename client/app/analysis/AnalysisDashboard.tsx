@@ -11,6 +11,7 @@ import StraddleHistory from "./components/StraddleHistory";
 import DayOfWeekBreakdown from "./components/DayOfWeekBreakdown";
 import MaxVsEod from "./components/MaxVsEod";
 import SkewVsRealized from "./components/SkewVsRealized";
+import OvernightRange from "./components/OvernightRange";
 
 type StraddleSnapshot = {
   created_at: string;
@@ -28,23 +29,36 @@ type SkewSnapshot = {
   atm_iv: number;
 };
 
+type EsSnapshot = {
+  created_at: string;
+  open: number;
+  high: number;
+  low: number;
+  es_ref: number;
+};
+
 export type SessionData = {
   date: string;
   dayOfWeek: string;
   openingStraddle: number;
   openingSpx: number;
   openingSkew: number | null;
+  closingSkew: number | null;
+  skewChange: number | null; // closingSkew - openingSkew
   closingSpx: number;
   realizedMovePts: number;
   realizedMovePct: number;
   maxMovePts: number;
   maxMovePct: number;
+  overnightRange: number | null;
+  overnightGap: number | null;
   snapshots: StraddleSnapshot[];
 };
 
 type Props = {
   straddleSnapshots: StraddleSnapshot[];
   skewSnapshots: SkewSnapshot[];
+  esSnapshots: EsSnapshot[];
 };
 
 function getETDate(isoString: string): string {
@@ -57,6 +71,13 @@ function getDayOfWeek(dateStr: string): string {
   return new Date(dateStr + "T12:00:00Z").toLocaleDateString("en-US", {
     weekday: "short",
   });
+}
+
+// Get previous calendar day from ET date string
+function prevCalendarDay(etDate: string): string {
+  const d = new Date(etDate + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
 }
 
 function SectionHeader({ label }: { label: string }) {
@@ -73,6 +94,7 @@ function SectionHeader({ label }: { label: string }) {
 export default function AnalysisDashboard({
   straddleSnapshots,
   skewSnapshots,
+  esSnapshots,
 }: Props) {
   const sessions = useMemo((): SessionData[] => {
     const byDate = new Map<string, StraddleSnapshot[]>();
@@ -83,9 +105,52 @@ export default function AnalysisDashboard({
     }
 
     const skewByDate = new Map<string, number>();
+    const closingSkewByDate = new Map<string, number>();
     for (const s of skewSnapshots) {
       const date = getETDate(s.created_at);
       if (!skewByDate.has(date)) skewByDate.set(date, s.skew);
+      closingSkewByDate.set(date, s.skew); // last write wins = closing skew
+    }
+
+    // Build overnight range per session date
+    // Overnight window: prevDay 21:00 UTC (17:00 ET) → sessionDay 13:30 UTC (09:30 ET)
+    const overnightByDate = new Map<
+      string,
+      { range: number; gap: number | null }
+    >();
+
+    for (const [date] of byDate) {
+      const prev = prevCalendarDay(date);
+      const windowStart = new Date(`${prev}T21:00:00Z`).getTime();
+      const windowEnd = new Date(`${date}T13:30:00Z`).getTime();
+
+      const overnightBars = esSnapshots.filter((e) => {
+        const t = new Date(e.created_at).getTime();
+        return t >= windowStart && t < windowEnd;
+      });
+
+      if (overnightBars.length < 5) continue; // not enough bars
+
+      const highs = overnightBars.map((e) => e.high);
+      const lows = overnightBars.map((e) => e.low);
+      const overnightHigh = Math.max(...highs);
+      const overnightLow = Math.min(...lows);
+      const range = parseFloat((overnightHigh - overnightLow).toFixed(2));
+
+      // Gap: first overnight bar open vs last pre-overnight bar close
+      const priorBars = esSnapshots.filter((e) => {
+        const t = new Date(e.created_at).getTime();
+        return t >= new Date(`${prev}T13:30:00Z`).getTime() && t < windowStart;
+      });
+      const lastRTHClose =
+        priorBars.length > 0 ? priorBars[priorBars.length - 1].es_ref : null;
+      const firstGlobexOpen = overnightBars[0]?.open ?? null;
+      const gap =
+        lastRTHClose && firstGlobexOpen
+          ? parseFloat((firstGlobexOpen - lastRTHClose).toFixed(2))
+          : null;
+
+      overnightByDate.set(date, { range, gap });
     }
 
     const result: SessionData[] = [];
@@ -107,24 +172,35 @@ export default function AnalysisDashboard({
       const maxMovePts = Math.max(maxSpx - openSpx, openSpx - minSpx);
       const realizedMovePct = (realizedMovePts / opening.straddle_mid) * 100;
       const maxMovePct = (maxMovePts / opening.straddle_mid) * 100;
+      const openingSkew = skewByDate.get(date) ?? null;
+      const closingSkew = closingSkewByDate.get(date) ?? null;
+      const skewChange =
+        openingSkew !== null && closingSkew !== null
+          ? parseFloat((closingSkew - openingSkew).toFixed(4))
+          : null;
+      const overnight = overnightByDate.get(date) ?? null;
 
       result.push({
         date,
         dayOfWeek: getDayOfWeek(date),
         openingStraddle: opening.straddle_mid,
         openingSpx: openSpx,
-        openingSkew: skewByDate.get(date) ?? null,
+        openingSkew,
+        closingSkew,
+        skewChange,
         closingSpx: closeSpx,
         realizedMovePts,
         realizedMovePct,
         maxMovePts,
         maxMovePct,
+        overnightRange: overnight?.range ?? null,
+        overnightGap: overnight?.gap ?? null,
         snapshots: sorted,
       });
     }
 
     return result.sort((a, b) => a.date.localeCompare(b.date));
-  }, [straddleSnapshots, skewSnapshots]);
+  }, [straddleSnapshots, skewSnapshots, esSnapshots]);
 
   const sessionCount = sessions.length;
 
@@ -189,19 +265,25 @@ export default function AnalysisDashboard({
               </div>
             </div>
 
-            {/* Row 3: Max intraday vs EOD + Skew vs Realized */}
+            {/* Row 3: Max intraday vs EOD + Skew vs Regime */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <SectionHeader label="Max intraday vs EOD — trending vs reverting" />
                 <MaxVsEod sessions={sessions} />
               </div>
               <div>
-                <SectionHeader label="Skew vs movimento realizado" />
+                <SectionHeader label="Skew intraday vs regime do dia" />
                 <SkewVsRealized sessions={sessions} />
               </div>
             </div>
 
-            {/* Row 4: Decay curve full width */}
+            {/* Row 4: Overnight range full width */}
+            <div>
+              <SectionHeader label="Overnight ES range vs RV/IV" />
+              <OvernightRange sessions={sessions} />
+            </div>
+
+            {/* Row 5: Decay curve full width */}
             <div>
               <SectionHeader label="Straddle Decay — média (avg) vs hoje" />
               <DecayCurve
@@ -210,7 +292,7 @@ export default function AnalysisDashboard({
               />
             </div>
 
-            {/* Row 5: Session table */}
+            {/* Row 6: Session table */}
             <div>
               <SectionHeader label="Tabela sessões" />
               <div className="bg-[#111] rounded overflow-hidden">
@@ -225,6 +307,8 @@ export default function AnalysisDashboard({
                         "Max",
                         "RV/IV",
                         "Skew",
+                        "Skew Δ",
+                        "ON Range",
                       ].map((h) => (
                         <th
                           key={h}
@@ -272,6 +356,28 @@ export default function AnalysisDashboard({
                           </td>
                           <td className="font-mono text-sm text-[#9ca3af] px-4 py-2.5">
                             {s.openingSkew?.toFixed(3) ?? "—"}
+                          </td>
+                          <td
+                            className="font-mono text-sm px-4 py-2.5"
+                            style={{
+                              color:
+                                s.skewChange === null
+                                  ? "#444"
+                                  : s.skewChange > 0
+                                    ? "#f87171"
+                                    : s.skewChange < 0
+                                      ? "#9CA9FF"
+                                      : "#555",
+                            }}
+                          >
+                            {s.skewChange !== null
+                              ? `${s.skewChange > 0 ? "+" : ""}${s.skewChange.toFixed(3)}`
+                              : "—"}
+                          </td>
+                          <td className="font-mono text-sm text-[#9ca3af] px-4 py-2.5">
+                            {s.overnightRange !== null
+                              ? `${s.overnightRange.toFixed(1)}pts`
+                              : "—"}
                           </td>
                         </tr>
                       );
