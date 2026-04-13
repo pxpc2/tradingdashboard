@@ -8,6 +8,12 @@ export type TickData = {
   mid: number;
   prevClose: number | null;
   last: number | null;
+  // Greeks — only populated for option symbols
+  delta: number | null;
+  gamma: number | null;
+  theta: number | null;
+  vega: number | null;
+  iv: number | null;
 };
 
 export const ES_STREAMER_SYMBOL = "/ESM26:XCME";
@@ -16,7 +22,9 @@ export function useLiveTick(symbols: string[]) {
   const [ticks, setTicks] = useState<Record<string, TickData>>({});
   const wsRef = useRef<WebSocket | null>(null);
   const channelId = useRef(1);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const cancelledRef = useRef(false);
 
   useEffect(() => {
@@ -35,36 +43,46 @@ export function useLiveTick(symbols: string[]) {
         wsRef.current = ws;
 
         ws.onopen = () => {
-          ws.send(JSON.stringify({
-            type: "SETUP",
-            channel: 0,
-            version: "0.1",
-            minVersion: "0.1",
-            keepaliveTimeout: 60,
-            acceptKeepaliveTimeout: 60,
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "SETUP",
+              channel: 0,
+              version: "0.1",
+              minVersion: "0.1",
+              keepaliveTimeout: 60,
+              acceptKeepaliveTimeout: 60,
+            }),
+          );
           ws.send(JSON.stringify({ type: "AUTH", channel: 0, token }));
-          ws.send(JSON.stringify({
-            type: "CHANNEL_REQUEST",
-            channel: channelId.current,
-            service: "FEED",
-            parameters: { contract: "AUTO" },
-          }));
+          ws.send(
+            JSON.stringify({
+              type: "CHANNEL_REQUEST",
+              channel: channelId.current,
+              service: "FEED",
+              parameters: { contract: "AUTO" },
+            }),
+          );
         };
 
         ws.onmessage = (event) => {
           const msg = JSON.parse(event.data);
 
-          if (msg.type === "CHANNEL_OPENED" && msg.channel === channelId.current) {
-            ws.send(JSON.stringify({
-              type: "FEED_SUBSCRIPTION",
-              channel: channelId.current,
-              add: [
-                ...symbols.map((symbol) => ({ type: "Quote", symbol })),
-                ...symbols.map((symbol) => ({ type: "Summary", symbol })),
-                ...symbols.map((symbol) => ({ type: "Trade", symbol })),
-              ],
-            }));
+          if (
+            msg.type === "CHANNEL_OPENED" &&
+            msg.channel === channelId.current
+          ) {
+            ws.send(
+              JSON.stringify({
+                type: "FEED_SUBSCRIPTION",
+                channel: channelId.current,
+                add: [
+                  ...symbols.map((symbol) => ({ type: "Quote", symbol })),
+                  ...symbols.map((symbol) => ({ type: "Summary", symbol })),
+                  ...symbols.map((symbol) => ({ type: "Trade", symbol })),
+                  ...symbols.map((symbol) => ({ type: "Greeks", symbol })),
+                ],
+              }),
+            );
           }
 
           if (msg.type === "FEED_DATA" && msg.channel === channelId.current) {
@@ -76,7 +94,16 @@ export function useLiveTick(symbols: string[]) {
               for (const event of events) {
                 if (!symbols.includes(event.eventSymbol)) continue;
                 const existing = next[event.eventSymbol] ?? {
-                  bid: 0, ask: 0, mid: 0, prevClose: null, last: null,
+                  bid: 0,
+                  ask: 0,
+                  mid: 0,
+                  prevClose: null,
+                  last: null,
+                  delta: null,
+                  gamma: null,
+                  theta: null,
+                  vega: null,
+                  iv: null,
                 };
 
                 if (event.eventType === "Quote") {
@@ -107,6 +134,17 @@ export function useLiveTick(symbols: string[]) {
                     };
                   }
                 }
+
+                if (event.eventType === "Greeks") {
+                  next[event.eventSymbol] = {
+                    ...existing,
+                    delta: event.delta ?? null,
+                    gamma: event.gamma ?? null,
+                    theta: event.theta ?? null,
+                    vega: event.vega ?? null,
+                    iv: event.volatility ?? null,
+                  };
+                }
               }
               return next;
             });
@@ -117,12 +155,16 @@ export function useLiveTick(symbols: string[]) {
           }
         };
 
-        ws.onerror = () => { ws.close(); };
+        ws.onerror = () => {
+          ws.close();
+        };
 
         ws.onclose = () => {
           wsRef.current = null;
           if (!cancelledRef.current) {
-            console.log("[useLiveTick] Connection closed, reconnecting in 5s...");
+            console.log(
+              "[useLiveTick] Connection closed, reconnecting in 5s...",
+            );
             reconnectTimeoutRef.current = setTimeout(connect, 5 * 1000);
           }
         };
@@ -138,7 +180,8 @@ export function useLiveTick(symbols: string[]) {
 
     return () => {
       cancelledRef.current = true;
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (reconnectTimeoutRef.current)
+        clearTimeout(reconnectTimeoutRef.current);
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;

@@ -41,6 +41,8 @@ type TradeStructure =
   | "Put Butterfly"
   | "Unknown";
 
+type MaxPnl = { maxProfit: number; maxLoss: number };
+
 type TradeGroup = {
   id: string;
   structure: TradeStructure;
@@ -50,7 +52,72 @@ type TradeGroup = {
   label: string;
   legs: PositionLeg[];
   totalPnl: number | null;
+  maxPnl: MaxPnl | null;
+  netDelta: number | null;
 };
+
+function computeMaxPnl(
+  structure: TradeStructure,
+  legs: PositionLeg[],
+): MaxPnl | null {
+  if (structure === "Put Spread" || structure === "Call Spread") {
+    const sorted = [...legs].sort((a, b) => a.strike - b.strike);
+    const width = sorted[1].strike - sorted[0].strike;
+    const qty = sorted[0].quantity;
+    const multiplier = sorted[0].multiplier;
+    const longLeg = legs.find((l) => l.direction === "Long");
+    const shortLeg = legs.find((l) => l.direction === "Short");
+    if (!longLeg || !shortLeg) return null;
+    const netDebit = longLeg.averageOpenPrice - shortLeg.averageOpenPrice;
+    if (netDebit > 0) {
+      return {
+        maxProfit: (width - netDebit) * qty * multiplier,
+        maxLoss: -(netDebit * qty * multiplier),
+      };
+    } else {
+      const netCredit = -netDebit;
+      return {
+        maxProfit: netCredit * qty * multiplier,
+        maxLoss: -((width - netCredit) * qty * multiplier),
+      };
+    }
+  }
+
+  if (structure === "Put Butterfly" || structure === "Call Butterfly") {
+    const sorted = [...legs].sort((a, b) => a.strike - b.strike);
+    const [low, mid] = sorted;
+    const wingQty = low.quantity;
+    const multiplier = low.multiplier;
+    const width = mid.strike - low.strike;
+    let netCostPerUnit = 0;
+    for (const leg of legs) {
+      const sign = leg.direction === "Long" ? 1 : -1;
+      netCostPerUnit += sign * leg.averageOpenPrice * (leg.quantity / wingQty);
+    }
+    return {
+      maxProfit: (width - netCostPerUnit) * wingQty * multiplier,
+      maxLoss: -(netCostPerUnit * wingQty * multiplier),
+    };
+  }
+
+  return null;
+}
+
+function computeNetDelta(
+  legs: PositionLeg[],
+  ticks: Record<string, TickData>,
+): number | null {
+  let net = 0;
+  let hasAny = false;
+  for (const leg of legs) {
+    const tick = ticks[leg.streamerSymbol] ?? null;
+    if (tick?.delta == null) continue;
+    const sign = leg.direction === "Long" ? 1 : -1;
+    net += sign * tick.delta * leg.quantity;
+    hasAny = true;
+  }
+  return hasAny ? net : null;
+}
 
 function groupLegs(
   legs: PositionLeg[],
@@ -62,7 +129,6 @@ function groupLegs(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   );
 
-  // Cluster by 10s window + same underlying + expiry + optionType
   const clusters: PositionLeg[][] = [];
   let current: PositionLeg[] = [sorted[0]];
 
@@ -115,9 +181,7 @@ function groupLegs(
       label = `${leg.strike}${optType} ${typeName}`;
     } else if (cluster.length === 2) {
       const [l0, l1] = [...cluster].sort((a, b) => a.strike - b.strike);
-      const oppDirs = l0.direction !== l1.direction;
-      const eqQty = l0.quantity === l1.quantity;
-      if (oppDirs && eqQty) {
+      if (l0.direction !== l1.direction && l0.quantity === l1.quantity) {
         structure = optType === "P" ? "Put Spread" : "Call Spread";
         label = `${l0.strike}/${l1.strike} ${typeName} Spread`;
       }
@@ -125,19 +189,20 @@ function groupLegs(
       const [low, mid2, high] = [...cluster].sort(
         (a, b) => a.strike - b.strike,
       );
-      const wingWidth1 = mid2.strike - low.strike;
-      const wingWidth2 = high.strike - mid2.strike;
-      const symmetric = Math.abs(wingWidth1 - wingWidth2) < 0.01;
+      const symmetric =
+        Math.abs(mid2.strike - low.strike - (high.strike - mid2.strike)) < 0.01;
       const centerDouble = Math.abs(mid2.quantity - low.quantity * 2) < 0.01;
       const centerOpp =
         mid2.direction !== low.direction && mid2.direction !== high.direction;
       const wingsMatch = low.direction === high.direction;
-
       if (symmetric && centerDouble && centerOpp && wingsMatch) {
         structure = optType === "P" ? "Put Butterfly" : "Call Butterfly";
         label = `${low.strike}/${mid2.strike}/${high.strike} ${typeName} Fly`;
       }
     }
+
+    const maxPnl = computeMaxPnl(structure, cluster);
+    const netDelta = computeNetDelta(cluster, ticks);
 
     return {
       id: `group-${idx}`,
@@ -148,6 +213,8 @@ function groupLegs(
       label,
       legs: cluster,
       totalPnl: totalPnl ?? null,
+      maxPnl,
+      netDelta,
     };
   });
 }
@@ -164,6 +231,21 @@ function calcPnl(leg: PositionLeg, tick: TickData | null): number | null {
   if (mid === null || mid === 0) return null;
   const sign = leg.direction === "Long" ? 1 : -1;
   return sign * (mid - leg.averageOpenPrice) * leg.quantity * leg.multiplier;
+}
+
+function pctOfMax(pnl: number, maxPnl: MaxPnl): string | null {
+  if (pnl >= 0 && maxPnl.maxProfit > 0) {
+    return `${Math.round((pnl / maxPnl.maxProfit) * 100)}% max`;
+  }
+  if (pnl < 0 && maxPnl.maxLoss < 0) {
+    return `${Math.round((pnl / Math.abs(maxPnl.maxLoss)) * 100)}% max`;
+  }
+  return null;
+}
+
+function formatDelta(delta: number | null | undefined): string {
+  if (delta == null) return "—";
+  return `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}Δ`;
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -322,33 +404,30 @@ function RealPositionsView({
 
   function toggleExpand(id: string) {
     setExpanded((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
     });
   }
 
-  if (isLoading && groups.length === 0) {
+  if (isLoading && groups.length === 0)
     return (
       <div className="flex-1 flex items-center justify-center text-xs text-[#333]">
         Carregando...
       </div>
     );
-  }
-  if (error) {
+  if (error)
     return (
       <div className="flex-1 flex items-center justify-center text-xs text-[#f87171]">
         {error}
       </div>
     );
-  }
-  if (groups.length === 0) {
+  if (groups.length === 0)
     return (
       <div className="flex-1 flex items-center justify-center text-xs text-[#333] uppercase tracking-wide">
         Sem posições abertas
       </div>
     );
-  }
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -369,13 +448,18 @@ function RealPositionsView({
       <div className="flex-1 overflow-y-auto space-y-1.5 pr-0.5">
         {groups.map((group) => {
           if (group.structure === "Unknown") {
-            // Fall back to individual legs
             return group.legs.map((leg) => {
               const tick = ticks[leg.streamerSymbol] ?? null;
               const mid = tick?.mid ?? null;
               const legPnl = calcPnl(leg, tick);
               const pnlColor =
                 legPnl === null ? "#555" : legPnl >= 0 ? "#4ade80" : "#f87171";
+              const legDelta =
+                tick?.delta != null
+                  ? (leg.direction === "Long" ? 1 : -1) *
+                    tick.delta *
+                    leg.quantity
+                  : null;
               return (
                 <div
                   key={leg.symbol}
@@ -398,6 +482,11 @@ function RealPositionsView({
                     </div>
                     <div className="font-sans text-[10px] text-[#444] uppercase">
                       {leg.direction} {leg.quantity} × {leg.underlyingSymbol}
+                      {legDelta !== null && (
+                        <span className="ml-2 text-[#555]">
+                          {formatDelta(legDelta)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
@@ -428,6 +517,10 @@ function RealPositionsView({
               : group.totalPnl >= 0
                 ? "#4ade80"
                 : "#f87171";
+          const pctMax =
+            group.totalPnl !== null && group.maxPnl
+              ? pctOfMax(group.totalPnl, group.maxPnl)
+              : null;
 
           return (
             <div key={group.id} className="bg-[#111] rounded overflow-hidden">
@@ -441,24 +534,71 @@ function RealPositionsView({
                   <div className="font-mono text-sm text-[#9ca3af]">
                     {group.label}
                   </div>
-                  <div className="font-sans text-[10px] text-[#444] uppercase">
-                    {formatExpiry(group.expiryDate)} · {group.underlyingSymbol}
+                  <div className="font-sans text-[10px] text-[#444] uppercase flex gap-2">
+                    <span>
+                      {formatExpiry(group.expiryDate)} ·{" "}
+                      {group.underlyingSymbol}
+                    </span>
+                    {group.netDelta !== null && (
+                      <span className="text-[#555]">
+                        {formatDelta(group.netDelta)}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="text-right shrink-0 flex items-center gap-2">
-                  <div
-                    className="font-mono text-xs"
-                    style={{ color: pnlColor }}
-                  >
-                    {group.totalPnl !== null
-                      ? `${group.totalPnl >= 0 ? "+" : ""}$${group.totalPnl.toFixed(2)}`
-                      : "—"}
+                  <div>
+                    <div
+                      className="font-mono text-xs"
+                      style={{ color: pnlColor }}
+                    >
+                      {group.totalPnl !== null
+                        ? `${group.totalPnl >= 0 ? "+" : ""}$${group.totalPnl.toFixed(2)}`
+                        : "—"}
+                    </div>
+                    {pctMax && (
+                      <div className="font-mono text-[10px] text-[#444]">
+                        {pctMax}
+                      </div>
+                    )}
                   </div>
                   <span className="text-[#333] text-[10px]">
                     {isExp ? "▲" : "▼"}
                   </span>
                 </div>
               </div>
+
+              {/* Max profit/loss bar — shows when expanded */}
+              {isExp && group.maxPnl && (
+                <div className="px-2 py-1.5 border-t border-[#1a1a1a] flex gap-4">
+                  <div>
+                    <div className="font-sans text-[10px] text-[#444] uppercase">
+                      Max profit
+                    </div>
+                    <div className="font-mono text-xs text-[#4ade80]">
+                      +${group.maxPnl.maxProfit.toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-sans text-[10px] text-[#444] uppercase">
+                      Max loss
+                    </div>
+                    <div className="font-mono text-xs text-[#f87171]">
+                      -${Math.abs(group.maxPnl.maxLoss).toFixed(2)}
+                    </div>
+                  </div>
+                  {group.netDelta !== null && (
+                    <div>
+                      <div className="font-sans text-[10px] text-[#444] uppercase">
+                        Net Δ
+                      </div>
+                      <div className="font-mono text-xs text-[#9ca3af]">
+                        {formatDelta(group.netDelta)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Expanded legs */}
               {isExp &&
@@ -472,6 +612,12 @@ function RealPositionsView({
                       : legPnl >= 0
                         ? "#4ade80"
                         : "#f87171";
+                  const legDelta =
+                    tick?.delta != null
+                      ? (leg.direction === "Long" ? 1 : -1) *
+                        tick.delta *
+                        leg.quantity
+                      : null;
                   return (
                     <div
                       key={leg.symbol}
@@ -494,6 +640,11 @@ function RealPositionsView({
                             {leg.direction} {leg.quantity}
                           </span>
                         </div>
+                        {legDelta !== null && (
+                          <div className="font-mono text-[10px] text-[#555]">
+                            {formatDelta(legDelta)}
+                          </div>
+                        )}
                       </div>
                       <div className="text-right shrink-0">
                         <div className="font-mono text-xs text-[#666]">
@@ -566,12 +717,11 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
     chartRef.current = chart;
     seriesRef.current = series;
     const handleResize = () => {
-      if (containerRef.current) {
+      if (containerRef.current)
         chart.applyOptions({
           width: containerRef.current.clientWidth,
           height: containerRef.current.clientHeight,
         });
-      }
     };
     window.addEventListener("resize", handleResize);
     return () => {
