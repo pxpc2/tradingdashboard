@@ -5,17 +5,49 @@ import { TradingPlan } from "../TradingPlanDashboard";
 
 type Props = {
   plan: TradingPlan | null;
+  openingSkew: number | null;
   onSave: (updates: Partial<TradingPlan>) => Promise<void>;
 };
 
-export default function PostSessionReview({ plan, onSave }: Props) {
+const SKEW_THRESHOLD = 0.005;
+
+function computeSkewDirection(
+  closing: number,
+  opening: number,
+): "rose" | "flat" | "fell" {
+  const diff = closing - opening;
+  if (diff > SKEW_THRESHOLD) return "rose";
+  if (diff < -SKEW_THRESHOLD) return "fell";
+  return "flat";
+}
+
+const DIR_LABELS: Record<string, { label: string; color: string }> = {
+  rose: { label: "↑ subiu", color: "#f87171" },
+  flat: { label: "→ estável", color: "#555" },
+  fell: { label: "↓ caiu", color: "#9CA9FF" },
+};
+
+export default function PostSessionReview({
+  plan,
+  openingSkew,
+  onSave,
+}: Props) {
   const [actualRegime, setActualRegime] = useState(plan?.actual_regime ?? "");
-  const [biasCorrect, setBiasCorrect] = useState<boolean | null>(plan?.bias_was_correct ?? null);
-  const [confirmedAt, setConfirmedAt] = useState(plan?.regime_confirmed_at ?? "");
+  const [biasCorrect, setBiasCorrect] = useState<boolean | null>(
+    plan?.bias_was_correct ?? null,
+  );
+  const [confirmedAt, setConfirmedAt] = useState(
+    plan?.regime_confirmed_at ?? "",
+  );
   const [levelsHeld, setLevelsHeld] = useState(plan?.levels_held ?? "");
   const [tradeOutcome, setTradeOutcome] = useState(plan?.trade_outcome ?? "");
   const [lesson, setLesson] = useState(plan?.lesson ?? "");
-  const [rating, setRating] = useState(plan?.accuracy_rating ?? null);
+  const [rating, setRating] = useState<number | null>(
+    plan?.accuracy_rating ?? null,
+  );
+  const [closingSkew, setClosingSkew] = useState(
+    plan?.closing_skew?.toString() ?? "",
+  );
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
@@ -26,7 +58,15 @@ export default function PostSessionReview({ plan, onSave }: Props) {
     setTradeOutcome(plan?.trade_outcome ?? "");
     setLesson(plan?.lesson ?? "");
     setRating(plan?.accuracy_rating ?? null);
+    setClosingSkew(plan?.closing_skew?.toString() ?? "");
   }, [plan]);
+
+  const closingSkewNum = parseFloat(closingSkew);
+  const skewDir =
+    !isNaN(closingSkewNum) && openingSkew !== null
+      ? computeSkewDirection(closingSkewNum, openingSkew)
+      : null;
+  const dirInfo = skewDir ? DIR_LABELS[skewDir] : null;
 
   async function handleSave() {
     setIsSaving(true);
@@ -38,6 +78,8 @@ export default function PostSessionReview({ plan, onSave }: Props) {
       trade_outcome: tradeOutcome || null,
       lesson: lesson || null,
       accuracy_rating: rating,
+      closing_skew: !isNaN(closingSkewNum) ? closingSkewNum : null,
+      skew_direction: skewDir,
     });
     setIsSaving(false);
   }
@@ -55,9 +97,11 @@ export default function PostSessionReview({ plan, onSave }: Props) {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Actual regime */}
           <div>
-            <div className="font-sans text-[11px] text-[#555] mb-1.5">Regime real do dia</div>
+            <div className="font-sans text-[11px] text-[#555] mb-1.5">
+              Regime real do dia
+            </div>
             <div className="flex gap-2">
-              {["trending", "reverting", "mixed"].map(v => (
+              {["trending", "reverting", "mixed"].map((v) => (
                 <button
                   key={v}
                   onClick={() => setActualRegime(v)}
@@ -75,9 +119,11 @@ export default function PostSessionReview({ plan, onSave }: Props) {
 
           {/* Bias correct */}
           <div>
-            <div className="font-sans text-[11px] text-[#555] mb-1.5">Bias estava correto?</div>
+            <div className="font-sans text-[11px] text-[#555] mb-1.5">
+              Bias estava correto?
+            </div>
             <div className="flex gap-2">
-              {([true, false] as const).map(v => (
+              {([true, false] as const).map((v) => (
                 <button
                   key={String(v)}
                   onClick={() => setBiasCorrect(v)}
@@ -95,11 +141,13 @@ export default function PostSessionReview({ plan, onSave }: Props) {
 
           {/* Confirmed at */}
           <div>
-            <div className="font-sans text-[11px] text-[#555] mb-1.5">Regime confirmado às (CT)</div>
+            <div className="font-sans text-[11px] text-[#555] mb-1.5">
+              Regime confirmado às (CT)
+            </div>
             <input
               type="text"
               value={confirmedAt}
-              onChange={e => setConfirmedAt(e.target.value)}
+              onChange={(e) => setConfirmedAt(e.target.value)}
               placeholder="ex: 09:45"
               className="w-full bg-[#0a0a0a] border border-[#222] rounded px-2.5 py-1.5 font-mono text-xs text-[#9ca3af] placeholder-[#333] focus:border-[#444] focus:outline-none"
             />
@@ -107,9 +155,11 @@ export default function PostSessionReview({ plan, onSave }: Props) {
 
           {/* Rating */}
           <div>
-            <div className="font-sans text-[11px] text-[#555] mb-1.5">Precisão do plano (1-5)</div>
+            <div className="font-sans text-[11px] text-[#555] mb-1.5">
+              Precisão do plano (1-5)
+            </div>
             <div className="flex gap-2">
-              {[1, 2, 3, 4, 5].map(v => (
+              {[1, 2, 3, 4, 5].map((v) => (
                 <button
                   key={v}
                   onClick={() => setRating(v)}
@@ -126,13 +176,50 @@ export default function PostSessionReview({ plan, onSave }: Props) {
           </div>
         </div>
 
+        {/* Closing skew */}
+        <div>
+          <div className="font-sans text-[11px] text-[#555] mb-1.5">
+            Skew no fechamento
+          </div>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              step="0.001"
+              value={closingSkew}
+              onChange={(e) => setClosingSkew(e.target.value)}
+              placeholder={
+                openingSkew
+                  ? `abertura: ${openingSkew.toFixed(3)}`
+                  : "ex: 0.442"
+              }
+              className="w-36 bg-[#0a0a0a] border border-[#222] rounded px-2.5 py-1.5 font-mono text-xs text-[#9ca3af] placeholder-[#333] focus:border-[#444] focus:outline-none"
+            />
+            {dirInfo && (
+              <span
+                className="font-mono text-xs"
+                style={{ color: dirInfo.color }}
+              >
+                {dirInfo.label}
+              </span>
+            )}
+            {openingSkew !== null && !isNaN(closingSkewNum) && (
+              <span className="font-mono text-[10px] text-[#444]">
+                {closingSkewNum > openingSkew ? "+" : ""}
+                {(closingSkewNum - openingSkew).toFixed(4)}
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Levels held */}
         <div>
-          <div className="font-sans text-[11px] text-[#555] mb-1.5">Níveis que seguraram / falharam</div>
+          <div className="font-sans text-[11px] text-[#555] mb-1.5">
+            Níveis que seguraram / falharam
+          </div>
           <input
             type="text"
             value={levelsHeld}
-            onChange={e => setLevelsHeld(e.target.value)}
+            onChange={(e) => setLevelsHeld(e.target.value)}
             placeholder="ex: 6820 balance segurou, 6850 test falhou"
             className="w-full bg-[#0a0a0a] border border-[#222] rounded px-2.5 py-1.5 font-mono text-xs text-[#9ca3af] placeholder-[#333] focus:border-[#444] focus:outline-none"
           />
@@ -140,11 +227,13 @@ export default function PostSessionReview({ plan, onSave }: Props) {
 
         {/* Trade outcome */}
         <div>
-          <div className="font-sans text-[11px] text-[#555] mb-1.5">Resultado do trade</div>
+          <div className="font-sans text-[11px] text-[#555] mb-1.5">
+            Resultado do trade
+          </div>
           <input
             type="text"
             value={tradeOutcome}
-            onChange={e => setTradeOutcome(e.target.value)}
+            onChange={(e) => setTradeOutcome(e.target.value)}
             placeholder="ex: +$150, ou sem trade hoje"
             className="w-full bg-[#0a0a0a] border border-[#222] rounded px-2.5 py-1.5 font-mono text-xs text-[#9ca3af] placeholder-[#333] focus:border-[#444] focus:outline-none"
           />
@@ -152,10 +241,12 @@ export default function PostSessionReview({ plan, onSave }: Props) {
 
         {/* Lesson */}
         <div>
-          <div className="font-sans text-[11px] text-[#555] mb-1.5">Lição do dia</div>
+          <div className="font-sans text-[11px] text-[#555] mb-1.5">
+            Lição do dia
+          </div>
           <textarea
             value={lesson}
-            onChange={e => setLesson(e.target.value)}
+            onChange={(e) => setLesson(e.target.value)}
             placeholder="O que aprendeu hoje?"
             rows={2}
             className="w-full bg-[#0a0a0a] border border-[#222] rounded px-2.5 py-1.5 font-mono text-xs text-[#9ca3af] placeholder-[#333] focus:border-[#444] focus:outline-none resize-none"

@@ -126,7 +126,14 @@ export default function AnalysisDashboard({
 
       const overnightBars = esSnapshots.filter((e) => {
         const t = new Date(e.created_at).getTime();
-        return t >= windowStart && t < windowEnd;
+        return (
+          t >= windowStart &&
+          t < windowEnd &&
+          e.high !== null &&
+          e.low !== null &&
+          e.high > 0 &&
+          e.low > 0
+        );
       });
 
       if (overnightBars.length < 5) continue; // not enough bars
