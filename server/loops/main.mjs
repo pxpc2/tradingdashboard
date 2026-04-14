@@ -36,7 +36,7 @@ function shouldFireOpenCycle() {
   const today = getTodayET();
   if (["Sat", "Sun"].includes(day)) return false;
   if (openCycleFiredDate === today) return false;
-  return time >= "09:30:00" && time <= "09:30:30";
+  return time >= "09:30:15" && time <= "09:30:45";
 }
 
 function shouldFireCloseCycle() {
