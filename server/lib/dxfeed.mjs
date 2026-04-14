@@ -171,23 +171,35 @@ export async function getIndexLast(symbol) {
   try {
     return await withTimeout(
       new Promise((resolve) => {
+        let summaryPrice = null;
         const listener = (events) => {
-          const trade = events.find(
-            (e) =>
-              e.eventSymbol === symbol &&
-              e.eventType === "Trade" &&
-              e.price > 0,
-          );
-          if (trade) {
-            client.quoteStreamer.removeEventListener(listener);
-            client.quoteStreamer.unsubscribe([symbol]);
-            resolve(trade.price);
-          }
+          events.forEach((e) => {
+            if (e.eventSymbol !== symbol) return;
+            // Primary: Trade event
+            if (e.eventType === "Trade" && e.price > 0) {
+              client.quoteStreamer.removeEventListener(listener);
+              client.quoteStreamer.unsubscribe([symbol]);
+              resolve(e.price);
+            }
+            // Fallback: Summary prevDayClosePrice
+            if (e.eventType === "Summary" && e.prevDayClosePrice > 0) {
+              summaryPrice = e.prevDayClosePrice;
+            }
+          });
         };
         client.quoteStreamer.addEventListener(listener);
         client.quoteStreamer.subscribe([symbol]);
+
+        // After 8s, if no Trade, use Summary fallback
+        setTimeout(() => {
+          if (summaryPrice !== null) {
+            client.quoteStreamer.removeEventListener(listener);
+            client.quoteStreamer.unsubscribe([symbol]);
+            resolve(summaryPrice);
+          }
+        }, 8000);
       }),
-      10000,
+      20000,
       `${symbol} last`,
     );
   } catch {
