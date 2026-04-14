@@ -48,7 +48,6 @@ function shouldFireCloseCycle() {
   return time >= "16:00:00" && time <= "16:01:00";
 }
 
-// Weekly straddle fires on Monday open cycle only, once per week
 function shouldFireWeeklyOpenCycle() {
   const day = getETDay();
   const today = getTodayET();
@@ -100,8 +99,8 @@ function findNearestFriday() {
   const etNow = new Date(
     now.toLocaleString("en-US", { timeZone: "America/New_York" }),
   );
-  const day = etNow.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri
-  const daysUntilFriday = (5 - day + 7) % 7 || 7; // if today is Friday, get next Friday
+  const day = etNow.getDay();
+  const daysUntilFriday = (5 - day + 7) % 7 || 7;
   const friday = new Date(etNow);
   friday.setDate(etNow.getDate() + daysUntilFriday);
   return friday.toLocaleDateString("en-CA", { timeZone: "America/New_York" });
@@ -114,7 +113,6 @@ async function captureWeeklyStraddle(options, spxMid) {
       `[${nowCT()}] 📅 Weekly straddle — target expiry: ${targetFriday}`,
     );
 
-    // Find SPXW options expiring on that Friday
     const weeklyOptions = options.filter(
       (o) =>
         o["expiration-date"] === targetFriday && o["root-symbol"] === "SPXW",
@@ -302,9 +300,10 @@ async function writeCloseSummary(today) {
         ? parseFloat(((maxIntradayPts / openStraddle) * 100).toFixed(1))
         : null;
 
+    // Fetch all skew snapshots for today with full fields
     const { data: skewRows } = await supabase
       .from("skew_snapshots")
-      .select("skew, created_at")
+      .select("skew, put_iv, call_iv, atm_iv, created_at")
       .gte("created_at", `${today}T00:00:00`)
       .lt("created_at", `${today}T23:59:59`)
       .order("created_at", { ascending: true });
@@ -336,6 +335,16 @@ async function writeCloseSummary(today) {
           max_intraday_pct_of_straddle: maxIntradayPct,
           spx_closed_above_open: closeSpx > openSpx,
           skew_direction: skewDirection,
+          // Backfill opening skew fields from first snapshot of the day
+          // (open cycle fires before first skew at 09:35, so these are null at open)
+          ...(skewRows?.[0]
+            ? {
+                opening_skew: skewRows[0].skew,
+                opening_put_iv: skewRows[0].put_iv,
+                opening_call_iv: skewRows[0].call_iv,
+                opening_atm_iv: skewRows[0].atm_iv,
+              }
+            : {}),
           updated_at: new Date().toISOString(),
         },
         { onConflict: "date" },
@@ -599,8 +608,8 @@ async function runCycle(isOpenCycle = false) {
         `[${nowCT()}]    DXFeed Quote mid         : ${dxQuoteMid?.toFixed(2) ?? "N/A"}`,
       );
 
+      // FMP logged for observational purposes only
       const fmpBar = await getFmpOpenPrice();
-      const fmpOpenPrice = fmpBar?.open ?? null;
       if (fmpBar) {
         console.log(
           `[${nowCT()}]    FMP 09:30 bar            : O:${fmpBar.open} H:${fmpBar.high} L:${fmpBar.low} C:${fmpBar.close}`,
@@ -609,31 +618,16 @@ async function runCycle(isOpenCycle = false) {
         console.log(`[${nowCT()}]    FMP 09:30 bar            : N/A`);
       }
 
+      // Always use Quote mid for both spx_ref and ATM selection
       spxMid = dxQuoteMid;
-      const refForAtm = dxSummaryOpen ?? dxQuoteMid;
+      const refForAtm = dxQuoteMid;
       atmStrikePrice = strikes.reduce((prev, curr) =>
         Math.abs(curr - refForAtm) < Math.abs(prev - refForAtm) ? curr : prev,
       );
 
       console.log(
-        `[${nowCT()}]    ATM strike (DXFeed)      : ${atmStrikePrice}`,
+        `[${nowCT()}]    ATM strike (Quote mid)   : ${atmStrikePrice}`,
       );
-
-      if (fmpOpenPrice !== null && dxSummaryOpen !== null) {
-        const diff = Math.abs(fmpOpenPrice - dxSummaryOpen).toFixed(2);
-        const fmpAtm = strikes.reduce((prev, curr) =>
-          Math.abs(curr - fmpOpenPrice) < Math.abs(prev - fmpOpenPrice)
-            ? curr
-            : prev,
-        );
-        console.log(
-          `[${nowCT()}]    FMP open price           : ${fmpOpenPrice.toFixed(2)}`,
-        );
-        console.log(`[${nowCT()}]    DXFeed vs FMP diff       : ${diff} pts`);
-        console.log(
-          `[${nowCT()}]    ATM strike (FMP)         : ${fmpAtm}${fmpAtm !== atmStrikePrice ? " ⚠️  DIFFERENT" : " ✓ same"}`,
-        );
-      }
 
       const esMid = await getEsMid(ES_SYMBOL);
       if (esMid !== null && spxMid > 0) {
@@ -801,7 +795,6 @@ async function runCycle(isOpenCycle = false) {
       }
     }
 
-    // Return open cycle data for session summary + weekly straddle
     if (isOpenCycle) {
       return {
         spxMid,
@@ -838,7 +831,6 @@ export async function runAndScheduleNext() {
         console.error(`[${nowCT()}] writeOpenSummary failed:`, err.message),
       );
 
-      // Weekly straddle — Monday only
       if (shouldFireWeeklyOpenCycle()) {
         weeklyOpenCycleFiredDate = getTodayET();
         captureWeeklyStraddle(openData.options, openData.spxMid).catch((err) =>
