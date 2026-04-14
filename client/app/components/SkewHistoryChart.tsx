@@ -8,6 +8,7 @@ import {
   ISeriesApi,
   SeriesType,
   IChartApi,
+  IPriceLine,
   createTextWatermark,
 } from "lightweight-charts";
 import { SkewSnapshot } from "../types";
@@ -39,6 +40,7 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
+  const avgLineRef = useRef<IPriceLine | null>(null);
   const boundariesRef = useRef<UTCTimestamp[]>([]);
 
   const today = useMemo(
@@ -185,9 +187,17 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
 
     seriesRef.current.setData(points);
 
+    // Remove existing avg line before recreating
+    if (avgLineRef.current) {
+      try {
+        seriesRef.current.removePriceLine(avgLineRef.current);
+      } catch {}
+      avgLineRef.current = null;
+    }
+
     if (avgSkew !== null) {
       try {
-        seriesRef.current.createPriceLine({
+        avgLineRef.current = seriesRef.current.createPriceLine({
           price: avgSkew,
           color: "#555",
           lineWidth: 1,
