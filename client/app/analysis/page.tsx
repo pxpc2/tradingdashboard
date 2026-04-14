@@ -21,12 +21,25 @@ export default async function AnalysisPage() {
     .gte("created_at", "2026-04-02T00:00:00")
     .order("created_at", { ascending: true });
 
-  // ES snapshots for overnight range computation
-  // created_at is UTC — used as proxy for bar time for historical rows without bar_time
   const { data: esSnapshots } = await supabase
     .from("es_snapshots")
     .select("created_at, open, high, low, es_ref")
     .order("created_at", { ascending: true });
+
+  // Weekly straddle snapshots — all Mondays
+  const { data: weeklyStraddles } = await supabase
+    .from("weekly_straddle_snapshots")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  // Latest SPX for current week range display
+  const { data: latestStraddle } = await supabase
+    .from("straddle_snapshots")
+    .select("spx_ref")
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  const currentSpx = latestStraddle?.[0]?.spx_ref ?? null;
 
   return (
     <main className="min-h-screen bg-[#0a0a0a] text-white">
@@ -34,6 +47,8 @@ export default async function AnalysisPage() {
         straddleSnapshots={straddleSnapshots ?? []}
         skewSnapshots={skewSnapshots ?? []}
         esSnapshots={esSnapshots ?? []}
+        weeklyStraddles={weeklyStraddles ?? []}
+        currentSpx={currentSpx}
       />
     </main>
   );

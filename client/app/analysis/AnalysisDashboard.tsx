@@ -12,6 +12,7 @@ import DayOfWeekBreakdown from "./components/DayOfWeekBreakdown";
 import MaxVsEod from "./components/MaxVsEod";
 import SkewVsRealized from "./components/SkewVsRealized";
 import OvernightRange from "./components/OvernightRange";
+import WeeklyStraddle from "./components/WeeklyStraddle";
 
 type StraddleSnapshot = {
   created_at: string;
@@ -55,10 +56,24 @@ export type SessionData = {
   snapshots: StraddleSnapshot[];
 };
 
+type WeeklyStraddleRow = {
+  created_at: string;
+  expiry_date: string;
+  spx_ref: number;
+  atm_strike: number;
+  straddle_mid: number;
+  call_bid: number;
+  call_ask: number;
+  put_bid: number;
+  put_ask: number;
+};
+
 type Props = {
   straddleSnapshots: StraddleSnapshot[];
   skewSnapshots: SkewSnapshot[];
   esSnapshots: EsSnapshot[];
+  weeklyStraddles: WeeklyStraddleRow[];
+  currentSpx: number | null;
 };
 
 function getETDate(isoString: string): string {
@@ -95,6 +110,8 @@ export default function AnalysisDashboard({
   straddleSnapshots,
   skewSnapshots,
   esSnapshots,
+  weeklyStraddles,
+  currentSpx,
 }: Props) {
   const sessions = useMemo((): SessionData[] => {
     const byDate = new Map<string, StraddleSnapshot[]>();
@@ -126,14 +143,7 @@ export default function AnalysisDashboard({
 
       const overnightBars = esSnapshots.filter((e) => {
         const t = new Date(e.created_at).getTime();
-        return (
-          t >= windowStart &&
-          t < windowEnd &&
-          e.high !== null &&
-          e.low !== null &&
-          e.high > 0 &&
-          e.low > 0
-        );
+        return t >= windowStart && t < windowEnd;
       });
 
       if (overnightBars.length < 5) continue; // not enough bars
@@ -284,7 +294,19 @@ export default function AnalysisDashboard({
               </div>
             </div>
 
-            {/* Row 4: Overnight range full width */}
+            {/* Row 4: Weekly straddle */}
+            {weeklyStraddles.length > 0 && (
+              <div>
+                <SectionHeader label="STRADDLE SEMANAL - RANGE IMPLÍCITO" />
+                <WeeklyStraddle
+                  weeklyStraddles={weeklyStraddles}
+                  sessions={sessions}
+                  currentSpx={currentSpx}
+                />
+              </div>
+            )}
+
+            {/* Row 5: Overnight range full width */}
             <div>
               <SectionHeader label="Overnight ES range vs RV/IV" />
               <OvernightRange sessions={sessions} />
