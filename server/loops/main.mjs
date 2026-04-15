@@ -36,7 +36,8 @@ function shouldFireOpenCycle() {
   const today = getTodayET();
   if (["Sat", "Sun"].includes(day)) return false;
   if (openCycleFiredDate === today) return false;
-  return time >= "09:30:15" && time <= "09:30:45";
+  // Wide window catches the 09:30:00 minute boundary — sleep inside runCycle delays actual fetch
+  return time >= "09:30:00" && time <= "09:30:59";
 }
 
 function shouldFireCloseCycle() {
@@ -300,7 +301,6 @@ async function writeCloseSummary(today) {
         ? parseFloat(((maxIntradayPts / openStraddle) * 100).toFixed(1))
         : null;
 
-    // Fetch all skew snapshots for today with full fields
     const { data: skewRows } = await supabase
       .from("skew_snapshots")
       .select("skew, put_iv, call_iv, atm_iv, created_at")
@@ -335,8 +335,6 @@ async function writeCloseSummary(today) {
           max_intraday_pct_of_straddle: maxIntradayPct,
           spx_closed_above_open: closeSpx > openSpx,
           skew_direction: skewDirection,
-          // Backfill opening skew fields from first snapshot of the day
-          // (open cycle fires before first skew at 09:35, so these are null at open)
           ...(skewRows?.[0]
             ? {
                 opening_skew: skewRows[0].skew,
@@ -563,6 +561,18 @@ async function runCycle(isOpenCycle = false) {
   }
 
   try {
+    // ── Open cycle: sleep 15s before fetching so auction clears and RTH quotes are live
+    if (isOpenCycle) {
+      console.log(`[${nowCT()}] ============================================`);
+      console.log(
+        `[${nowCT()}] 🔔 OPEN CYCLE — aguardando 15s para leilão liquidar...`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 15000));
+      console.log(
+        `[${nowCT()}] 🔔 OPEN CYCLE — buscando preço de abertura do SPX`,
+      );
+    }
+
     const chain = await client.instrumentsService.getOptionChain("%2FSPX");
     const options = Array.from(chain);
     const today = getTodayET();
@@ -596,9 +606,6 @@ async function runCycle(isOpenCycle = false) {
     let esBasis = null;
 
     if (isOpenCycle) {
-      console.log(`[${nowCT()}] ============================================`);
-      console.log(`[${nowCT()}] 🔔 OPEN CYCLE — fetching SPX opening price`);
-
       const { openPrice: dxSummaryOpen, quoteMid: dxQuoteMid } =
         await getSpxOpenPrice();
       console.log(
