@@ -4,8 +4,13 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
 import { FlySnapshot, RtmSession } from "../types";
 
-export function useFlyData(selectedDate: string, initialSession: RtmSession | null = null) {
-  const [smlSession, setSmlSession] = useState<RtmSession | null>(initialSession);
+export function useFlyData(
+  selectedDate: string,
+  initialSession: RtmSession | null = null,
+) {
+  const [smlSession, setSmlSession] = useState<RtmSession | null>(
+    initialSession,
+  );
   const [flySnapshots, setFlySnapshots] = useState<FlySnapshot[]>([]);
 
   // Fetch session + snapshots on date change
@@ -43,7 +48,32 @@ export function useFlyData(selectedDate: string, initialSession: RtmSession | nu
     };
   }, [selectedDate]);
 
-  // Realtime subscription — only appends when viewing today
+  // Realtime: new rtm_session inserted → update session state immediately
+  useEffect(() => {
+    const today = new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/New_York",
+    });
+    if (selectedDate !== today) return;
+
+    const channel = supabase
+      .channel("rtm_sessions_realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "rtm_sessions" },
+        (payload) => {
+          const newSession = payload.new as RtmSession;
+          setSmlSession(newSession);
+          setFlySnapshots([]); // reset snapshots for new session
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedDate]);
+
+  // Realtime: new fly snapshots appended
   useEffect(() => {
     const today = new Date().toLocaleDateString("en-CA", {
       timeZone: "America/New_York",
