@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { signOut } from "../login/actions";
 import { FaSignOutAlt } from "react-icons/fa";
 import Link from "next/link";
@@ -38,7 +38,7 @@ export type TradingPlan = {
   lesson: string | null;
   accuracy_rating: number | null;
   closing_skew: number | null;
-  skew_direction: string | null; // 'rose' | 'flat' | 'fell'
+  skew_direction: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -52,8 +52,8 @@ export type ConditionEntry = {
 export type SkewTrend = {
   sessions: { date: string; closingSkew: number }[];
   direction: "expanding" | "compressing" | "flat";
-  skewAtmRatio: number | null; // today's skew / atm_iv
-  skewAtmRatioAvg: number | null; // historical avg for context
+  skewAtmRatio: number | null;
+  skewAtmRatioAvg: number | null;
 };
 
 type RecentSkewRow = { skew: number; atm_iv: number; created_at: string };
@@ -80,6 +80,8 @@ type Props = {
     expiry_date: string;
   } | null;
   recentSkewRows: RecentSkewRow[];
+  overnightRangePts: number | null;
+  overnightRangeClass: "tight" | "normal" | "wide" | null;
 };
 
 function getETDate(iso: string): string {
@@ -93,25 +95,21 @@ function computeSkewTrend(
   today: string,
   latestSkew: { skew: number; atm_iv: number } | null,
 ): SkewTrend {
-  // Group by ET date, take closing value per day (last row)
   const byDate = new Map<string, RecentSkewRow>();
   for (const row of recentSkewRows) {
     const date = getETDate(row.created_at);
-    byDate.set(date, row); // last write wins = closing value
+    byDate.set(date, row);
   }
 
-  // Get last 3 completed sessions (excluding today)
   const pastDates = [...byDate.keys()]
     .filter((d) => d < today)
     .sort()
     .slice(-3);
-
   const sessions = pastDates.map((date) => ({
     date,
     closingSkew: byDate.get(date)!.skew,
   }));
 
-  // Direction: compare first and last of the 3 sessions
   let direction: "expanding" | "compressing" | "flat" = "flat";
   if (sessions.length >= 2) {
     const first = sessions[0].closingSkew;
@@ -121,13 +119,11 @@ function computeSkewTrend(
     else if (diff < -0.005) direction = "compressing";
   }
 
-  // Skew/ATM IV ratio for today
   const skewAtmRatio =
     latestSkew && latestSkew.atm_iv > 0
       ? parseFloat((latestSkew.skew / latestSkew.atm_iv).toFixed(3))
       : null;
 
-  // Historical avg ratio from recent rows
   const ratios = recentSkewRows
     .filter((r) => r.atm_iv > 0)
     .map((r) => r.skew / r.atm_iv);
@@ -218,6 +214,8 @@ export default function TradingPlanDashboard({
   latestStraddle,
   weeklyStraddle,
   recentSkewRows,
+  overnightRangePts,
+  overnightRangeClass,
 }: Props) {
   const [localPlans, setLocalPlans] = useState<TradingPlan[]>(plans);
 
@@ -244,13 +242,23 @@ export default function TradingPlanDashboard({
         )
       : null;
 
+  useEffect(() => {
+    if (
+      overnightRangeClass !== null &&
+      todayPlan !== null && // plan must already exist
+      todayPlan.overnight_es_range == null
+    ) {
+      savePlan({ overnight_es_range: overnightRangeClass });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overnightRangeClass, todayPlan?.id, todayPlan?.overnight_es_range]);
+
   async function savePlan(updates: Partial<TradingPlan>) {
     const { score, bias, breakdown } = computeScore(
       { ...todayPlan, ...updates },
       skewPctile,
     );
 
-    // Auto-compute skew_direction if closing_skew is being saved
     let skewDirection =
       updates.skew_direction ?? todayPlan?.skew_direction ?? null;
     const closingSkew = updates.closing_skew ?? todayPlan?.closing_skew ?? null;
@@ -343,6 +351,8 @@ export default function TradingPlanDashboard({
           latestStraddle={latestStraddle}
           weeklyImpliedMove={weeklyImpliedMove}
           spxVsWeeklyAtm={spxVsWeeklyAtm}
+          overnightRangePts={overnightRangePts}
+          overnightRangeClass={overnightRangeClass}
           onSave={savePlan}
         />
 

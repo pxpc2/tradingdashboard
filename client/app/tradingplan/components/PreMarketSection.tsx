@@ -20,6 +20,8 @@ type Props = {
   } | null;
   weeklyImpliedMove: number | null;
   spxVsWeeklyAtm: number | null;
+  overnightRangePts: number | null;
+  overnightRangeClass: "tight" | "normal" | "wide" | null;
   onSave: (updates: Partial<TradingPlan>) => Promise<void>;
 };
 
@@ -67,6 +69,12 @@ const TREND_LABELS: Record<string, { label: string; color: string }> = {
   flat: { label: "→ estável", color: "#555" },
 };
 
+const RANGE_COLORS: Record<string, string> = {
+  tight: "#9CA9FF",
+  normal: "#9ca3af",
+  wide: "#f87171",
+};
+
 function ScoreRow({ label, value }: { label: string; value: number }) {
   const color = value > 0 ? "#f87171" : value < 0 ? "#9CA9FF" : "#444";
   const text =
@@ -93,6 +101,8 @@ export default function PreMarketSection({
   latestStraddle,
   weeklyImpliedMove,
   spxVsWeeklyAtm,
+  overnightRangePts,
+  overnightRangeClass,
   onSave,
 }: Props) {
   const [gammaRegime, setGammaRegime] = useState(plan?.gamma_regime ?? "");
@@ -102,17 +112,22 @@ export default function PreMarketSection({
   const [testStrikes, setTestStrikes] = useState(plan?.test_strikes ?? "");
   const [vs3dContext, setVs3dContext] = useState(plan?.vs3d_context ?? "");
   const [overnightRange, setOvernightRange] = useState(
-    plan?.overnight_es_range ?? "",
+    plan?.overnight_es_range ?? overnightRangeClass ?? "",
   );
+  const [planId, setPlanId] = useState(plan?.id ?? null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Only re-sync when the plan itself changes (different day = different id)
   useEffect(() => {
+    if ((plan?.id ?? null) === planId) return;
+    setPlanId(plan?.id ?? null);
     setGammaRegime(plan?.gamma_regime ?? "");
     setBalanceStrikes(plan?.balance_strikes ?? "");
     setTestStrikes(plan?.test_strikes ?? "");
     setVs3dContext(plan?.vs3d_context ?? "");
-    setOvernightRange(plan?.overnight_es_range ?? "");
-  }, [plan]);
+    setOvernightRange(plan?.overnight_es_range ?? overnightRangeClass ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plan?.id]);
 
   const bias = plan?.regime_bias ?? null;
   const score = plan?.regime_score ?? null;
@@ -125,11 +140,14 @@ export default function PreMarketSection({
     .map((s) => s.closingSkew.toFixed(3))
     .join(" → ");
 
-  // Skew/ATM ratio context
   const ratioAboveAvg =
     skewTrend.skewAtmRatio !== null && skewTrend.skewAtmRatioAvg !== null
       ? skewTrend.skewAtmRatio > skewTrend.skewAtmRatioAvg
       : null;
+
+  const isAutoRange =
+    overnightRangeClass !== null &&
+    plan?.overnight_es_range === overnightRangeClass;
 
   async function handleSave() {
     setIsSaving(true);
@@ -159,7 +177,7 @@ export default function PreMarketSection({
             Dados automáticos
           </div>
 
-          {/* Skew — with percentile */}
+          {/* Skew */}
           <div className="flex justify-between items-center border-b border-[#1a1a1a] pb-1.5">
             <span className="font-sans text-xs text-[#555]">Skew</span>
             <span className="font-mono text-xs text-[#9ca3af]">
@@ -169,7 +187,7 @@ export default function PreMarketSection({
             </span>
           </div>
 
-          {/* Skew trend — 3 sessions */}
+          {/* Skew trend */}
           <div className="flex justify-between items-start border-b border-[#1a1a1a] pb-1.5">
             <span className="font-sans text-xs text-[#555]">
               Skew trend (3 sess.)
@@ -214,6 +232,31 @@ export default function PreMarketSection({
             </span>
           </div>
 
+          {/* Overnight ES range — auto-computed */}
+          <div className="flex justify-between items-center border-b border-[#1a1a1a] pb-1.5">
+            <span className="font-sans text-xs text-[#555]">ON ES range</span>
+            <div className="flex items-center gap-2">
+              {overnightRangePts !== null && (
+                <span className="font-mono text-[10px] text-[#444]">
+                  {overnightRangePts.toFixed(1)}pts
+                </span>
+              )}
+              {overnightRangeClass !== null ? (
+                <span
+                  className="font-mono text-xs"
+                  style={{ color: RANGE_COLORS[overnightRangeClass] }}
+                >
+                  {overnightRangeClass}
+                  {isAutoRange && (
+                    <span className="text-[#444] ml-1 text-[10px]">auto</span>
+                  )}
+                </span>
+              ) : (
+                <span className="font-mono text-xs text-[#444]">—</span>
+              )}
+            </div>
+          </div>
+
           {/* Rest of auto metrics */}
           {[
             ["VIX1D/VIX", plan?.vix1d_vix_ratio?.toFixed(2) ?? "—"],
@@ -248,7 +291,7 @@ export default function PreMarketSection({
           ))}
         </div>
 
-        {/* VS3D inputs */}
+        {/* VS3D / Manual inputs */}
         <div className="bg-[#111] rounded p-4 space-y-3">
           <div className="font-sans text-[11px] text-[#555] uppercase tracking-wide mb-3">
             VS3D / Manual
@@ -275,9 +318,17 @@ export default function PreMarketSection({
             </div>
           </div>
 
+          {/* Overnight range manual override */}
           <div>
-            <div className="font-sans text-[11px] text-[#555] mb-1.5">
-              Overnight ES range
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="font-sans text-[11px] text-[#555]">
+                Overnight ES range
+              </div>
+              {overnightRangeClass && (
+                <span className="font-sans text-[10px] text-[#444]">
+                  (auto: {overnightRangeClass} · override abaixo)
+                </span>
+              )}
             </div>
             <div className="flex gap-2">
               {["tight", "normal", "wide"].map((v) => (
