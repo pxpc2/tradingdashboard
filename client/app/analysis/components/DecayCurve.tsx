@@ -185,7 +185,7 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
         },
       },
       legend: {
-        data: ["Avg", "Today"],
+        data: ["Média", "Hoje"],
         right: 16,
         top: 4,
         textStyle: { color: "#555", fontSize: 10 },
@@ -194,7 +194,7 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
       },
       series: [
         {
-          name: "Avg",
+          name: "Média",
           type: "line",
           data: avgCurve,
           lineStyle: { color: "#333", width: 1.5, type: "dashed" },
@@ -205,7 +205,7 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
         ...(todayCurve.length > 0
           ? [
               {
-                name: "Today",
+                name: "Hoje",
                 type: "line",
                 data: todayCurve,
                 lineStyle: { color: "#9CA9FF", width: 1.5 },

@@ -321,7 +321,7 @@ export default function AnalysisDashboard({
 
             {/* Row 5: Decay curve full width */}
             <div>
-              <SectionHeader label="Straddle Decay — média (avg) vs hoje" />
+              <SectionHeader label="Straddle Decay — média vs hoje" />
               <DecayCurve
                 sessions={sessions}
                 straddleSnapshots={straddleSnapshots}
