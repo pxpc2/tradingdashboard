@@ -606,14 +606,33 @@ async function runCycle(isOpenCycle = false) {
     let esBasis = null;
 
     if (isOpenCycle) {
-      const { openPrice: dxSummaryOpen, quoteMid: dxQuoteMid } =
-        await getSpxOpenPrice();
-      console.log(
-        `[${nowCT()}]    DXFeed Summary.openPrice : ${dxSummaryOpen?.toFixed(2) ?? "N/A"}`,
-      );
-      console.log(
-        `[${nowCT()}]    DXFeed Quote mid         : ${dxQuoteMid?.toFixed(2) ?? "N/A"}`,
-      );
+      let dxSummaryOpen = null;
+      let dxQuoteMid = null;
+      try {
+        ({ openPrice: dxSummaryOpen, quoteMid: dxQuoteMid } =
+          await getSpxOpenPrice());
+        console.log(
+          `[${nowCT()}]    DXFeed Summary.openPrice : ${dxSummaryOpen?.toFixed(2) ?? "N/A"}`,
+        );
+        console.log(
+          `[${nowCT()}]    DXFeed Quote mid         : ${dxQuoteMid?.toFixed(2) ?? "N/A"}`,
+        );
+      } catch (err) {
+        console.log(
+          `[${nowCT()}]    getSpxOpenPrice timeout — falling back to getSpxQuoteMid`,
+        );
+        try {
+          dxQuoteMid = await getSpxQuoteMid();
+          console.log(
+            `[${nowCT()}]    Fallback Quote mid       : ${dxQuoteMid?.toFixed(2) ?? "N/A"}`,
+          );
+        } catch {
+          console.log(
+            `[${nowCT()}]    getSpxQuoteMid also failed — aborting open cycle`,
+          );
+          return null;
+        }
+      }
 
       // FMP logged for observational purposes only
       const fmpBar = await getFmpOpenPrice();
