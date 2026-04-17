@@ -3,14 +3,16 @@ import { createSupabaseServerClient } from "../lib/supabase-server";
 import TradingPlanDashboard from "./TradingPlanDashboard";
 
 function classifyOvernightRange(pts: number): "tight" | "normal" | "wide" {
-  if (pts < 50) return "tight";
-  if (pts <= 100) return "normal";
+  if (pts < 25) return "tight";
+  if (pts <= 50) return "normal";
   return "wide";
 }
 
 export default async function TradingPlanPage() {
   const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const today = new Date().toLocaleDateString("en-CA", {
