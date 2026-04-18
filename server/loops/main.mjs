@@ -13,7 +13,6 @@ import {
   getSpxOpenPrice,
   getSpxQuoteMid,
   getEsMid,
-  getIndexLast,
   withTimeout,
 } from "../lib/dxfeed.mjs";
 import {
@@ -206,10 +205,29 @@ async function writeOpenSummary({
   esBasis,
 }) {
   try {
-    const [vix, vix1d] = await Promise.all([
-      getIndexLast("VIX"),
-      getIndexLast("VIX1D"),
+    // Wait 90s for OHLC loop to capture first VIX/VIX1D bar before querying
+    // writeOpenSummary is fire-and-forget so this doesn't block the main cycle
+    await new Promise((resolve) => setTimeout(resolve, 90000));
+
+    const [vixRows, vix1dRows] = await Promise.all([
+      supabase
+        .from("vix_snapshots")
+        .select("open")
+        .gte("created_at", `${today}T00:00:00`)
+        .lt("created_at", `${today}T23:59:59`)
+        .order("created_at", { ascending: true })
+        .limit(1),
+      supabase
+        .from("vix1d_snapshots")
+        .select("open")
+        .gte("created_at", `${today}T00:00:00`)
+        .lt("created_at", `${today}T23:59:59`)
+        .order("created_at", { ascending: true })
+        .limit(1),
     ]);
+
+    const vix = vixRows.data?.[0]?.open ?? null;
+    const vix1d = vix1dRows.data?.[0]?.open ?? null;
 
     const vix1dVixRatio =
       vix && vix1d && vix > 0 ? parseFloat((vix1d / vix).toFixed(4)) : null;
@@ -561,7 +579,7 @@ async function runCycle(isOpenCycle = false) {
   }
 
   try {
-    // ── Open cycle: sleep 15s before fetching so auction clears and RTH quotes are live
+    // Open cycle: sleep 15s before fetching so auction clears and RTH quotes are live
     if (isOpenCycle) {
       console.log(`[${nowCT()}] ============================================`);
       console.log(
@@ -617,7 +635,7 @@ async function runCycle(isOpenCycle = false) {
         console.log(
           `[${nowCT()}]    DXFeed Quote mid         : ${dxQuoteMid?.toFixed(2) ?? "N/A"}`,
         );
-      } catch (err) {
+      } catch {
         console.log(
           `[${nowCT()}]    getSpxOpenPrice timeout — falling back to getSpxQuoteMid`,
         );
