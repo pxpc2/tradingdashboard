@@ -62,8 +62,9 @@ function pctChange(
   return (((current - prevClose) / prevClose) * 100).toFixed(2);
 }
 
+// Blue for up, amber for down
 function pctColor(pct: string): string {
-  return parseFloat(pct) >= 0 ? "#4ade80" : "#f87171";
+  return parseFloat(pct) >= 0 ? "#60a5fa" : "#E4D00A";
 }
 
 function TickerItem({
@@ -139,7 +140,6 @@ export default function WatchlistStrip({ entries, ticks }: Props) {
         }
       `}</style>
       <div className="ticker-track">
-        {/* Render twice for seamless loop */}
         {[...allEntries, ...allEntries].map((entry, i) => (
           <TickerItem
             key={`${entry.symbol}-${i}`}

@@ -71,9 +71,10 @@ function pctChange(
   return (((current - prevClose) / prevClose) * 100).toFixed(2);
 }
 
+// Blue for up, amber for down
 function pctColor(pct: string | null): string {
   if (!pct) return "#666";
-  return parseFloat(pct) >= 0 ? "#4ade80" : "#f87171";
+  return parseFloat(pct) >= 0 ? "#60a5fa" : "#E4D00A";
 }
 
 export default function LiveDashboard({
@@ -85,7 +86,6 @@ export default function LiveDashboard({
     searchParams.get("date") ??
     new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 
-  // Data hooks - all simplified to today only
   const { straddleData, esBasis } = useStraddleData(
     today,
     initialStraddleData,
@@ -103,7 +103,6 @@ export default function LiveDashboard({
     error: realError,
   } = useRealPositions();
 
-  // First skew snapshot of today — used for skew-adjusted levels
   const openingSkew = useMemo(() => {
     return (
       skewHistory.find(
@@ -121,13 +120,12 @@ export default function LiveDashboard({
     return Math.round((below / skewHistory.length) * 100);
   }, [latestSkew, skewHistory]);
 
-  // Live ticks
   const allSymbols = useMemo(() => {
     const set = new Set(CORE_SYMBOLS);
     for (const e of watchlistEntries) set.add(e.streamerSymbol);
     for (const s of realSymbols) set.add(s);
     return Array.from(set);
-  }, [watchlistEntries, realSymbols]); // add realSymbols to deps
+  }, [watchlistEntries, realSymbols]);
 
   const ticks = useLiveTick(allSymbols);
   const spxTick = ticks["SPX"] ?? null;
@@ -145,7 +143,6 @@ export default function LiveDashboard({
       ? (vix1dLast / vixLast).toFixed(2)
       : null;
 
-  // Computed values
   const todayRows = useMemo(
     () =>
       straddleData.filter(
@@ -184,8 +181,6 @@ export default function LiveDashboard({
   const spxOpen = isSpxOpen();
   const esOpen = isEsOpen();
 
-  // For SPX %, we need prevClose from pdhl - simplified: use esTick.prevClose logic
-  // In a full implementation, fetch from /api/pdhl
   const spxPct = pctChange(liveSpx, spxTick?.prevClose ?? null);
   const esPct = pctChange(liveEs, esTick?.prevClose ?? null);
 
@@ -194,26 +189,21 @@ export default function LiveDashboard({
       {/* Header */}
       <div className="border-b border-[#1a1a1a] bg-[#0a0a0a] sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between h-10">
-          {/* Watchlist in header - desktop only */}
           <div className="hidden md:block flex-1 mr-4 overflow-x-auto scrollbar-none">
             <WatchlistStrip entries={watchlistEntries} ticks={ticks} />
           </div>
 
           <div className="flex items-center gap-3 md:gap-4 shrink-0">
-            {/* Basis - mobile */}
             {liveBasis !== null && (
               <span className="font-mono text-sm text-[#555] md:hidden">
                 B {liveBasis > 0 ? "+" : ""}
                 {liveBasis.toFixed(2)}
               </span>
             )}
-
-            {/* Converter - desktop */}
             <div className="hidden md:flex items-center gap-3">
               <div className="w-px h-4 bg-[#1a1a1a]" />
               <EsSpxConverter initialBasis={liveBasis} compact />
             </div>
-
             <div className="w-px h-4 bg-[#1a1a1a]" />
             <Link href="/analysis">
               <span className="font-sans text-xs text-[#555] hover:text-[#f59e0b] transition-colors uppercase tracking-widest">
@@ -233,7 +223,6 @@ export default function LiveDashboard({
       </div>
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 md:py-5">
-        {/* World Clock */}
         <div className="mb-4">
           <WorldClock />
         </div>
@@ -286,6 +275,7 @@ export default function LiveDashboard({
                 </span>
               )}
             </div>
+
             {/* VIX */}
             <div className="flex items-center gap-2">
               <div
@@ -308,6 +298,7 @@ export default function LiveDashboard({
                 </span>
               )}
             </div>
+
             {/* VIX1D */}
             <div className="flex items-center gap-2">
               <div
@@ -433,14 +424,11 @@ export default function LiveDashboard({
           <SkewHistoryChart data={skewHistory} avgSkew={avgSkew} />
         </div>
 
-        {/* Bottom row: Macro + Positions */}
+        {/* Bottom row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Macro - single scroll container */}
           <div className="h-[220px]">
             <MacroEvents selectedDate={today} />
           </div>
-
-          {/* Positions */}
           <div className="h-[220px]">
             <PositionsPanel
               smlSession={smlSession}

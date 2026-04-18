@@ -349,11 +349,12 @@ export default function PositionsPanel({
                   {latest?.mid.toFixed(2) ?? "—"}
                 </span>
               </span>
+              {/* SML fly P&L — blue/amber */}
               <span
                 className="font-mono"
                 style={{
                   color:
-                    pnl === null ? "#555" : pnl >= 0 ? "#4ade80" : "#f87171",
+                    pnl === null ? "#555" : pnl >= 0 ? "#60a5fa" : "#E4D00A",
                 }}
               >
                 {pnl !== null ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}` : "—"}
@@ -436,9 +437,10 @@ function RealPositionsView({
           <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
             Total P&L
           </span>
+          {/* Total P&L — blue/amber */}
           <span
             className="font-mono text-base"
-            style={{ color: totalPnl >= 0 ? "#4ade80" : "#f87171" }}
+            style={{ color: totalPnl >= 0 ? "#60a5fa" : "#E4D00A" }}
           >
             {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
           </span>
@@ -452,8 +454,9 @@ function RealPositionsView({
               const tick = ticks[leg.streamerSymbol] ?? null;
               const mid = tick?.mid ?? null;
               const legPnl = calcPnl(leg, tick);
+              // P&L blue/amber
               const pnlColor =
-                legPnl === null ? "#555" : legPnl >= 0 ? "#4ade80" : "#f87171";
+                legPnl === null ? "#555" : legPnl >= 0 ? "#60a5fa" : "#E4D00A";
               const legDelta =
                 tick?.delta != null
                   ? (leg.direction === "Long" ? 1 : -1) *
@@ -465,6 +468,7 @@ function RealPositionsView({
                   key={leg.symbol}
                   className="bg-[#111] rounded px-2 py-1.5 flex items-center gap-2"
                 >
+                  {/* Long/short indicator — stays green/red */}
                   <div
                     className="w-0.5 h-5 shrink-0"
                     style={{
@@ -511,12 +515,13 @@ function RealPositionsView({
           }
 
           const isExp = expanded.has(group.id);
+          // Group P&L — blue/amber
           const pnlColor =
             group.totalPnl === null
               ? "#555"
               : group.totalPnl >= 0
-                ? "#4ade80"
-                : "#f87171";
+                ? "#60a5fa"
+                : "#E4D00A";
           const pctMax =
             group.totalPnl !== null && group.maxPnl
               ? pctOfMax(group.totalPnl, group.maxPnl)
@@ -524,7 +529,6 @@ function RealPositionsView({
 
           return (
             <div key={group.id} className="bg-[#111] rounded overflow-hidden">
-              {/* Group header */}
               <div
                 className="px-2 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-[#151515] transition-colors"
                 onClick={() => toggleExpand(group.id)}
@@ -568,7 +572,7 @@ function RealPositionsView({
                 </div>
               </div>
 
-              {/* Max profit/loss bar — shows when expanded */}
+              {/* Max profit/loss — stays green/red (structural, not live P&L) */}
               {isExp && group.maxPnl && (
                 <div className="px-2 py-1.5 border-t border-[#1a1a1a] flex gap-4">
                   <div>
@@ -606,12 +610,13 @@ function RealPositionsView({
                   const tick = ticks[leg.streamerSymbol] ?? null;
                   const mid = tick?.mid ?? null;
                   const legPnl = calcPnl(leg, tick);
+                  // Leg P&L — blue/amber
                   const legPnlColor =
                     legPnl === null
                       ? "#555"
                       : legPnl >= 0
-                        ? "#4ade80"
-                        : "#f87171";
+                        ? "#60a5fa"
+                        : "#E4D00A";
                   const legDelta =
                     tick?.delta != null
                       ? (leg.direction === "Long" ? 1 : -1) *
@@ -623,6 +628,7 @@ function RealPositionsView({
                       key={leg.symbol}
                       className="px-2 py-1.5 flex items-center gap-2 border-t border-[#1a1a1a]"
                     >
+                      {/* Long/short indicator — stays green/red */}
                       <div
                         className="w-0.5 h-4 shrink-0"
                         style={{
