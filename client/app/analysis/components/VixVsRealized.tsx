@@ -28,12 +28,12 @@ const CLASS_COLORS: Record<RegimeClass, string> = {
   "Quiet drift": "#555",
 };
 
-export default function OvernightRange({ sessions }: Props) {
+export default function VixVsRealized({ sessions }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
 
   const filtered = sessions.filter(
-    (s) => s.overnightRange !== null && s.overnightRange > 0,
+    (s) => s.vix1dVixRatio !== null && s.maxMovePct > 0,
   );
 
   useEffect(() => {
@@ -54,6 +54,11 @@ export default function OvernightRange({ sessions }: Props) {
   useEffect(() => {
     if (!chartRef.current || filtered.length === 0) return;
 
+    const ratios = filtered.map((s) => s.vix1dVixRatio!);
+    const minR = Math.min(...ratios);
+    const maxR = Math.max(...ratios);
+    const pad = (maxR - minR) * 0.1 || 0.05;
+
     const byRegime: Record<RegimeClass, any[]> = {
       Trending: [],
       "Partial reversal": [],
@@ -64,17 +69,15 @@ export default function OvernightRange({ sessions }: Props) {
     filtered.forEach((s) => {
       const regime = classifySession(s.maxMovePct, s.realizedMovePct);
       byRegime[regime].push([
-        parseFloat(s.overnightRange!.toFixed(2)),
+        parseFloat(s.vix1dVixRatio!.toFixed(3)),
         parseFloat(s.realizedMovePct.toFixed(1)),
         s.date,
         s.dayOfWeek,
         regime,
-        parseFloat(s.maxMovePct.toFixed(1)),
+        s.openingVix?.toFixed(2) ?? "—",
+        s.hasMacro ? "Macro" : "",
       ]);
     });
-
-    const ranges = filtered.map((s) => s.overnightRange!);
-    const maxRange = Math.max(...ranges) * 1.15;
 
     chartRef.current.setOption({
       backgroundColor: "#111111",
@@ -89,16 +92,27 @@ export default function OvernightRange({ sessions }: Props) {
       },
       xAxis: {
         type: "value",
-        name: "Overnight ES range (pts)",
+        name: "VIX1D / VIX ratio",
         nameLocation: "middle",
         nameGap: 28,
         nameTextStyle: { color: "#444", fontSize: 10 },
-        min: 0,
-        max: parseFloat(maxRange.toFixed(0)),
+        min: parseFloat((minR - pad).toFixed(2)),
+        max: parseFloat((maxR + pad).toFixed(2)),
         axisLine: { lineStyle: { color: "#1f1f1f" } },
         axisTick: { show: false },
         axisLabel: { color: "#666", fontSize: 10 },
         splitLine: { lineStyle: { color: "#1a1a1a" } },
+        // Reference line at 1.0
+        markLine: {
+          silent: true,
+          symbol: "none",
+          data: [
+            {
+              xAxis: 1.0,
+              lineStyle: { color: "#2a2a2a", width: 1, type: "dashed" },
+            },
+          ],
+        },
       },
       yAxis: {
         type: "value",
@@ -124,11 +138,11 @@ export default function OvernightRange({ sessions }: Props) {
         textStyle: { color: "#9ca3af", fontSize: 11 },
         formatter: (p: any) => {
           if (!Array.isArray(p.data)) return "";
-          const [range, rv, date, day, regime, maxPct] = p.data;
-          return `<span style="color:#555;font-size:10px">${date} ${day}</span><br/>
-                  Overnight range <span style="color:#9ca3af">${range}pts</span><br/>
+          const [ratio, rv, date, day, regime, vix, macro] = p.data;
+          return `<span style="color:#555;font-size:10px">${date} ${day}${macro ? " 📅" : ""}</span><br/>
+                  VIX1D/VIX <span style="color:#9ca3af">${ratio}</span>
+                  ${vix !== "—" ? `<span style="color:#555"> (VIX ${vix})</span>` : ""}<br/>
                   RV/IV <span style="color:#9ca3af">${rv}%</span><br/>
-                  Max intraday <span style="color:#9ca3af">${maxPct}%</span><br/>
                   <span style="color:${CLASS_COLORS[regime as RegimeClass]}">${regime}</span>`;
         },
       },
@@ -145,7 +159,6 @@ export default function OvernightRange({ sessions }: Props) {
         data: byRegime[regime],
         symbolSize: 7,
         itemStyle: { color: CLASS_COLORS[regime], opacity: 0.85 },
-        z: 2,
       })),
     });
   }, [filtered]);
@@ -153,33 +166,48 @@ export default function OvernightRange({ sessions }: Props) {
   if (filtered.length < 2) {
     return (
       <div className="flex items-center justify-center h-40 text-xs text-[#333]">
-        Dados insuficientes — aguardando mais sessões com overnight range
+        Dados insuficientes — VIX disponível após 2026-04-17
       </div>
     );
   }
 
-  // Quick stats
-  const avgRange =
-    filtered.reduce((a, s) => a + s.overnightRange!, 0) / filtered.length;
-  const today = filtered[filtered.length - 1];
+  // Summary stats
+  const highRatio = filtered.filter((s) => (s.vix1dVixRatio ?? 0) > 1.0);
+  const lowRatio = filtered.filter((s) => (s.vix1dVixRatio ?? 1) <= 1.0);
+  const avgRvHigh =
+    highRatio.length > 0
+      ? (
+          highRatio.reduce((a, s) => a + s.realizedMovePct, 0) /
+          highRatio.length
+        ).toFixed(1)
+      : null;
+  const avgRvLow =
+    lowRatio.length > 0
+      ? (
+          lowRatio.reduce((a, s) => a + s.realizedMovePct, 0) / lowRatio.length
+        ).toFixed(1)
+      : null;
 
   return (
     <div>
-      <div className="flex gap-4 mb-2">
-        <span className="font-sans text-[11px] text-[#555]">
-          avg range{" "}
-          <span className="font-mono text-[#9ca3af]">
-            {avgRange.toFixed(1)}pts
-          </span>
-        </span>
-        {today && (
-          <span className="font-sans text-[11px] text-[#555]">
-            hoje{" "}
-            <span className="font-mono text-[#f59e0b]">
-              {today.overnightRange!.toFixed(1)}pts
+      <div className="flex gap-4 mb-2 text-[11px]">
+        <span className="text-[#555]">
+          ratio &gt;1.0 ({highRatio.length} dias)
+          {avgRvHigh && (
+            <span className="font-mono text-[#f87171] ml-1">
+              avg {avgRvHigh}% RV/IV
             </span>
-          </span>
-        )}
+          )}
+        </span>
+        <span className="text-[#444]">·</span>
+        <span className="text-[#555]">
+          ratio ≤1.0 ({lowRatio.length} dias)
+          {avgRvLow && (
+            <span className="font-mono text-[#9CA9FF] ml-1">
+              avg {avgRvLow}% RV/IV
+            </span>
+          )}
+        </span>
       </div>
       <div ref={containerRef} className="w-full rounded overflow-hidden" />
     </div>

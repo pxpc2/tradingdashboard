@@ -26,18 +26,24 @@ export default async function AnalysisPage() {
     .select("created_at, open, high, low, es_ref")
     .order("created_at", { ascending: true });
 
-  // Weekly straddle snapshots — all Mondays
   const { data: weeklyStraddles } = await supabase
     .from("weekly_straddle_snapshots")
     .select("*")
     .order("created_at", { ascending: false });
 
-  // Latest SPX for current week range display
   const { data: latestStraddle } = await supabase
     .from("straddle_snapshots")
     .select("spx_ref")
     .order("created_at", { ascending: false })
     .limit(1);
+
+  // Session summary — for VIX, macro flag, directional outcome
+  const { data: sessionSummaries } = await supabase
+    .from("session_summary")
+    .select(
+      "date, opening_vix, opening_vix1d, opening_vix1d_vix_ratio, has_high_impact_macro, spx_closed_above_open",
+    )
+    .order("date", { ascending: true });
 
   const currentSpx = latestStraddle?.[0]?.spx_ref ?? null;
 
@@ -49,6 +55,16 @@ export default async function AnalysisPage() {
         esSnapshots={esSnapshots ?? []}
         weeklyStraddles={weeklyStraddles ?? []}
         currentSpx={currentSpx}
+        sessionSummaries={
+          (sessionSummaries ?? []) as {
+            date: string;
+            opening_vix: number | null;
+            opening_vix1d: number | null;
+            opening_vix1d_vix_ratio: number | null;
+            has_high_impact_macro: boolean | null;
+            spx_closed_above_open: boolean | null;
+          }[]
+        }
       />
     </main>
   );
