@@ -181,11 +181,11 @@ function computeScore(
   }
 
   if (plan.overnight_es_range === "wide") {
-    breakdown.overnight = 1;
-    score += 1;
-  } else if (plan.overnight_es_range === "tight") {
     breakdown.overnight = -1;
     score -= 1;
+  } else if (plan.overnight_es_range === "tight") {
+    breakdown.overnight = +1;
+    score += 1;
   } else {
     breakdown.overnight = 0;
   }
