@@ -8,6 +8,8 @@ import MacroEvents from "./MacroEvents";
 import PositionsPanel from "./PositionsPanel";
 import WatchlistStrip from "./WatchlistStrip";
 import EsSpxConverter from "./Converter";
+import SkewCharacterBadge from "./SkewCharacterBadge";
+import LiveReadLine from "./LiveReadLine";
 import { useStraddleData } from "../hooks/useStraddleData";
 import { useSkewHistory } from "../hooks/useSkewHistory";
 import { useFlyData } from "../hooks/useFlyData";
@@ -20,6 +22,10 @@ import { FaSignOutAlt } from "react-icons/fa";
 import { useSearchParams } from "next/navigation";
 import { useRealPositions } from "../hooks/useRealPositions";
 import Link from "next/link";
+import {
+  computeSkewCharacter,
+  computePriceCharacter,
+} from "../lib/sessionCharacter";
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
@@ -71,7 +77,6 @@ function pctChange(
   return (((current - prevClose) / prevClose) * 100).toFixed(2);
 }
 
-// Blue for up, amber for down
 function pctColor(pct: string | null): string {
   if (!pct) return "#666";
   return parseFloat(pct) >= 0 ? "#60a5fa" : "#E4D00A";
@@ -154,6 +159,18 @@ export default function LiveDashboard({
     [straddleData, today],
   );
 
+  // Today's skew snapshots for character computation
+  const todaySkewRows = useMemo(
+    () =>
+      skewHistory.filter(
+        (s) =>
+          new Date(s.created_at).toLocaleDateString("en-CA", {
+            timeZone: "America/New_York",
+          }) === today,
+      ),
+    [skewHistory, today],
+  );
+
   const latest = todayRows[todayRows.length - 1] ?? null;
   const opening = todayRows[0] ?? null;
 
@@ -177,6 +194,36 @@ export default function LiveDashboard({
       : realizedMovePct && parseInt(realizedMovePct) >= 70
         ? "#f59e0b"
         : "#9ca3af";
+
+  // Max/min SPX across today's snapshots, including live tick
+  const { maxSpx, minSpx } = useMemo(() => {
+    if (todayRows.length === 0)
+      return { maxSpx: null as number | null, minSpx: null as number | null };
+    const prices = todayRows.map((r) => r.spx_ref);
+    if (liveSpx !== null) prices.push(liveSpx);
+    return {
+      maxSpx: Math.max(...prices),
+      minSpx: Math.min(...prices),
+    };
+  }, [todayRows, liveSpx]);
+
+  // Session character
+  const skewChar = useMemo(
+    () => computeSkewCharacter(todaySkewRows),
+    [todaySkewRows],
+  );
+
+  const priceChar = useMemo(
+    () =>
+      computePriceCharacter(
+        opening?.spx_ref ?? null,
+        liveSpx,
+        maxSpx,
+        minSpx,
+        opening?.straddle_mid ?? null,
+      ),
+    [opening, liveSpx, maxSpx, minSpx],
+  );
 
   const spxOpen = isSpxOpen();
   const esOpen = isEsOpen();
@@ -252,7 +299,6 @@ export default function LiveDashboard({
                 </span>
               )}
             </div>
-
             {/* ES */}
             <div className="flex items-center gap-2">
               <div
@@ -275,7 +321,6 @@ export default function LiveDashboard({
                 </span>
               )}
             </div>
-
             {/* VIX */}
             <div className="flex items-center gap-2">
               <div
@@ -298,7 +343,6 @@ export default function LiveDashboard({
                 </span>
               )}
             </div>
-
             {/* VIX1D */}
             <div className="flex items-center gap-2">
               <div
@@ -383,6 +427,9 @@ export default function LiveDashboard({
               )}
             </div>
             <div className="w-px bg-[#1f1f1f]" />
+            {/* NEW: Skew character today */}
+            <SkewCharacterBadge skewChar={skewChar} />
+            <div className="w-px bg-[#1f1f1f]" />
             <div>
               <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
                 Call IV / Put IV
@@ -412,6 +459,13 @@ export default function LiveDashboard({
               </div>
             </div>
           </div>
+
+          {/* Live read line — only renders when there's enough data */}
+          {spxOpen && (
+            <div className="mt-3">
+              <LiveReadLine price={priceChar} skew={skewChar} />
+            </div>
+          )}
         </div>
 
         {/* Charts row */}
