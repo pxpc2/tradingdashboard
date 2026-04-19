@@ -4,29 +4,14 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import { SessionData } from "../AnalysisDashboard";
+import {
+  classifySessionFinal,
+  SESSION_TYPE_COLOR,
+  SESSION_TYPE_ORDER,
+  SessionType,
+} from "../../lib/sessionCharacter";
 
 type Props = { sessions: SessionData[] };
-
-type RegimeClass =
-  | "Trending"
-  | "Partial reversal"
-  | "Mean-reverting"
-  | "Quiet drift";
-
-function classifySession(maxPct: number, eodPct: number): RegimeClass {
-  const reversion = maxPct > 0 ? (maxPct - eodPct) / maxPct : 0;
-  if (maxPct < 50 && eodPct < 40) return "Quiet drift";
-  if (reversion < 0.25) return "Trending";
-  if (reversion < 0.55) return "Partial reversal";
-  return "Mean-reverting";
-}
-
-const CLASS_COLORS: Record<RegimeClass, string> = {
-  Trending: "#f87171",
-  "Partial reversal": "#f59e0b",
-  "Mean-reverting": "#9CA9FF",
-  "Quiet drift": "#555",
-};
 
 export default function VixVsRealized({ sessions }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -59,21 +44,21 @@ export default function VixVsRealized({ sessions }: Props) {
     const maxR = Math.max(...ratios);
     const pad = (maxR - minR) * 0.1 || 0.05;
 
-    const byRegime: Record<RegimeClass, any[]> = {
-      Trending: [],
-      "Partial reversal": [],
-      "Mean-reverting": [],
-      "Quiet drift": [],
+    const byType: Record<SessionType, any[]> = {
+      "Trend day": [],
+      "Trend with partial reversal": [],
+      "Reversal day": [],
+      "Flat day": [],
     };
 
     filtered.forEach((s) => {
-      const regime = classifySession(s.maxMovePct, s.realizedMovePct);
-      byRegime[regime].push([
+      const type = classifySessionFinal(s.maxMovePct, s.realizedMovePct);
+      byType[type].push([
         parseFloat(s.vix1dVixRatio!.toFixed(3)),
         parseFloat(s.realizedMovePct.toFixed(1)),
         s.date,
         s.dayOfWeek,
-        regime,
+        type,
         s.openingVix?.toFixed(2) ?? "—",
         s.hasMacro ? "Macro" : "",
       ]);
@@ -84,7 +69,7 @@ export default function VixVsRealized({ sessions }: Props) {
       animation: false,
       grid: { top: 16, bottom: 64, left: 52, right: 16 },
       legend: {
-        data: ["Trending", "Partial reversal", "Mean-reverting", "Quiet drift"],
+        data: SESSION_TYPE_ORDER,
         bottom: 4,
         textStyle: { color: "#555", fontSize: 10 },
         itemWidth: 10,
@@ -102,7 +87,6 @@ export default function VixVsRealized({ sessions }: Props) {
         axisTick: { show: false },
         axisLabel: { color: "#666", fontSize: 10 },
         splitLine: { lineStyle: { color: "#1a1a1a" } },
-        // Reference line at 1.0
         markLine: {
           silent: true,
           symbol: "none",
@@ -138,27 +122,20 @@ export default function VixVsRealized({ sessions }: Props) {
         textStyle: { color: "#9ca3af", fontSize: 11 },
         formatter: (p: any) => {
           if (!Array.isArray(p.data)) return "";
-          const [ratio, rv, date, day, regime, vix, macro] = p.data;
+          const [ratio, rv, date, day, type, vix, macro] = p.data;
           return `<span style="color:#555;font-size:10px">${date} ${day}${macro ? " 📅" : ""}</span><br/>
                   VIX1D/VIX <span style="color:#9ca3af">${ratio}</span>
                   ${vix !== "—" ? `<span style="color:#555"> (VIX ${vix})</span>` : ""}<br/>
                   RV/IV <span style="color:#9ca3af">${rv}%</span><br/>
-                  <span style="color:${CLASS_COLORS[regime as RegimeClass]}">${regime}</span>`;
+                  <span style="color:${SESSION_TYPE_COLOR[type as SessionType]}">${type}</span>`;
         },
       },
-      series: (
-        [
-          "Trending",
-          "Partial reversal",
-          "Mean-reverting",
-          "Quiet drift",
-        ] as RegimeClass[]
-      ).map((regime) => ({
-        name: regime,
+      series: SESSION_TYPE_ORDER.map((type) => ({
+        name: type,
         type: "scatter" as const,
-        data: byRegime[regime],
+        data: byType[type],
         symbolSize: 7,
-        itemStyle: { color: CLASS_COLORS[regime], opacity: 0.85 },
+        itemStyle: { color: SESSION_TYPE_COLOR[type], opacity: 0.85 },
       })),
     });
   }, [filtered]);
@@ -171,7 +148,6 @@ export default function VixVsRealized({ sessions }: Props) {
     );
   }
 
-  // Summary stats
   const highRatio = filtered.filter((s) => (s.vix1dVixRatio ?? 0) > 1.0);
   const lowRatio = filtered.filter((s) => (s.vix1dVixRatio ?? 1) <= 1.0);
   const avgRvHigh =

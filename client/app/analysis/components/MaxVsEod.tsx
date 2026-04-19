@@ -4,20 +4,14 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import { SessionData } from "../AnalysisDashboard";
+import {
+  classifySessionFinal,
+  SESSION_TYPE_COLOR,
+  SESSION_TYPE_ORDER,
+  SessionType,
+} from "../../lib/sessionCharacter";
 
 type Props = { sessions: SessionData[] };
-
-function classifySession(
-  maxPct: number,
-  eodPct: number,
-): { label: string; color: string } {
-  const reversion = maxPct > 0 ? (maxPct - eodPct) / maxPct : 0;
-  if (maxPct < 50 && eodPct < 40)
-    return { label: "Quiet drift", color: "#555" };
-  if (reversion < 0.25) return { label: "Trending", color: "#f87171" };
-  if (reversion < 0.55) return { label: "Partial reversal", color: "#f59e0b" };
-  return { label: "Mean-reverting", color: "#9CA9FF" };
-}
 
 export default function MaxVsEod({ sessions }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,65 +40,35 @@ export default function MaxVsEod({ sessions }: Props) {
         ...sessions.map((s) => Math.max(s.maxMovePct, s.realizedMovePct)),
       ) * 1.15;
 
-    const trendingData = sessions
-      .filter(
-        (s) =>
-          classifySession(s.maxMovePct, s.realizedMovePct).label === "Trending",
-      )
-      .map((s) => [
-        parseFloat(s.maxMovePct.toFixed(1)),
-        parseFloat(s.realizedMovePct.toFixed(1)),
-        s.date,
-        s.dayOfWeek,
-      ]);
+    // Group by session type
+    const byType: Record<SessionType, any[]> = {
+      "Trend day": [],
+      "Trend with partial reversal": [],
+      "Reversal day": [],
+      "Flat day": [],
+    };
 
-    const partialData = sessions
-      .filter(
-        (s) =>
-          classifySession(s.maxMovePct, s.realizedMovePct).label ===
-          "Partial reversal",
-      )
-      .map((s) => [
+    sessions.forEach((s) => {
+      const type = classifySessionFinal(s.maxMovePct, s.realizedMovePct);
+      byType[type].push([
         parseFloat(s.maxMovePct.toFixed(1)),
         parseFloat(s.realizedMovePct.toFixed(1)),
         s.date,
         s.dayOfWeek,
+        type,
       ]);
-
-    const revertingData = sessions
-      .filter(
-        (s) =>
-          classifySession(s.maxMovePct, s.realizedMovePct).label ===
-          "Mean-reverting",
-      )
-      .map((s) => [
-        parseFloat(s.maxMovePct.toFixed(1)),
-        parseFloat(s.realizedMovePct.toFixed(1)),
-        s.date,
-        s.dayOfWeek,
-      ]);
-
-    const quietData = sessions
-      .filter(
-        (s) =>
-          classifySession(s.maxMovePct, s.realizedMovePct).label ===
-          "Quiet drift",
-      )
-      .map((s) => [
-        parseFloat(s.maxMovePct.toFixed(1)),
-        parseFloat(s.realizedMovePct.toFixed(1)),
-        s.date,
-        s.dayOfWeek,
-      ]);
+    });
 
     const tooltipFmt = (p: any) => {
-      const [max, eod, date, day] = p.data;
-      const cls = classifySession(max, eod);
-      const reversion = max > 0 ? Math.round(((max - eod) / max) * 100) : 0;
+      if (!Array.isArray(p.data)) return "";
+      const [max, eod, date, day, type] = p.data;
+      const magnitude = (max / 100).toFixed(2);
+      const character = max > 0 ? (eod / max).toFixed(2) : "0.00";
+      const color = SESSION_TYPE_COLOR[type as SessionType];
       return `<span style="color:#555;font-size:10px">${date} ${day}</span><br/>
               Max <span style="color:#9ca3af">${max}%</span> → EOD <span style="color:#9ca3af">${eod}%</span><br/>
-              Reversão <span style="color:#9ca3af">${reversion}%</span><br/>
-              <span style="color:${cls.color}">${cls.label}</span>`;
+              Magnitude <span style="color:#9ca3af">${magnitude}x</span> · Character <span style="color:#9ca3af">${character}</span><br/>
+              <span style="color:${color}">${type}</span>`;
     };
 
     chartRef.current.setOption({
@@ -112,7 +76,7 @@ export default function MaxVsEod({ sessions }: Props) {
       animation: false,
       grid: { top: 16, bottom: 64, left: 52, right: 16 },
       legend: {
-        data: ["Trending", "Partial reversal", "Mean-reverting", "Quiet drift"],
+        data: SESSION_TYPE_ORDER,
         bottom: 4,
         textStyle: { color: "#555", fontSize: 10 },
         itemWidth: 10,
@@ -134,6 +98,23 @@ export default function MaxVsEod({ sessions }: Props) {
           formatter: (v: number) => `${v}%`,
         },
         splitLine: { lineStyle: { color: "#1a1a1a" } },
+        // Reference line at 100% (= magnitude 1.0, implied threshold)
+        markLine: {
+          silent: true,
+          symbol: "none",
+          data: [
+            {
+              xAxis: 100,
+              lineStyle: { color: "#2a2a2a", width: 1, type: "dashed" },
+              label: {
+                formatter: "implied",
+                color: "#444",
+                fontSize: 9,
+                position: "end",
+              },
+            },
+          ],
+        },
       },
       yAxis: {
         type: "value",
@@ -161,7 +142,7 @@ export default function MaxVsEod({ sessions }: Props) {
         formatter: tooltipFmt,
       },
       series: [
-        // Diagonal reference line (max = eod = trending)
+        // Diagonal reference (character = 1.0)
         {
           type: "line",
           data: [
@@ -176,38 +157,14 @@ export default function MaxVsEod({ sessions }: Props) {
           name: "_diagonal",
           tooltip: { show: false },
         },
-        {
-          name: "Trending",
-          type: "scatter",
-          data: trendingData,
+        ...SESSION_TYPE_ORDER.map((type) => ({
+          name: type,
+          type: "scatter" as const,
+          data: byType[type],
           symbolSize: 8,
-          itemStyle: { color: "#f87171", opacity: 0.85 },
+          itemStyle: { color: SESSION_TYPE_COLOR[type], opacity: 0.85 },
           z: 3,
-        },
-        {
-          name: "Partial reversal",
-          type: "scatter",
-          data: partialData,
-          symbolSize: 8,
-          itemStyle: { color: "#f59e0b", opacity: 0.85 },
-          z: 3,
-        },
-        {
-          name: "Mean-reverting",
-          type: "scatter",
-          data: revertingData,
-          symbolSize: 8,
-          itemStyle: { color: "#9CA9FF", opacity: 0.85 },
-          z: 3,
-        },
-        {
-          name: "Quiet drift",
-          type: "scatter",
-          data: quietData,
-          symbolSize: 8,
-          itemStyle: { color: "#555", opacity: 0.85 },
-          z: 3,
-        },
+        })),
       ],
     });
   }, [sessions]);
@@ -215,33 +172,31 @@ export default function MaxVsEod({ sessions }: Props) {
   // Summary counts
   const counts = sessions.reduce(
     (acc, s) => {
-      const label = classifySession(s.maxMovePct, s.realizedMovePct).label;
-      acc[label] = (acc[label] ?? 0) + 1;
+      const type = classifySessionFinal(s.maxMovePct, s.realizedMovePct);
+      acc[type] = (acc[type] ?? 0) + 1;
       return acc;
     },
-    {} as Record<string, number>,
+    {} as Record<SessionType, number>,
   );
 
   return (
     <div>
-      <div className="flex gap-4 mb-2">
-        {[
-          { label: "Trending", color: "#f87171" },
-          { label: "Partial reversal", color: "#f59e0b" },
-          { label: "Mean-reverting", color: "#9CA9FF" },
-          { label: "Quiet drift", color: "#555" },
-        ].map(({ label, color }) => (
-          <div key={label} className="flex items-center gap-1.5">
-            <div
-              className="w-2 h-2 rounded-full"
-              style={{ backgroundColor: color }}
-            />
-            <span className="font-mono text-[11px]" style={{ color }}>
-              {counts[label] ?? 0}
-            </span>
-            <span className="font-sans text-[10px] text-[#444]">{label}</span>
-          </div>
-        ))}
+      <div className="flex gap-4 mb-2 flex-wrap">
+        {SESSION_TYPE_ORDER.map((type) => {
+          const color = SESSION_TYPE_COLOR[type];
+          return (
+            <div key={type} className="flex items-center gap-1.5">
+              <div
+                className="w-2 h-2 rounded-full"
+                style={{ backgroundColor: color }}
+              />
+              <span className="font-mono text-[11px]" style={{ color }}>
+                {counts[type] ?? 0}
+              </span>
+              <span className="font-sans text-[10px] text-[#444]">{type}</span>
+            </div>
+          );
+        })}
       </div>
       <div ref={containerRef} className="w-full rounded overflow-hidden" />
     </div>

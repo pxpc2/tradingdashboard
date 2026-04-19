@@ -110,18 +110,14 @@ export function computePriceCharacter(
   else direction = currentMoveSigned > 0 ? "up" : "down";
 
   let classification: PriceCharacter["classification"];
-  // Not enough magnitude to classify as any trending/reversing type
   if (magnitude < 0.3) {
     classification = "flat";
   } else if (character >= 0.7) {
-    // Price held direction regardless of size — trend
     classification = "trending";
   } else if (magnitude >= 1.0) {
-    // Market exceeded implied move — classify character of reversal
     if (character >= 0.4) classification = "partial_reversal";
     else classification = "reversal";
   } else {
-    // Below implied, didn't hold direction — flat
     classification = "flat";
   }
 
@@ -135,7 +131,54 @@ export function computePriceCharacter(
   };
 }
 
-// Combines price + skew into a single narrated line
+// ─── Post-session classification ──────────────────────────────────────────────
+// Used in /analysis charts and post-session review
+// Takes final EOD numbers (% of straddle) and returns day type
+
+export type SessionType =
+  | "Trend day"
+  | "Trend with partial reversal"
+  | "Reversal day"
+  | "Flat day";
+
+export function classifySessionFinal(
+  maxMovePct: number, // max intraday move as % of opening straddle (e.g. 120 = 1.2x)
+  eodMovePct: number, // EOD realized move as % of opening straddle
+): SessionType {
+  // Convert pct (0-300+) to multiples (0.0-3.0+)
+  const magnitude = maxMovePct / 100;
+  const character = maxMovePct > 0 ? eodMovePct / maxMovePct : 0;
+
+  // Insufficient magnitude → flat regardless of character
+  if (magnitude < 0.3) return "Flat day";
+
+  // Held direction (character ≥ 0.7) → trend day at any magnitude
+  if (character >= 0.7) return "Trend day";
+
+  // Below implied AND didn't hold direction → flat
+  if (magnitude < 1.0) return "Flat day";
+
+  // Exceeded implied move (magnitude ≥ 1.0):
+  if (character >= 0.4) return "Trend with partial reversal";
+  return "Reversal day";
+}
+
+export const SESSION_TYPE_COLOR: Record<SessionType, string> = {
+  "Trend day": "#f87171",
+  "Trend with partial reversal": "#f59e0b",
+  "Reversal day": "#9CA9FF",
+  "Flat day": "#555",
+};
+
+export const SESSION_TYPE_ORDER: SessionType[] = [
+  "Trend day",
+  "Trend with partial reversal",
+  "Reversal day",
+  "Flat day",
+];
+
+// ─── Live read (price + skew narration) ───────────────────────────────────────
+
 export function buildLiveRead(
   price: PriceCharacter,
   skew: SkewCharacter,
@@ -150,7 +193,6 @@ export function buildLiveRead(
   const skewMoving = skew.strength === "moving";
   const skewStrong = skew.strength === "strongly_moving";
 
-  // Trending price
   if (price.classification === "trending") {
     if (skewMoving || skewStrong) {
       return {
@@ -164,7 +206,6 @@ export function buildLiveRead(
     };
   }
 
-  // Partial reversal
   if (price.classification === "partial_reversal") {
     if (skewStrong) {
       return {
@@ -178,7 +219,6 @@ export function buildLiveRead(
     };
   }
 
-  // Reversal
   if (price.classification === "reversal") {
     return {
       text: `Preço em reversão · Skew ${skewFlat ? "flat" : skewDirLabel(skew.direction)} — mean-reversion se desenvolvendo`,
@@ -186,7 +226,6 @@ export function buildLiveRead(
     };
   }
 
-  // Flat price
   if (price.classification === "flat") {
     if (skewStrong) {
       return {
