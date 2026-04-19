@@ -4,6 +4,7 @@
 import { useEffect, useRef, useMemo } from "react";
 import * as echarts from "echarts";
 import { SessionData } from "../AnalysisDashboard";
+import { resolveChartPalette } from "../../lib/chartPalette";
 
 type StraddleSnapshot = {
   created_at: string;
@@ -33,19 +34,17 @@ function getMinutesSinceOpen(iso: string): number {
     hour12: false,
   });
   const [h, m] = etStr.split(":").map(Number);
-  return (h - 9) * 60 + (m - 30); // minutes since 09:30 ET
+  return (h - 9) * 60 + (m - 30);
 }
 
 export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<echarts.ECharts | null>(null);
 
-  // Today's ET date
   const today = new Date().toLocaleDateString("en-CA", {
     timeZone: "America/New_York",
   });
 
-  // Build normalized decay data
   const { avgCurve, todayCurve } = useMemo(() => {
     const byDate = new Map<string, StraddleSnapshot[]>();
     for (const s of straddleSnapshots) {
@@ -54,8 +53,6 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
       byDate.get(date)!.push(s);
     }
 
-    // For each past session (not today), normalize to opening = 100
-    // then bucket by minute-since-open (0–390 = 6.5 hours RTH)
     const buckets: Record<number, number[]> = {};
 
     for (const [date, snaps] of byDate) {
@@ -76,7 +73,6 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
       }
     }
 
-    // Average per minute bucket
     const avgCurve: [number, number][] = Object.entries(buckets)
       .map(
         ([min, vals]) =>
@@ -89,7 +85,6 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
       )
       .sort((a, b) => a[0] - b[0]);
 
-    // Today's curve
     const todaySnaps = byDate.get(today) ?? [];
     const todaySorted = [...todaySnaps].sort(
       (a, b) =>
@@ -127,32 +122,32 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
 
   useEffect(() => {
     if (!chartRef.current) return;
+    const P = resolveChartPalette();
 
-    // Format minute offset as CT time label
     const formatMin = (min: number) => {
-      const totalMins = 9 * 60 + 30 + min; // minutes since midnight ET
-      const h = Math.floor(totalMins / 60) - 1; // ET→CT offset -1
+      const totalMins = 9 * 60 + 30 + min;
+      const h = Math.floor(totalMins / 60) - 1;
       const m = totalMins % 60;
       return `${h}:${m.toString().padStart(2, "0")}`;
     };
 
     chartRef.current.setOption({
-      backgroundColor: "#111111",
+      backgroundColor: P.bg,
       animation: false,
       grid: { top: 16, bottom: 32, left: 40, right: 16 },
       xAxis: {
         type: "value",
         min: 0,
         max: 390,
-        axisLine: { lineStyle: { color: "#1f1f1f" } },
+        axisLine: { lineStyle: { color: P.border } },
         axisTick: { show: false },
         axisLabel: {
-          color: "#666",
+          color: P.text3,
           fontSize: 10,
           formatter: (v: number) => formatMin(v),
           interval: 59,
         },
-        splitLine: { lineStyle: { color: "#1a1a1a" } },
+        splitLine: { lineStyle: { color: P.border } },
       },
       yAxis: {
         type: "value",
@@ -161,24 +156,24 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          color: "#666",
+          color: P.text3,
           fontSize: 10,
           formatter: (v: number) => `${v}%`,
         },
-        splitLine: { lineStyle: { color: "#1a1a1a" } },
+        splitLine: { lineStyle: { color: P.border } },
       },
       tooltip: {
         trigger: "axis",
-        backgroundColor: "#1a1a1a",
-        borderColor: "#222",
+        backgroundColor: P.bg,
+        borderColor: P.border2,
         padding: [6, 10],
-        textStyle: { color: "#9ca3af", fontSize: 11 },
+        textStyle: { color: P.text2, fontSize: 11 },
         formatter: (params: any) => {
           const min = params[0]?.axisValue;
-          let out = `<span style="color:#555;font-size:10px">${formatMin(min)} CT</span><br/>`;
+          let out = `<span style="color:${P.text4};font-size:10px">${formatMin(min)} CT</span><br/>`;
           for (const p of params) {
             if (p.value !== undefined) {
-              out += `<span style="color:${p.color}">${p.seriesName}</span> <span style="color:#9ca3af">${p.value[1]}%</span><br/>`;
+              out += `<span style="color:${p.color}">${p.seriesName}</span> <span style="color:${P.text2}">${p.value[1]}%</span><br/>`;
             }
           }
           return out;
@@ -188,7 +183,8 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
         data: ["Média", "Hoje"],
         right: 16,
         top: 4,
-        textStyle: { color: "#555", fontSize: 10 },
+        textStyle: { color: P.text3, fontSize: 10 },
+        inactiveColor: P.text6,
         itemWidth: 16,
         itemHeight: 2,
       },
@@ -197,9 +193,10 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
           name: "Média",
           type: "line",
           data: avgCurve,
-          lineStyle: { color: "#333", width: 1.5, type: "dashed" },
-          itemStyle: { color: "#333" },
+          lineStyle: { color: P.text5, width: 1.5, type: "dashed" },
+          itemStyle: { color: P.text5 },
           symbol: "none",
+          emphasis: { focus: "series", lineStyle: { width: 2 } },
           z: 1,
         },
         ...(todayCurve.length > 0
@@ -208,9 +205,10 @@ export default function DecayCurve({ sessions, straddleSnapshots }: Props) {
                 name: "Hoje",
                 type: "line",
                 data: todayCurve,
-                lineStyle: { color: "#9CA9FF", width: 1.5 },
-                itemStyle: { color: "#9CA9FF" },
+                lineStyle: { color: P.skewMoving, width: 1.5 },
+                itemStyle: { color: P.skewMoving },
                 symbol: "none",
+                emphasis: { focus: "series", lineStyle: { width: 2.5 } },
                 z: 2,
               },
             ]

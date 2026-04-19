@@ -4,29 +4,15 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import { SessionData } from "../AnalysisDashboard";
+import {
+  classifySessionFinal,
+  SESSION_TYPE_ORDER,
+  SessionType,
+  resolveSessionTypeColors,
+} from "../../lib/sessionCharacter";
+import { resolveChartPalette } from "../../lib/chartPalette";
 
 type Props = { sessions: SessionData[] };
-
-type RegimeClass =
-  | "Trending"
-  | "Partial reversal"
-  | "Mean-reverting"
-  | "Quiet drift";
-
-function classifySession(maxPct: number, eodPct: number): RegimeClass {
-  const reversion = maxPct > 0 ? (maxPct - eodPct) / maxPct : 0;
-  if (maxPct < 50 && eodPct < 40) return "Quiet drift";
-  if (reversion < 0.25) return "Trending";
-  if (reversion < 0.55) return "Partial reversal";
-  return "Mean-reverting";
-}
-
-const CLASS_COLORS: Record<RegimeClass, string> = {
-  Trending: "#f87171",
-  "Partial reversal": "#f59e0b",
-  "Mean-reverting": "#9CA9FF",
-  "Quiet drift": "#555",
-};
 
 export default function OvernightRange({ sessions }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -53,22 +39,24 @@ export default function OvernightRange({ sessions }: Props) {
 
   useEffect(() => {
     if (!chartRef.current || filtered.length === 0) return;
+    const P = resolveChartPalette();
+    const C = resolveSessionTypeColors();
 
-    const byRegime: Record<RegimeClass, any[]> = {
-      Trending: [],
-      "Partial reversal": [],
-      "Mean-reverting": [],
-      "Quiet drift": [],
+    const byType: Record<SessionType, any[]> = {
+      "Trend day": [],
+      "Trend with partial reversal": [],
+      "Reversal day": [],
+      "Flat day": [],
     };
 
     filtered.forEach((s) => {
-      const regime = classifySession(s.maxMovePct, s.realizedMovePct);
-      byRegime[regime].push([
+      const type = classifySessionFinal(s.maxMovePct, s.realizedMovePct);
+      byType[type].push([
         parseFloat(s.overnightRange!.toFixed(2)),
         parseFloat(s.realizedMovePct.toFixed(1)),
         s.date,
         s.dayOfWeek,
-        regime,
+        type,
         parseFloat(s.maxMovePct.toFixed(1)),
       ]);
     });
@@ -77,13 +65,14 @@ export default function OvernightRange({ sessions }: Props) {
     const maxRange = Math.max(...ranges) * 1.15;
 
     chartRef.current.setOption({
-      backgroundColor: "#111111",
+      backgroundColor: P.bg,
       animation: false,
       grid: { top: 16, bottom: 64, left: 52, right: 16 },
       legend: {
-        data: ["Trending", "Partial reversal", "Mean-reverting", "Quiet drift"],
+        data: SESSION_TYPE_ORDER,
         bottom: 4,
-        textStyle: { color: "#555", fontSize: 10 },
+        textStyle: { color: P.text3, fontSize: 10 },
+        inactiveColor: P.text6,
         itemWidth: 10,
         itemHeight: 10,
       },
@@ -92,59 +81,57 @@ export default function OvernightRange({ sessions }: Props) {
         name: "Overnight ES range (pts)",
         nameLocation: "middle",
         nameGap: 28,
-        nameTextStyle: { color: "#444", fontSize: 10 },
+        nameTextStyle: { color: P.text4, fontSize: 10 },
         min: 0,
         max: parseFloat(maxRange.toFixed(0)),
-        axisLine: { lineStyle: { color: "#1f1f1f" } },
+        axisLine: { lineStyle: { color: P.border } },
         axisTick: { show: false },
-        axisLabel: { color: "#666", fontSize: 10 },
-        splitLine: { lineStyle: { color: "#1a1a1a" } },
+        axisLabel: { color: P.text3, fontSize: 10 },
+        splitLine: { lineStyle: { color: P.border } },
       },
       yAxis: {
         type: "value",
         name: "RV/IV (%)",
         nameLocation: "middle",
         nameGap: 40,
-        nameTextStyle: { color: "#444", fontSize: 10 },
+        nameTextStyle: { color: P.text4, fontSize: 10 },
         min: 0,
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          color: "#666",
+          color: P.text3,
           fontSize: 10,
           formatter: (v: number) => `${v}%`,
         },
-        splitLine: { lineStyle: { color: "#1a1a1a" } },
+        splitLine: { lineStyle: { color: P.border } },
       },
       tooltip: {
         trigger: "item",
-        backgroundColor: "#1a1a1a",
-        borderColor: "#222",
+        backgroundColor: P.bg,
+        borderColor: P.border2,
         padding: [6, 10],
-        textStyle: { color: "#9ca3af", fontSize: 11 },
+        textStyle: { color: P.text2, fontSize: 11 },
         formatter: (p: any) => {
           if (!Array.isArray(p.data)) return "";
-          const [range, rv, date, day, regime, maxPct] = p.data;
-          return `<span style="color:#555;font-size:10px">${date} ${day}</span><br/>
-                  Overnight range <span style="color:#9ca3af">${range}pts</span><br/>
-                  RV/IV <span style="color:#9ca3af">${rv}%</span><br/>
-                  Max intraday <span style="color:#9ca3af">${maxPct}%</span><br/>
-                  <span style="color:${CLASS_COLORS[regime as RegimeClass]}">${regime}</span>`;
+          const [range, rv, date, day, type, maxPct] = p.data;
+          return `<span style="color:${P.text4};font-size:10px">${date} ${day}</span><br/>
+                  Overnight range <span style="color:${P.text2}">${range}pts</span><br/>
+                  RV/IV <span style="color:${P.text2}">${rv}%</span><br/>
+                  Max intraday <span style="color:${P.text2}">${maxPct}%</span><br/>
+                  <span style="color:${C[type as SessionType]}">${type}</span>`;
         },
       },
-      series: (
-        [
-          "Trending",
-          "Partial reversal",
-          "Mean-reverting",
-          "Quiet drift",
-        ] as RegimeClass[]
-      ).map((regime) => ({
-        name: regime,
+      series: SESSION_TYPE_ORDER.map((type) => ({
+        name: type,
         type: "scatter" as const,
-        data: byRegime[regime],
+        data: byType[type],
         symbolSize: 7,
-        itemStyle: { color: CLASS_COLORS[regime], opacity: 0.85 },
+        itemStyle: { color: C[type], opacity: 0.85 },
+        emphasis: {
+          focus: "series",
+          itemStyle: { opacity: 1, borderWidth: 1, borderColor: P.text2 },
+        },
+        blur: { itemStyle: { opacity: 0.12 } },
         z: 2,
       })),
     });
@@ -152,13 +139,12 @@ export default function OvernightRange({ sessions }: Props) {
 
   if (filtered.length < 2) {
     return (
-      <div className="flex items-center justify-center h-40 text-xs text-[#333]">
+      <div className="flex items-center justify-center h-40 text-xs text-text-6">
         Dados insuficientes — aguardando mais sessões com overnight range
       </div>
     );
   }
 
-  // Quick stats
   const avgRange =
     filtered.reduce((a, s) => a + s.overnightRange!, 0) / filtered.length;
   const today = filtered[filtered.length - 1];
@@ -166,16 +152,16 @@ export default function OvernightRange({ sessions }: Props) {
   return (
     <div>
       <div className="flex gap-4 mb-2">
-        <span className="font-sans text-[11px] text-[#555]">
+        <span className="font-sans text-[11px] text-text-4">
           avg range{" "}
-          <span className="font-mono text-[#9ca3af]">
+          <span className="font-mono text-text-2">
             {avgRange.toFixed(1)}pts
           </span>
         </span>
         {today && (
-          <span className="font-sans text-[11px] text-[#555]">
+          <span className="font-sans text-[11px] text-text-4">
             hoje{" "}
-            <span className="font-mono text-[#f59e0b]">
+            <span className="font-mono text-amber">
               {today.overnightRange!.toFixed(1)}pts
             </span>
           </span>

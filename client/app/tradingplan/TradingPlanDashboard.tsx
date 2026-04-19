@@ -180,12 +180,13 @@ function computeScore(
     breakdown.vix_ratio = 0;
   }
 
-  if (plan.overnight_es_range === "wide") {
+  // Tight overnight → trending, wide overnight → reverting (flipped semantics)
+  if (plan.overnight_es_range === "tight") {
+    breakdown.overnight = 1;
+    score += 1;
+  } else if (plan.overnight_es_range === "wide") {
     breakdown.overnight = -1;
     score -= 1;
-  } else if (plan.overnight_es_range === "tight") {
-    breakdown.overnight = +1;
-    score += 1;
   } else {
     breakdown.overnight = 0;
   }
@@ -245,7 +246,7 @@ export default function TradingPlanDashboard({
   useEffect(() => {
     if (
       overnightRangeClass !== null &&
-      todayPlan !== null && // plan must already exist
+      todayPlan !== null &&
       todayPlan.overnight_es_range == null
     ) {
       savePlan({ overnight_es_range: overnightRangeClass });
@@ -312,30 +313,30 @@ export default function TradingPlanDashboard({
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
-      <div className="border-b border-[#1a1a1a] bg-[#0a0a0a] sticky top-0 z-50">
+    <div className="min-h-screen bg-page">
+      <div className="border-b border-border bg-page sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 md:px-6 flex items-center justify-between h-10">
           <div className="flex items-center gap-4">
             <Link
               href="/"
-              className="font-sans text-xs text-[#555] hover:text-[#f59e0b] transition-colors uppercase tracking-widest"
+              className="font-sans text-xs text-text-4 hover:text-amber transition-colors uppercase tracking-widest"
             >
               ← Live
             </Link>
-            <div className="w-px h-4 bg-[#1a1a1a]" />
-            <span className="font-sans text-xs text-[#666] uppercase tracking-widest">
+            <div className="w-px h-4 bg-border" />
+            <span className="font-sans text-xs text-text-3 uppercase tracking-widest">
               Plano de Trading
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="font-mono text-xs text-[#444]">{today}</span>
-            <div className="w-px h-4 bg-[#1a1a1a]" />
+            <span className="font-mono text-xs text-text-5">{today}</span>
+            <div className="w-px h-4 bg-border" />
             <form action={signOut}>
               <button
                 type="submit"
-                className="text-[#555] hover:cursor-pointer"
+                className="text-text-4 hover:cursor-pointer"
               >
-                <FaSignOutAlt className="text-md hover:text-[#f59e0b]" />
+                <FaSignOutAlt className="text-md hover:text-amber" />
               </button>
             </form>
           </div>

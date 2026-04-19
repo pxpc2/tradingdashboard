@@ -26,6 +26,7 @@ import {
   computeSkewCharacter,
   computePriceCharacter,
 } from "../lib/sessionCharacter";
+import { THEME } from "../lib/theme";
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
@@ -77,9 +78,10 @@ function pctChange(
   return (((current - prevClose) / prevClose) * 100).toFixed(2);
 }
 
+// Sage (up) / coral (down) — replaces blue/yellow
 function pctColor(pct: string | null): string {
-  if (!pct) return "#666";
-  return parseFloat(pct) >= 0 ? "#60a5fa" : "#E4D00A";
+  if (!pct) return THEME.text3;
+  return parseFloat(pct) >= 0 ? THEME.up : THEME.down;
 }
 
 export default function LiveDashboard({
@@ -159,7 +161,6 @@ export default function LiveDashboard({
     [straddleData, today],
   );
 
-  // Today's skew snapshots for character computation
   const todaySkewRows = useMemo(
     () =>
       skewHistory.filter(
@@ -188,14 +189,14 @@ export default function LiveDashboard({
     currentMovePts !== null && opening && opening.straddle_mid > 0
       ? ((currentMovePts / opening.straddle_mid) * 100).toFixed(0)
       : null;
+  // Realized gradient: alert-coral at ≥100%, amber at ≥70%, neutral otherwise
   const realizedColor =
     realizedMovePct && parseInt(realizedMovePct) >= 100
-      ? "#f87171"
+      ? THEME.down
       : realizedMovePct && parseInt(realizedMovePct) >= 70
-        ? "#f59e0b"
-        : "#9ca3af";
+        ? THEME.amber
+        : THEME.text2;
 
-  // Max/min SPX across today's snapshots, including live tick
   const { maxSpx, minSpx } = useMemo(() => {
     if (todayRows.length === 0)
       return { maxSpx: null as number | null, minSpx: null as number | null };
@@ -207,7 +208,6 @@ export default function LiveDashboard({
     };
   }, [todayRows, liveSpx]);
 
-  // Session character
   const skewChar = useMemo(
     () => computeSkewCharacter(todaySkewRows),
     [todaySkewRows],
@@ -232,9 +232,9 @@ export default function LiveDashboard({
   const esPct = pctChange(liveEs, esTick?.prevClose ?? null);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
+    <div className="min-h-screen bg-page">
       {/* Header */}
-      <div className="border-b border-[#1a1a1a] bg-[#0a0a0a] sticky top-0 z-50">
+      <div className="border-b border-border bg-page sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between h-10">
           <div className="hidden md:block flex-1 mr-4 overflow-x-auto scrollbar-none">
             <WatchlistStrip entries={watchlistEntries} ticks={ticks} />
@@ -242,27 +242,27 @@ export default function LiveDashboard({
 
           <div className="flex items-center gap-3 md:gap-4 shrink-0">
             {liveBasis !== null && (
-              <span className="font-mono text-sm text-[#555] md:hidden">
+              <span className="font-mono text-sm text-text-4 md:hidden">
                 B {liveBasis > 0 ? "+" : ""}
                 {liveBasis.toFixed(2)}
               </span>
             )}
             <div className="hidden md:flex items-center gap-3">
-              <div className="w-px h-4 bg-[#1a1a1a]" />
+              <div className="w-px h-4 bg-border" />
               <EsSpxConverter initialBasis={liveBasis} compact />
             </div>
-            <div className="w-px h-4 bg-[#1a1a1a]" />
+            <div className="w-px h-4 bg-border" />
             <Link href="/analysis">
-              <span className="font-sans text-xs text-[#555] hover:text-[#f59e0b] transition-colors uppercase tracking-widest">
+              <span className="font-sans text-xs text-text-4 hover:text-amber transition-colors uppercase tracking-widest">
                 aba /Analysis
               </span>
             </Link>
             <form action={signOut}>
               <button
                 type="submit"
-                className="font-sans text-xs text-[#555] hover:text-[#666] transition-colors hover:cursor-pointer uppercase tracking-widest"
+                className="font-sans text-xs text-text-4 hover:text-text-3 transition-colors hover:cursor-pointer uppercase tracking-widest"
               >
-                <FaSignOutAlt className="text-md hover:text-[#f59e0b]" />
+                <FaSignOutAlt className="text-md hover:text-amber" />
               </button>
             </form>
           </div>
@@ -275,18 +275,22 @@ export default function LiveDashboard({
         </div>
 
         {/* SPX + ES + VIX row */}
-        <div className="mb-4 pb-4 border-b border-[#222]">
+        <div className="mb-4 pb-4 border-b border-border">
           <div className="flex gap-10 mb-3">
             {/* SPX */}
             <div className="flex items-center gap-2">
               <div
                 className="w-0.5 h-5"
-                style={{ backgroundColor: spxOpen ? "#4ade80" : "#2a2a2a" }}
+                style={{
+                  backgroundColor: spxOpen
+                    ? THEME.status.open
+                    : THEME.status.closed,
+                }}
               />
-              <span className="font-sans text-xs text-[#666] uppercase">
+              <span className="font-sans text-xs text-text-3 uppercase">
                 SPX
               </span>
-              <span className="font-mono text-xl text-[#9ca3af] font-light">
+              <span className="font-mono text-xl text-text-2 font-light">
                 {liveSpx?.toFixed(2) ?? "—"}
               </span>
               {spxPct && (
@@ -303,12 +307,16 @@ export default function LiveDashboard({
             <div className="flex items-center gap-2">
               <div
                 className="w-0.5 h-5"
-                style={{ backgroundColor: esOpen ? "#4ade80" : "#2a2a2a" }}
+                style={{
+                  backgroundColor: esOpen
+                    ? THEME.status.open
+                    : THEME.status.closed,
+                }}
               />
-              <span className="font-sans text-xs text-[#666] uppercase">
+              <span className="font-sans text-xs text-text-3 uppercase">
                 ES
               </span>
-              <span className="font-mono text-xl text-[#9ca3af] font-light">
+              <span className="font-mono text-xl text-text-2 font-light">
                 {liveEs?.toFixed(2) ?? "—"}
               </span>
               {esPct && (
@@ -325,12 +333,16 @@ export default function LiveDashboard({
             <div className="flex items-center gap-2">
               <div
                 className="w-0.5 h-5"
-                style={{ backgroundColor: spxOpen ? "#4ade80" : "#2a2a2a" }}
+                style={{
+                  backgroundColor: spxOpen
+                    ? THEME.status.open
+                    : THEME.status.closed,
+                }}
               />
-              <span className="font-sans text-xs text-[#666] uppercase">
+              <span className="font-sans text-xs text-text-3 uppercase">
                 VIX
               </span>
-              <span className="font-mono text-xl text-[#9ca3af] font-light">
+              <span className="font-mono text-xl text-text-2 font-light">
                 {vixLast?.toFixed(2) ?? "—"}
               </span>
               {vixPct && (
@@ -347,12 +359,16 @@ export default function LiveDashboard({
             <div className="flex items-center gap-2">
               <div
                 className="w-0.5 h-5"
-                style={{ backgroundColor: spxOpen ? "#4ade80" : "#2a2a2a" }}
+                style={{
+                  backgroundColor: spxOpen
+                    ? THEME.status.open
+                    : THEME.status.closed,
+                }}
               />
-              <span className="font-sans text-xs text-[#666] uppercase">
+              <span className="font-sans text-xs text-text-3 uppercase">
                 VIX1D
               </span>
-              <span className="font-mono text-xl text-[#9ca3af] font-light">
+              <span className="font-mono text-xl text-text-2 font-light">
                 {vix1dLast?.toFixed(2) ?? "—"}
               </span>
               {vix1dPct && (
@@ -370,25 +386,25 @@ export default function LiveDashboard({
           {/* Metrics strip */}
           <div className="flex gap-6 flex-wrap">
             <div>
-              <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+              <span className="font-sans text-[11px] text-text-4 uppercase tracking-wide">
                 Straddle
               </span>
-              <div className="font-mono text-lg text-[#9ca3af] font-light">
+              <div className="font-mono text-lg text-text-2 font-light">
                 ${latest?.straddle_mid?.toFixed(2) ?? "—"}
               </div>
             </div>
-            <div className="w-px bg-[#1f1f1f]" />
+            <div className="w-px bg-border" />
             <div>
-              <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+              <span className="font-sans text-[11px] text-text-4 uppercase tracking-wide">
                 Implied
               </span>
-              <div className="font-mono text-lg text-[#9ca3af] font-light">
+              <div className="font-mono text-lg text-text-2 font-light">
                 ${opening?.straddle_mid?.toFixed(2) ?? "—"}
               </div>
             </div>
-            <div className="w-px bg-[#1f1f1f]" />
+            <div className="w-px bg-border" />
             <div>
-              <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+              <span className="font-sans text-[11px] text-text-4 uppercase tracking-wide">
                 Realized
               </span>
               <div
@@ -403,46 +419,45 @@ export default function LiveDashboard({
                 )}
               </div>
             </div>
-            <div className="w-px bg-[#1f1f1f]" />
+            <div className="w-px bg-border" />
             <div>
-              <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+              <span className="font-sans text-[11px] text-text-4 uppercase tracking-wide">
                 IV30
               </span>
-              <div className="font-mono text-lg text-[#9ca3af] font-light">
+              <div className="font-mono text-lg text-text-2 font-light">
                 {latestSkew ? (latestSkew.atm_iv * 100).toFixed(1) : "—"}
               </div>
             </div>
-            <div className="w-px bg-[#1f1f1f]" />
+            <div className="w-px bg-border" />
             <div>
-              <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+              <span className="font-sans text-[11px] text-text-4 uppercase tracking-wide">
                 Skew
               </span>
-              <div className="font-mono text-lg text-[#9ca3af] font-light">
+              <div className="font-mono text-lg text-text-2 font-light">
                 {latestSkew?.skew?.toFixed(3) ?? "—"}
               </div>
               {skewPctile !== null && (
-                <div className="font-mono text-[10px] text-[#444]">
+                <div className="font-mono text-[10px] text-text-5">
                   {skewPctile}th %ile
                 </div>
               )}
             </div>
-            <div className="w-px bg-[#1f1f1f]" />
-            {/* NEW: Skew character today */}
+            <div className="w-px bg-border" />
             <SkewCharacterBadge skewChar={skewChar} />
-            <div className="w-px bg-[#1f1f1f]" />
+            <div className="w-px bg-border" />
             <div>
-              <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+              <span className="font-sans text-[11px] text-text-4 uppercase tracking-wide">
                 Call IV / Put IV
               </span>
-              <div className="font-mono text-lg text-[#9ca3af] font-light">
+              <div className="font-mono text-lg text-text-2 font-light">
                 {latestSkew
                   ? `${(latestSkew.call_iv * 100).toFixed(1)} / ${(latestSkew.put_iv * 100).toFixed(1)}`
                   : "—"}
               </div>
             </div>
-            <div className="w-px bg-[#1f1f1f]" />
+            <div className="w-px bg-border" />
             <div>
-              <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+              <span className="font-sans text-[11px] text-text-4 uppercase tracking-wide">
                 1D VOL ratio
               </span>
               <div
@@ -450,9 +465,9 @@ export default function LiveDashboard({
                 style={{
                   color: vixRatio
                     ? parseFloat(vixRatio) >= 1
-                      ? "#f59e0b"
-                      : "#9ca3af"
-                    : "#9ca3af",
+                      ? THEME.amber
+                      : THEME.text2
+                    : THEME.text2,
                 }}
               >
                 {vixRatio ?? "—"}
@@ -460,7 +475,6 @@ export default function LiveDashboard({
             </div>
           </div>
 
-          {/* Live read line — only renders when there's enough data */}
           {spxOpen && (
             <div className="mt-3">
               <LiveReadLine price={priceChar} skew={skewChar} />
@@ -469,7 +483,7 @@ export default function LiveDashboard({
         </div>
 
         {/* Charts row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pb-4 border-b border-[#222]">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pb-4 border-b border-border">
           <StraddleSpxChart
             data={todayRows}
             currentSpxPrice={spxTick?.mid ?? null}

@@ -14,6 +14,7 @@ import SkewVsRealized from "./components/SkewVsRealized";
 import OvernightRange from "./components/OvernightRange";
 import WeeklyStraddle from "./components/WeeklyStraddle";
 import VixVsRealized from "./components/VixVsRealized";
+import { THEME } from "../lib/theme";
 
 type StraddleSnapshot = {
   created_at: string;
@@ -83,9 +84,7 @@ type WeeklyStraddleRow = {
   put_ask: number;
 };
 
-type Filters = {
-  vixRatio: "all" | "high" | "low";
-};
+type Filters = { vixRatio: "all" | "high" | "low" };
 
 type Props = {
   straddleSnapshots: StraddleSnapshot[];
@@ -117,8 +116,8 @@ function prevCalendarDay(etDate: string): string {
 function SectionHeader({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-2 mb-3">
-      <div className="w-0.5 h-4 bg-[#333]" />
-      <span className="font-sans text-xs text-[#666] uppercase tracking-wide">
+      <div className="w-0.5 h-4 bg-border-2" />
+      <span className="font-sans text-xs text-text-3 uppercase tracking-wide">
         {label}
       </span>
     </div>
@@ -139,8 +138,8 @@ function FilterPill({
       onClick={onClick}
       className={`font-mono text-xs px-2.5 py-1 rounded transition-colors hover:cursor-pointer ${
         active
-          ? "bg-[#222] text-[#9ca3af]"
-          : "bg-transparent text-[#444] border border-[#1f1f1f]"
+          ? "bg-border-2 text-text-2"
+          : "bg-transparent text-text-5 border border-border"
       }`}
     >
       {children}
@@ -156,9 +155,7 @@ export default function AnalysisDashboard({
   currentSpx,
   sessionSummaries,
 }: Props) {
-  const [filters, setFilters] = useState<Filters>({
-    vixRatio: "all",
-  });
+  const [filters, setFilters] = useState<Filters>({ vixRatio: "all" });
 
   const summaryByDate = useMemo(() => {
     const map = new Map<string, SessionSummaryRow>();
@@ -301,23 +298,23 @@ export default function AnalysisDashboard({
   const hasVixData = sessions.some((s) => s.vix1dVixRatio !== null);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a]">
-      <div className="border-b border-[#1a1a1a] bg-[#0a0a0a] sticky top-0 z-50">
+    <div className="min-h-screen bg-page">
+      <div className="border-b border-border bg-page sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 md:px-6 flex items-center justify-between h-10">
           <div className="flex items-center gap-4">
             <Link
               href="/"
-              className="font-sans text-xs text-[#555] hover:text-[#f59e0b] transition-colors uppercase tracking-widest"
+              className="font-sans text-xs text-text-4 hover:text-amber transition-colors uppercase tracking-widest"
             >
               ← voltar p/ home
             </Link>
-            <div className="w-px h-4 bg-[#1a1a1a]" />
+            <div className="w-px h-4 bg-border" />
           </div>
           <div className="flex items-center gap-3">
-            <span className="font-mono text-xs text-[#444]">
+            <span className="font-mono text-xs text-text-5">
               {isFiltered ? (
                 <>
-                  <span className="text-[#9ca3af]">{filteredCount}</span> /{" "}
+                  <span className="text-text-2">{filteredCount}</span> /{" "}
                   {sessionCount} sessions
                 </>
               ) : (
@@ -326,13 +323,10 @@ export default function AnalysisDashboard({
                 </>
               )}
             </span>
-            <div className="w-px h-4 bg-[#1a1a1a]" />
+            <div className="w-px h-4 bg-border" />
             <form action={signOut}>
-              <button
-                type="submit"
-                className="text-[#555] hover:cursor-pointer"
-              >
-                <FaSignOutAlt className="text-md hover:text-[#f59e0b]" />
+              <button type="submit" className="text-text-4 hover:cursor-pointer">
+                <FaSignOutAlt className="text-md hover:text-amber" />
               </button>
             </form>
           </div>
@@ -341,21 +335,20 @@ export default function AnalysisDashboard({
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 space-y-8">
         {sessionCount < 2 ? (
-          <div className="flex items-center justify-center h-64 text-xs text-[#444] uppercase tracking-wide">
+          <div className="flex items-center justify-center h-64 text-xs text-text-5 uppercase tracking-wide">
             Not enough sessions yet — check back after a few trading days
           </div>
         ) : (
           <>
             {/* Filter panel */}
-            <div className="bg-[#111] rounded p-3 flex flex-wrap items-center gap-3">
-              <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+            <div className="bg-panel rounded p-3 flex flex-wrap items-center gap-3">
+              <span className="font-sans text-[11px] text-text-4 uppercase tracking-wide">
                 Filtros
               </span>
-              <div className="w-px h-4 bg-[#1a1a1a]" />
+              <div className="w-px h-4 bg-border" />
 
-              {/* VIX ratio filter */}
               <div className="flex items-center gap-1.5">
-                <span className="font-sans text-[11px] text-[#444]">
+                <span className="font-sans text-[11px] text-text-5">
                   VIX1D/VIX
                 </span>
                 <FilterPill
@@ -382,10 +375,10 @@ export default function AnalysisDashboard({
 
               {isFiltered && (
                 <>
-                  <div className="w-px h-4 bg-[#1a1a1a]" />
+                  <div className="w-px h-4 bg-border" />
                   <button
                     onClick={() => setFilters({ vixRatio: "all" })}
-                    className="font-sans text-[11px] text-[#f59e0b] hover:cursor-pointer"
+                    className="font-sans text-[11px] text-amber hover:cursor-pointer"
                   >
                     limpar filtros
                   </button>
@@ -394,12 +387,11 @@ export default function AnalysisDashboard({
             </div>
 
             {filteredCount < 2 ? (
-              <div className="flex items-center justify-center h-32 text-xs text-[#444] uppercase tracking-wide">
+              <div className="flex items-center justify-center h-32 text-xs text-text-5 uppercase tracking-wide">
                 Nenhuma sessão com esses filtros
               </div>
             ) : (
               <>
-                {/* Row 1 */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <SectionHeader label="Implied vs Realized" />
@@ -411,7 +403,6 @@ export default function AnalysisDashboard({
                   </div>
                 </div>
 
-                {/* Row 2 */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <SectionHeader label="Straddle abertura histórico" />
@@ -423,10 +414,9 @@ export default function AnalysisDashboard({
                   </div>
                 </div>
 
-                {/* Row 3 */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <SectionHeader label="Max intraday vs EOD — trending vs reverting" />
+                    <SectionHeader label="Max intraday vs EOD — classificação de sessão" />
                     <MaxVsEod sessions={filteredSessions} />
                   </div>
                   <div>
@@ -435,7 +425,6 @@ export default function AnalysisDashboard({
                   </div>
                 </div>
 
-                {/* Row 4: VIX1D/VIX + Overnight Range */}
                 {hasVixData && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
@@ -456,7 +445,6 @@ export default function AnalysisDashboard({
                   </div>
                 )}
 
-                {/* Weekly straddle */}
                 {weeklyStraddles.length > 0 && (
                   <div>
                     <SectionHeader label="Straddle semanal — range implícito" />
@@ -468,7 +456,6 @@ export default function AnalysisDashboard({
                   </div>
                 )}
 
-                {/* Decay curve */}
                 <div>
                   <SectionHeader label="Straddle Decay — média vs hoje" />
                   <DecayCurve
@@ -480,10 +467,10 @@ export default function AnalysisDashboard({
                 {/* Session table */}
                 <div>
                   <SectionHeader label="Tabela sessões" />
-                  <div className="bg-[#111] rounded overflow-hidden overflow-x-auto">
+                  <div className="bg-panel rounded overflow-hidden overflow-x-auto">
                     <table className="w-full">
                       <thead>
-                        <tr className="border-b border-[#1a1a1a]">
+                        <tr className="border-b border-border">
                           {[
                             "Data",
                             "Dia",
@@ -499,7 +486,7 @@ export default function AnalysisDashboard({
                           ].map((h) => (
                             <th
                               key={h}
-                              className="font-sans text-[11px] text-[#555] uppercase tracking-wide text-left px-4 py-2.5 font-normal whitespace-nowrap"
+                              className="font-sans text-[11px] text-text-4 uppercase tracking-wide text-left px-4 py-2.5 font-normal whitespace-nowrap"
                             >
                               {h}
                             </th>
@@ -511,36 +498,44 @@ export default function AnalysisDashboard({
                           const ratio = s.realizedMovePct / 100;
                           const ratioColor =
                             ratio >= 1
-                              ? "#f87171"
+                              ? THEME.regime.trend
                               : ratio >= 0.7
-                                ? "#f59e0b"
-                                : "#9ca3af";
+                                ? THEME.regime.partial
+                                : THEME.text2;
                           const vixRatioColor =
                             s.vix1dVixRatio === null
-                              ? "#444"
+                              ? THEME.text5
                               : s.vix1dVixRatio > 1.1
-                                ? "#f87171"
+                                ? THEME.amber
                                 : s.vix1dVixRatio < 0.9
-                                  ? "#9CA9FF"
-                                  : "#9ca3af";
+                                  ? THEME.indigo
+                                  : THEME.text2;
+                          const skewDeltaColor =
+                            s.skewChange === null
+                              ? THEME.text5
+                              : s.skewChange > 0
+                                ? THEME.amber
+                                : s.skewChange < 0
+                                  ? THEME.indigo
+                                  : THEME.text4;
                           return (
                             <tr
                               key={s.date}
-                              className="border-b border-[#1a1a1a] last:border-0 hover:bg-[#151515] transition-colors"
+                              className="border-b border-border last:border-0 hover:bg-panel-2 transition-colors"
                             >
-                              <td className="font-mono text-sm text-[#9ca3af] px-4 py-2.5">
+                              <td className="font-mono text-sm text-text-2 px-4 py-2.5">
                                 {s.date}
                               </td>
-                              <td className="font-sans text-sm text-[#666] px-4 py-2.5">
+                              <td className="font-sans text-sm text-text-3 px-4 py-2.5">
                                 {s.dayOfWeek}
                               </td>
-                              <td className="font-mono text-sm text-[#9ca3af] px-4 py-2.5">
+                              <td className="font-mono text-sm text-text-2 px-4 py-2.5">
                                 ${s.openingStraddle.toFixed(2)}
                               </td>
-                              <td className="font-mono text-sm text-[#9ca3af] px-4 py-2.5">
+                              <td className="font-mono text-sm text-text-2 px-4 py-2.5">
                                 {s.realizedMovePts.toFixed(1)}pts
                               </td>
-                              <td className="font-mono text-sm text-[#9ca3af] px-4 py-2.5">
+                              <td className="font-mono text-sm text-text-2 px-4 py-2.5">
                                 {s.maxMovePts.toFixed(1)}pts
                               </td>
                               <td
@@ -549,32 +544,23 @@ export default function AnalysisDashboard({
                               >
                                 {s.realizedMovePct.toFixed(1)}%
                               </td>
-                              <td className="font-mono text-sm text-[#9ca3af] px-4 py-2.5">
+                              <td className="font-mono text-sm text-text-2 px-4 py-2.5">
                                 {s.openingSkew?.toFixed(3) ?? "—"}
                               </td>
                               <td
                                 className="font-mono text-sm px-4 py-2.5"
-                                style={{
-                                  color:
-                                    s.skewChange === null
-                                      ? "#444"
-                                      : s.skewChange > 0
-                                        ? "#f87171"
-                                        : s.skewChange < 0
-                                          ? "#9CA9FF"
-                                          : "#555",
-                                }}
+                                style={{ color: skewDeltaColor }}
                               >
                                 {s.skewChange !== null
                                   ? `${s.skewChange > 0 ? "+" : ""}${s.skewChange.toFixed(3)}`
                                   : "—"}
                               </td>
-                              <td className="font-mono text-sm text-[#9ca3af] px-4 py-2.5">
+                              <td className="font-mono text-sm text-text-2 px-4 py-2.5">
                                 {s.overnightRange !== null
                                   ? `${s.overnightRange.toFixed(1)}pts`
                                   : "—"}
                               </td>
-                              <td className="font-mono text-sm text-[#9ca3af] px-4 py-2.5">
+                              <td className="font-mono text-sm text-text-2 px-4 py-2.5">
                                 {s.openingVix?.toFixed(2) ?? "—"}
                               </td>
                               <td

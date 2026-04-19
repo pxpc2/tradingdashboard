@@ -1,7 +1,61 @@
 @import "tailwindcss";
 
+@theme {
+  /* ─── Foundation ──────────────────────────────────────────────────────── */
+  --color-page: #0a0a0a;
+  --color-panel: #121214;
+  --color-panel-2: #17171a;
+  --color-border: #1f1f21;
+  --color-border-2: #2a2a2d;
+
+  /* ─── Text (6-step warm gray scale, replaces #9ca3af / #666 / #555 / #444 / #333) */
+  --color-text: #e8e6e0;
+  --color-text-2: #9a9890;
+  --color-text-3: #6e6c67;
+  --color-text-4: #555350;
+  --color-text-5: #44433f;
+  --color-text-6: #2f2e2c;
+
+  /* ─── Accents (signature + info) ──────────────────────────────────────── */
+  --color-amber: #f5a524;
+  --color-indigo: #7ea8c4;
+
+  /* ─── Semantic directional (up/down, pos/neg, long/short) ─────────────── */
+  --color-up: #7fc096;
+  --color-down: #d0695e;
+
+  /* ─── Regime (analysis side — punchy, categorically distinct) ─────────── */
+  --color-regime-trend: #e55a3f;
+  --color-regime-partial: #e6b84f;
+  --color-regime-reversal: #5bb4a0;
+  --color-regime-flat: #707070;
+
+  /* ─── Skew character (live dashboard badge) ──────────────────────────── */
+  --color-skew-flat: #9a9890;
+  --color-skew-moving: #9b7bb3;
+  --color-skew-strong: #f5a524;
+
+  /* ─── Live read tones ─────────────────────────────────────────────────── */
+  --color-tone-quiet: #6e6c67;
+  --color-tone-normal: #9a9890;
+  --color-tone-attention: #f5a524;
+  --color-tone-alert: #d0695e;
+
+  /* ─── Market status (open/closed indicator dots) ──────────────────────── */
+  --color-status-open: #7fc096;
+  --color-status-closed: #2a2a2d;
+
+  /* ─── SML fly widths (harmonized with palette) ────────────────────────── */
+  --color-width-10: #9b7bb3;
+  --color-width-15: #7ea8c4;
+  --color-width-20: #f5a524;
+  --color-width-25: #5bb4a0;
+  --color-width-30: #d0695e;
+}
+
 body {
-  background-color: #0a0a0a;
+  background-color: var(--color-page);
+  color: var(--color-text);
 }
 
 .font-mono {
@@ -22,15 +76,14 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #2a2a2a;
+  background: var(--color-border-2);
   border-radius: 2px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #444;
+  background: var(--color-text-5);
 }
 
-/* Hide scrollbar but keep scrolling */
 .scrollbar-none {
   -ms-overflow-style: none;
   scrollbar-width: none;

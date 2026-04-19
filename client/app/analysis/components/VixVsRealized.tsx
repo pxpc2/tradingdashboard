@@ -6,10 +6,11 @@ import * as echarts from "echarts";
 import { SessionData } from "../AnalysisDashboard";
 import {
   classifySessionFinal,
-  SESSION_TYPE_COLOR,
   SESSION_TYPE_ORDER,
   SessionType,
+  resolveSessionTypeColors,
 } from "../../lib/sessionCharacter";
+import { resolveChartPalette } from "../../lib/chartPalette";
 
 type Props = { sessions: SessionData[] };
 
@@ -38,6 +39,8 @@ export default function VixVsRealized({ sessions }: Props) {
 
   useEffect(() => {
     if (!chartRef.current || filtered.length === 0) return;
+    const P = resolveChartPalette();
+    const C = resolveSessionTypeColors();
 
     const ratios = filtered.map((s) => s.vix1dVixRatio!);
     const minR = Math.min(...ratios);
@@ -65,13 +68,14 @@ export default function VixVsRealized({ sessions }: Props) {
     });
 
     chartRef.current.setOption({
-      backgroundColor: "#111111",
+      backgroundColor: P.bg,
       animation: false,
       grid: { top: 16, bottom: 64, left: 52, right: 16 },
       legend: {
         data: SESSION_TYPE_ORDER,
         bottom: 4,
-        textStyle: { color: "#555", fontSize: 10 },
+        textStyle: { color: P.text3, fontSize: 10 },
+        inactiveColor: P.text6,
         itemWidth: 10,
         itemHeight: 10,
       },
@@ -80,20 +84,20 @@ export default function VixVsRealized({ sessions }: Props) {
         name: "VIX1D / VIX ratio",
         nameLocation: "middle",
         nameGap: 28,
-        nameTextStyle: { color: "#444", fontSize: 10 },
+        nameTextStyle: { color: P.text4, fontSize: 10 },
         min: parseFloat((minR - pad).toFixed(2)),
         max: parseFloat((maxR + pad).toFixed(2)),
-        axisLine: { lineStyle: { color: "#1f1f1f" } },
+        axisLine: { lineStyle: { color: P.border } },
         axisTick: { show: false },
-        axisLabel: { color: "#666", fontSize: 10 },
-        splitLine: { lineStyle: { color: "#1a1a1a" } },
+        axisLabel: { color: P.text3, fontSize: 10 },
+        splitLine: { lineStyle: { color: P.border } },
         markLine: {
           silent: true,
           symbol: "none",
           data: [
             {
               xAxis: 1.0,
-              lineStyle: { color: "#2a2a2a", width: 1, type: "dashed" },
+              lineStyle: { color: P.border2, width: 1, type: "dashed" },
             },
           ],
         },
@@ -103,31 +107,31 @@ export default function VixVsRealized({ sessions }: Props) {
         name: "RV/IV (%)",
         nameLocation: "middle",
         nameGap: 40,
-        nameTextStyle: { color: "#444", fontSize: 10 },
+        nameTextStyle: { color: P.text4, fontSize: 10 },
         min: 0,
         axisLine: { show: false },
         axisTick: { show: false },
         axisLabel: {
-          color: "#666",
+          color: P.text3,
           fontSize: 10,
           formatter: (v: number) => `${v}%`,
         },
-        splitLine: { lineStyle: { color: "#1a1a1a" } },
+        splitLine: { lineStyle: { color: P.border } },
       },
       tooltip: {
         trigger: "item",
-        backgroundColor: "#1a1a1a",
-        borderColor: "#222",
+        backgroundColor: P.bg,
+        borderColor: P.border2,
         padding: [6, 10],
-        textStyle: { color: "#9ca3af", fontSize: 11 },
+        textStyle: { color: P.text2, fontSize: 11 },
         formatter: (p: any) => {
           if (!Array.isArray(p.data)) return "";
           const [ratio, rv, date, day, type, vix, macro] = p.data;
-          return `<span style="color:#555;font-size:10px">${date} ${day}${macro ? " 📅" : ""}</span><br/>
-                  VIX1D/VIX <span style="color:#9ca3af">${ratio}</span>
-                  ${vix !== "—" ? `<span style="color:#555"> (VIX ${vix})</span>` : ""}<br/>
-                  RV/IV <span style="color:#9ca3af">${rv}%</span><br/>
-                  <span style="color:${SESSION_TYPE_COLOR[type as SessionType]}">${type}</span>`;
+          return `<span style="color:${P.text4};font-size:10px">${date} ${day}${macro ? " 📅" : ""}</span><br/>
+                  VIX1D/VIX <span style="color:${P.text2}">${ratio}</span>
+                  ${vix !== "—" ? `<span style="color:${P.text4}"> (VIX ${vix})</span>` : ""}<br/>
+                  RV/IV <span style="color:${P.text2}">${rv}%</span><br/>
+                  <span style="color:${C[type as SessionType]}">${type}</span>`;
         },
       },
       series: SESSION_TYPE_ORDER.map((type) => ({
@@ -135,14 +139,19 @@ export default function VixVsRealized({ sessions }: Props) {
         type: "scatter" as const,
         data: byType[type],
         symbolSize: 7,
-        itemStyle: { color: SESSION_TYPE_COLOR[type], opacity: 0.85 },
+        itemStyle: { color: C[type], opacity: 0.85 },
+        emphasis: {
+          focus: "series",
+          itemStyle: { opacity: 1, borderWidth: 1, borderColor: P.text2 },
+        },
+        blur: { itemStyle: { opacity: 0.12 } },
       })),
     });
   }, [filtered]);
 
   if (filtered.length < 2) {
     return (
-      <div className="flex items-center justify-center h-40 text-xs text-[#333]">
+      <div className="flex items-center justify-center h-40 text-xs text-text-6">
         Dados insuficientes — VIX disponível após 2026-04-17
       </div>
     );
@@ -167,19 +176,19 @@ export default function VixVsRealized({ sessions }: Props) {
   return (
     <div>
       <div className="flex gap-4 mb-2 text-[11px]">
-        <span className="text-[#555]">
+        <span className="text-text-4">
           ratio &gt;1.0 ({highRatio.length} dias)
           {avgRvHigh && (
-            <span className="font-mono text-[#f87171] ml-1">
+            <span className="font-mono text-amber ml-1">
               avg {avgRvHigh}% RV/IV
             </span>
           )}
         </span>
-        <span className="text-[#444]">·</span>
-        <span className="text-[#555]">
+        <span className="text-text-5">·</span>
+        <span className="text-text-4">
           ratio ≤1.0 ({lowRatio.length} dias)
           {avgRvLow && (
-            <span className="font-mono text-[#9CA9FF] ml-1">
+            <span className="font-mono text-indigo ml-1">
               avg {avgRvLow}% RV/IV
             </span>
           )}

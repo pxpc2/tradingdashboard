@@ -2,6 +2,7 @@
 
 import { WatchlistEntry } from "../api/watchlist/route";
 import { TickData, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
+import { THEME } from "../lib/theme";
 
 type Props = {
   entries: WatchlistEntry[];
@@ -62,9 +63,8 @@ function pctChange(
   return (((current - prevClose) / prevClose) * 100).toFixed(2);
 }
 
-// Blue for up, amber for down
 function pctColor(pct: string): string {
-  return parseFloat(pct) >= 0 ? "#60a5fa" : "#E4D00A";
+  return parseFloat(pct) >= 0 ? THEME.up : THEME.down;
 }
 
 function TickerItem({
@@ -80,24 +80,26 @@ function TickerItem({
   const displayPrice = mid === null || mid === 0 ? last : mid;
   const pct = pctChange(displayPrice, tick?.prevClose ?? null);
   const isOpen = isCategoryOpen(entry.instrumentType);
-  const borderColor = isOpen ? "#4ade80" : "#f87171";
+  const borderColor = isOpen ? THEME.status.open : THEME.status.closed;
 
   return (
     <div
       className="flex items-center gap-2 shrink-0 pl-2"
       style={{ borderLeft: `2px solid ${borderColor}` }}
     >
-      <span style={{ color: isOpen ? "#666" : "#444" }}>{entry.symbol}</span>
+      <span style={{ color: isOpen ? THEME.text3 : THEME.text5 }}>
+        {entry.symbol}
+      </span>
       <span
         className="font-mono"
-        style={{ color: isOpen ? "#9ca3af" : "#444" }}
+        style={{ color: isOpen ? THEME.text2 : THEME.text5 }}
       >
         {displayPrice !== null ? formatPrice(displayPrice) : "—"}
       </span>
       {pct && (
         <span
           className="font-mono"
-          style={{ color: isOpen ? pctColor(pct) : "#444" }}
+          style={{ color: isOpen ? pctColor(pct) : THEME.text5 }}
         >
           {parseFloat(pct) >= 0 ? "+" : ""}
           {pct}%

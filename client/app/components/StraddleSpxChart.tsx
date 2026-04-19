@@ -13,6 +13,7 @@ import {
   createTextWatermark,
 } from "lightweight-charts";
 import { StraddleSnapshot, SkewSnapshot } from "../types";
+import { cssVar } from "../lib/theme";
 
 type Props = {
   data: StraddleSnapshot[];
@@ -32,30 +33,37 @@ export default function StraddleSpxChart({
   const downsideLineRef = useRef<IPriceLine | null>(null);
   const upsideLineRef = useRef<IPriceLine | null>(null);
 
-  // Chart creation
   useEffect(() => {
     if (!containerRef.current) return;
 
+    // Resolve CSS vars at chart creation (client-side, after mount)
+    const panel = cssVar("--color-panel", "#121214");
+    const border = cssVar("--color-border", "#1f1f21");
+    const text5 = cssVar("--color-text-5", "#44433F");
+    const text6 = cssVar("--color-text-6", "#2F2E2C");
+    const skewMoving = cssVar("--color-skew-moving", "#9B7BB3");
+    const text3 = cssVar("--color-text-3", "#6E6C67");
+
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { color: "#111111" },
-        textColor: "#444444",
+        background: { color: panel },
+        textColor: text5,
       },
       grid: {
-        vertLines: { color: "#1a1a1a" },
-        horzLines: { color: "#1a1a1a" },
+        vertLines: { color: border },
+        horzLines: { color: border },
       },
       crosshair: {
-        vertLine: { color: "#333333" },
-        horzLine: { color: "#333333" },
+        vertLine: { color: text6 },
+        horzLine: { color: text6 },
       },
       rightPriceScale: {
-        borderColor: "#1f1f1f",
+        borderColor: border,
         scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       leftPriceScale: {
         visible: true,
-        borderColor: "#1f1f1f",
+        borderColor: border,
         scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       localization: {
@@ -68,7 +76,7 @@ export default function StraddleSpxChart({
           }),
       },
       timeScale: {
-        borderColor: "#1f1f1f",
+        borderColor: border,
         timeVisible: true,
         secondsVisible: false,
         shiftVisibleRangeOnNewBar: false,
@@ -84,11 +92,10 @@ export default function StraddleSpxChart({
       height: 150,
     });
 
-    // Straddle area series (right price scale)
     const straddleSeries = chart.addSeries(AreaSeries, {
-      lineColor: "#9CA9FF",
-      topColor: "#9CA9FF33",
-      bottomColor: "#9CA9FF00",
+      lineColor: skewMoving,
+      topColor: `${skewMoving}33`,
+      bottomColor: `${skewMoving}00`,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,
@@ -96,9 +103,8 @@ export default function StraddleSpxChart({
       priceScaleId: "right",
     });
 
-    // SPX line series (left price scale)
     const spxSeries = chart.addSeries(LineSeries, {
-      color: "#737373",
+      color: text3,
       lineWidth: 1,
       lineStyle: 2,
       priceLineVisible: false,
@@ -113,7 +119,7 @@ export default function StraddleSpxChart({
       lines: [
         {
           text: "0DTE Straddle + SPX",
-          color: "rgba(204, 204, 204, 0.15)",
+          color: "rgba(232, 230, 224, 0.10)",
           fontSize: 18,
         },
       ],
@@ -136,7 +142,6 @@ export default function StraddleSpxChart({
     };
   }, []);
 
-  // Data + skew-adjusted levels
   useEffect(() => {
     if (
       !straddleSeriesRef.current ||
@@ -147,18 +152,14 @@ export default function StraddleSpxChart({
 
     const straddlePoints = data
       .map((s) => ({
-        time: Math.floor(
-          new Date(s.created_at).getTime() / 1000,
-        ) as UTCTimestamp,
+        time: Math.floor(new Date(s.created_at).getTime() / 1000) as UTCTimestamp,
         value: s.straddle_mid,
       }))
       .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
 
     const spxPoints = data
       .map((s) => ({
-        time: Math.floor(
-          new Date(s.created_at).getTime() / 1000,
-        ) as UTCTimestamp,
+        time: Math.floor(new Date(s.created_at).getTime() / 1000) as UTCTimestamp,
         value: s.spx_ref,
       }))
       .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
@@ -166,7 +167,6 @@ export default function StraddleSpxChart({
     straddleSeriesRef.current.setData(straddlePoints);
     spxSeriesRef.current.setData(spxPoints);
 
-    // Clear existing level lines
     if (downsideLineRef.current) {
       try {
         spxSeriesRef.current.removePriceLine(downsideLineRef.current);
@@ -180,10 +180,8 @@ export default function StraddleSpxChart({
       upsideLineRef.current = null;
     }
 
-    // Skew-adjusted levels from opening snapshot
     const opening = data[0] ?? null;
     if (opening && openingSkew) {
-      // T = 1 trading day = 1/252 of a year
       const T = 1 / 252;
       const spxRef = opening.spx_ref;
       const downsidePts = spxRef * openingSkew.put_iv * Math.sqrt(T);
@@ -191,15 +189,20 @@ export default function StraddleSpxChart({
       const downsideLevel = spxRef - downsidePts;
       const upsideLevel = spxRef + upsidePts;
 
+      // Resolve current CSS values for up/down at each data update
+      const up = cssVar("--color-up", "#7FC096");
+      const down = cssVar("--color-down", "#D0695E");
+      const page = cssVar("--color-page", "#0a0a0a");
+
       try {
         downsideLineRef.current = spxSeriesRef.current.createPriceLine({
           price: downsideLevel,
-          color: "#f8717166",
+          color: `${down}66`,
           lineWidth: 1,
           lineStyle: 2,
           axisLabelVisible: true,
-          axisLabelColor: "#f87171",
-          axisLabelTextColor: "#111",
+          axisLabelColor: down,
+          axisLabelTextColor: page,
           title: `↓${downsidePts.toFixed(0)}`,
         });
       } catch {}
@@ -207,12 +210,12 @@ export default function StraddleSpxChart({
       try {
         upsideLineRef.current = spxSeriesRef.current.createPriceLine({
           price: upsideLevel,
-          color: "#4ade8066",
+          color: `${up}66`,
           lineWidth: 1,
           lineStyle: 2,
           axisLabelVisible: true,
-          axisLabelColor: "#4ade80",
-          axisLabelTextColor: "#111",
+          axisLabelColor: up,
+          axisLabelTextColor: page,
           title: `↑${upsidePts.toFixed(0)}`,
         });
       } catch {}
@@ -223,7 +226,6 @@ export default function StraddleSpxChart({
     } catch {}
   }, [data, openingSkew]);
 
-  // Live SPX tick
   useEffect(() => {
     if (!spxSeriesRef.current || !currentSpxPrice) return;
     const nowMinute = (Math.floor(Date.now() / 60000) * 60) as UTCTimestamp;
@@ -235,17 +237,17 @@ export default function StraddleSpxChart({
   return (
     <div>
       <div className="flex justify-between items-center mb-1.5">
-        <span className="font-sans text-xs text-[#555] uppercase tracking-wide">
+        <span className="font-sans text-xs text-text-4 uppercase tracking-wide">
           IV vs RV
         </span>
         <div className="flex gap-3 text-xs">
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-0.5 bg-[#9CA9FF]" />
-            <span className="text-[#666]">Straddle</span>
+            <span className="inline-block w-2.5 h-0.5 bg-skew-moving" />
+            <span className="text-text-3">Straddle</span>
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-0.5 bg-[#737373]" />
-            <span className="text-[#666]">SPX</span>
+            <span className="inline-block w-2.5 h-0.5 bg-text-3" />
+            <span className="text-text-3">SPX</span>
           </span>
         </div>
       </div>

@@ -13,6 +13,7 @@ import { FlySnapshot, RtmSession } from "../types";
 import { TickData } from "../hooks/useLiveTick";
 import { PositionLeg } from "../api/real-positions/route";
 import { supabase } from "../lib/supabase";
+import { THEME, cssVar, withOpacity } from "../lib/theme";
 
 type Props = {
   smlSession: RtmSession | null;
@@ -23,13 +24,8 @@ type Props = {
   realError: string | null;
 };
 
-const WIDTH_COLORS: Record<number, string> = {
-  10: "#60a5fa",
-  15: "#9CA9FF",
-  20: "#fb923c",
-  25: "#34d399",
-  30: "#f472b6",
-};
+// SML fly width colors — CSS var refs, update live via globals.css
+const WIDTH_COLORS = THEME.width;
 
 // ─── Trade Grouping ───────────────────────────────────────────────────────────
 
@@ -248,6 +244,11 @@ function formatDelta(delta: number | null | undefined): string {
   return `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}Δ`;
 }
 
+function pnlColor(pnl: number | null): string {
+  if (pnl === null) return THEME.text4;
+  return pnl >= 0 ? THEME.up : THEME.down;
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function PositionsPanel({
@@ -276,7 +277,9 @@ export default function PositionsPanel({
   const entry = widthSnapshots[0] ?? null;
   const pnl = latest && entry ? latest.mid - entry.mid : null;
   const color =
-    effectiveWidth !== null ? (WIDTH_COLORS[effectiveWidth] ?? "#888") : "#888";
+    effectiveWidth !== null
+      ? (WIDTH_COLORS[effectiveWidth] ?? THEME.text3)
+      : THEME.text3;
   const hasSession = smlSession?.sml_ref != null;
 
   const groups = useMemo(
@@ -300,19 +303,19 @@ export default function PositionsPanel({
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center mb-2">
-        <span className="font-sans text-xs text-[#555] uppercase tracking-wide">
+        <span className="font-sans text-xs text-text-4 uppercase tracking-wide">
           Posições
         </span>
         <div className="ml-auto flex gap-3 text-xs">
           <button
             onClick={() => setView("real")}
-            className={`transition-colors hover:cursor-pointer ${view === "real" ? "text-[#888] border-b border-[#555]" : "text-[#444]"}`}
+            className={`transition-colors hover:cursor-pointer ${view === "real" ? "text-text-3 border-b border-text-4" : "text-text-5"}`}
           >
             Real
           </button>
           <button
             onClick={() => setView("sml")}
-            className={`transition-colors hover:cursor-pointer ${view === "sml" ? "text-[#888] border-b border-[#555]" : "text-[#444]"}`}
+            className={`transition-colors hover:cursor-pointer ${view === "sml" ? "text-text-3 border-b border-text-4" : "text-text-5"}`}
           >
             SML Fly
           </button>
@@ -328,7 +331,7 @@ export default function PositionsPanel({
                   <button
                     key={w}
                     onClick={() => setActiveWidth(w)}
-                    className={`font-mono text-xs px-2 py-0.5 transition-colors hover:cursor-pointer ${effectiveWidth === w ? "text-[#888] border-b border-[#555]" : "text-[#444]"}`}
+                    className={`font-mono text-xs px-2 py-0.5 transition-colors hover:cursor-pointer ${effectiveWidth === w ? "text-text-3 border-b border-text-4" : "text-text-5"}`}
                   >
                     {w}W
                   </button>
@@ -336,35 +339,31 @@ export default function PositionsPanel({
               </div>
             )}
             <div className="flex gap-3 text-xs mb-2">
-              <span className="text-[#555]">{effectiveWidth}W</span>
+              <span className="text-text-4">{effectiveWidth}W</span>
               <span>
-                <span className="text-[#555]">ENT</span>{" "}
-                <span className="font-mono text-[#9ca3af]">
+                <span className="text-text-4">ENT</span>{" "}
+                <span className="font-mono text-text-2">
                   {entry?.mid.toFixed(2) ?? "—"}
                 </span>
               </span>
               <span>
-                <span className="text-[#555]">MID</span>{" "}
-                <span className="font-mono text-[#9ca3af]">
+                <span className="text-text-4">MID</span>{" "}
+                <span className="font-mono text-text-2">
                   {latest?.mid.toFixed(2) ?? "—"}
                 </span>
               </span>
-              {/* SML fly P&L — blue/amber */}
               <span
                 className="font-mono"
-                style={{
-                  color:
-                    pnl === null ? "#555" : pnl >= 0 ? "#60a5fa" : "#E4D00A",
-                }}
+                style={{ color: pnlColor(pnl) }}
               >
                 {pnl !== null ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}` : "—"}
               </span>
             </div>
-            <div className="flex-1 min-h-[80px] bg-[#111] rounded overflow-hidden">
+            <div className="flex-1 min-h-[80px] bg-panel rounded overflow-hidden">
               {widthSnapshots.length > 0 && effectiveWidth !== null ? (
-                <FlyMiniChart data={widthSnapshots} color={color} />
+                <FlyMiniChart data={widthSnapshots} widthKey={effectiveWidth} />
               ) : (
-                <div className="h-full flex items-center justify-center text-xs text-[#333]">
+                <div className="h-full flex items-center justify-center text-xs text-text-6">
                   Waiting for data...
                 </div>
               )}
@@ -413,19 +412,22 @@ function RealPositionsView({
 
   if (isLoading && groups.length === 0)
     return (
-      <div className="flex-1 flex items-center justify-center text-xs text-[#333]">
+      <div className="flex-1 flex items-center justify-center text-xs text-text-6">
         Carregando...
       </div>
     );
   if (error)
     return (
-      <div className="flex-1 flex items-center justify-center text-xs text-[#f87171]">
+      <div
+        className="flex-1 flex items-center justify-center text-xs"
+        style={{ color: THEME.down }}
+      >
         {error}
       </div>
     );
   if (groups.length === 0)
     return (
-      <div className="flex-1 flex items-center justify-center text-xs text-[#333] uppercase tracking-wide">
+      <div className="flex-1 flex items-center justify-center text-xs text-text-6 uppercase tracking-wide">
         Sem posições abertas
       </div>
     );
@@ -434,13 +436,12 @@ function RealPositionsView({
     <div className="flex-1 flex flex-col overflow-hidden">
       {totalPnl !== null && (
         <div className="flex items-center justify-between mb-2">
-          <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+          <span className="font-sans text-[11px] text-text-4 uppercase tracking-wide">
             Total P&L
           </span>
-          {/* Total P&L — blue/amber */}
           <span
             className="font-mono text-base"
-            style={{ color: totalPnl >= 0 ? "#60a5fa" : "#E4D00A" }}
+            style={{ color: pnlColor(totalPnl) }}
           >
             {totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}
           </span>
@@ -454,9 +455,6 @@ function RealPositionsView({
               const tick = ticks[leg.streamerSymbol] ?? null;
               const mid = tick?.mid ?? null;
               const legPnl = calcPnl(leg, tick);
-              // P&L blue/amber
-              const pnlColor =
-                legPnl === null ? "#555" : legPnl >= 0 ? "#60a5fa" : "#E4D00A";
               const legDelta =
                 tick?.delta != null
                   ? (leg.direction === "Long" ? 1 : -1) *
@@ -466,43 +464,42 @@ function RealPositionsView({
               return (
                 <div
                   key={leg.symbol}
-                  className="bg-[#111] rounded px-2 py-1.5 flex items-center gap-2"
+                  className="bg-panel rounded px-2 py-1.5 flex items-center gap-2"
                 >
-                  {/* Long/short indicator — stays green/red */}
                   <div
                     className="w-0.5 h-5 shrink-0"
                     style={{
                       backgroundColor:
-                        leg.direction === "Long" ? "#4ade80" : "#f87171",
+                        leg.direction === "Long" ? THEME.up : THEME.down,
                     }}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="font-mono text-sm text-[#9ca3af]">
+                    <div className="font-mono text-sm text-text-2">
                       {leg.strike}
                       {leg.optionType}{" "}
-                      <span className="text-xs text-[#555]">
+                      <span className="text-xs text-text-4">
                         {formatExpiry(leg.expiryDate)}
                       </span>
                     </div>
-                    <div className="font-sans text-[10px] text-[#444] uppercase">
+                    <div className="font-sans text-[10px] text-text-5 uppercase">
                       {leg.direction} {leg.quantity} × {leg.underlyingSymbol}
                       {legDelta !== null && (
-                        <span className="ml-2 text-[#555]">
+                        <span className="ml-2 text-text-4">
                           {formatDelta(legDelta)}
                         </span>
                       )}
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="font-mono text-xs text-[#9ca3af]">
+                    <div className="font-mono text-xs text-text-2">
                       {mid !== null ? mid.toFixed(2) : "—"}
-                      <span className="text-[#444] ml-1">
+                      <span className="text-text-5 ml-1">
                         / {leg.averageOpenPrice.toFixed(2)}
                       </span>
                     </div>
                     <div
                       className="font-mono text-xs"
-                      style={{ color: pnlColor }}
+                      style={{ color: pnlColor(legPnl) }}
                     >
                       {legPnl !== null
                         ? `${legPnl >= 0 ? "+" : ""}$${legPnl.toFixed(2)}`
@@ -515,36 +512,29 @@ function RealPositionsView({
           }
 
           const isExp = expanded.has(group.id);
-          // Group P&L — blue/amber
-          const pnlColor =
-            group.totalPnl === null
-              ? "#555"
-              : group.totalPnl >= 0
-                ? "#60a5fa"
-                : "#E4D00A";
           const pctMax =
             group.totalPnl !== null && group.maxPnl
               ? pctOfMax(group.totalPnl, group.maxPnl)
               : null;
 
           return (
-            <div key={group.id} className="bg-[#111] rounded overflow-hidden">
+            <div key={group.id} className="bg-panel rounded overflow-hidden">
               <div
-                className="px-2 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-[#151515] transition-colors"
+                className="px-2 py-1.5 flex items-center gap-2 cursor-pointer hover:bg-panel-2 transition-colors"
                 onClick={() => toggleExpand(group.id)}
               >
-                <div className="w-0.5 h-5 shrink-0 bg-[#333]" />
+                <div className="w-0.5 h-5 shrink-0 bg-border-2" />
                 <div className="flex-1 min-w-0">
-                  <div className="font-mono text-sm text-[#9ca3af]">
+                  <div className="font-mono text-sm text-text-2">
                     {group.label}
                   </div>
-                  <div className="font-sans text-[10px] text-[#444] uppercase flex gap-2">
+                  <div className="font-sans text-[10px] text-text-5 uppercase flex gap-2">
                     <span>
                       {formatExpiry(group.expiryDate)} ·{" "}
                       {group.underlyingSymbol}
                     </span>
                     {group.netDelta !== null && (
-                      <span className="text-[#555]">
+                      <span className="text-text-4">
                         {formatDelta(group.netDelta)}
                       </span>
                     )}
@@ -554,49 +544,54 @@ function RealPositionsView({
                   <div>
                     <div
                       className="font-mono text-xs"
-                      style={{ color: pnlColor }}
+                      style={{ color: pnlColor(group.totalPnl) }}
                     >
                       {group.totalPnl !== null
                         ? `${group.totalPnl >= 0 ? "+" : ""}$${group.totalPnl.toFixed(2)}`
                         : "—"}
                     </div>
                     {pctMax && (
-                      <div className="font-mono text-[10px] text-[#444]">
+                      <div className="font-mono text-[10px] text-text-5">
                         {pctMax}
                       </div>
                     )}
                   </div>
-                  <span className="text-[#333] text-[10px]">
+                  <span className="text-text-6 text-[10px]">
                     {isExp ? "▲" : "▼"}
                   </span>
                 </div>
               </div>
 
-              {/* Max profit/loss — stays green/red (structural, not live P&L) */}
               {isExp && group.maxPnl && (
-                <div className="px-2 py-1.5 border-t border-[#1a1a1a] flex gap-4">
+                <div className="px-2 py-1.5 border-t border-border flex gap-4">
                   <div>
-                    <div className="font-sans text-[10px] text-[#444] uppercase">
+                    <div className="font-sans text-[10px] text-text-5 uppercase">
                       Max profit
                     </div>
-                    <div className="font-mono text-xs text-[#4ade80]">
+                    <div
+                      className="font-mono text-xs"
+                      style={{ color: THEME.up }}
+                    >
                       +${group.maxPnl.maxProfit.toFixed(2)}
                     </div>
                   </div>
                   <div>
-                    <div className="font-sans text-[10px] text-[#444] uppercase">
+                    <div className="font-sans text-[10px] text-text-5 uppercase">
                       Max loss
                     </div>
-                    <div className="font-mono text-xs text-[#f87171]">
+                    <div
+                      className="font-mono text-xs"
+                      style={{ color: THEME.down }}
+                    >
                       -${Math.abs(group.maxPnl.maxLoss).toFixed(2)}
                     </div>
                   </div>
                   {group.netDelta !== null && (
                     <div>
-                      <div className="font-sans text-[10px] text-[#444] uppercase">
+                      <div className="font-sans text-[10px] text-text-5 uppercase">
                         Net Δ
                       </div>
-                      <div className="font-mono text-xs text-[#9ca3af]">
+                      <div className="font-mono text-xs text-text-2">
                         {formatDelta(group.netDelta)}
                       </div>
                     </div>
@@ -604,19 +599,11 @@ function RealPositionsView({
                 </div>
               )}
 
-              {/* Expanded legs */}
               {isExp &&
                 group.legs.map((leg) => {
                   const tick = ticks[leg.streamerSymbol] ?? null;
                   const mid = tick?.mid ?? null;
                   const legPnl = calcPnl(leg, tick);
-                  // Leg P&L — blue/amber
-                  const legPnlColor =
-                    legPnl === null
-                      ? "#555"
-                      : legPnl >= 0
-                        ? "#60a5fa"
-                        : "#E4D00A";
                   const legDelta =
                     tick?.delta != null
                       ? (leg.direction === "Long" ? 1 : -1) *
@@ -626,42 +613,41 @@ function RealPositionsView({
                   return (
                     <div
                       key={leg.symbol}
-                      className="px-2 py-1.5 flex items-center gap-2 border-t border-[#1a1a1a]"
+                      className="px-2 py-1.5 flex items-center gap-2 border-t border-border"
                     >
-                      {/* Long/short indicator — stays green/red */}
                       <div
                         className="w-0.5 h-4 shrink-0"
                         style={{
                           backgroundColor:
                             leg.direction === "Long"
-                              ? "#4ade8066"
-                              : "#f8717166",
+                              ? withOpacity(THEME.up, 0.4)
+                              : withOpacity(THEME.down, 0.4),
                         }}
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="font-mono text-xs text-[#666]">
+                        <div className="font-mono text-xs text-text-3">
                           {leg.strike}
                           {leg.optionType}
-                          <span className="text-[#444] ml-1">
+                          <span className="text-text-5 ml-1">
                             {leg.direction} {leg.quantity}
                           </span>
                         </div>
                         {legDelta !== null && (
-                          <div className="font-mono text-[10px] text-[#555]">
+                          <div className="font-mono text-[10px] text-text-4">
                             {formatDelta(legDelta)}
                           </div>
                         )}
                       </div>
                       <div className="text-right shrink-0">
-                        <div className="font-mono text-xs text-[#666]">
+                        <div className="font-mono text-xs text-text-3">
                           {mid !== null ? mid.toFixed(2) : "—"}
-                          <span className="text-[#444] ml-1">
+                          <span className="text-text-5 ml-1">
                             / {leg.averageOpenPrice.toFixed(2)}
                           </span>
                         </div>
                         <div
                           className="font-mono text-[11px]"
-                          style={{ color: legPnlColor }}
+                          style={{ color: pnlColor(legPnl) }}
                         >
                           {legPnl !== null
                             ? `${legPnl >= 0 ? "+" : ""}$${legPnl.toFixed(2)}`
@@ -681,26 +667,41 @@ function RealPositionsView({
 
 // ─── Fly Mini Chart ───────────────────────────────────────────────────────────
 
-function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
+function FlyMiniChart({
+  data,
+  widthKey,
+}: {
+  data: FlySnapshot[];
+  widthKey: number;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
+    const panel = cssVar("--color-panel", "#121214");
+    const border = cssVar("--color-border", "#1f1f21");
+    const text5 = cssVar("--color-text-5", "#44433F");
+    const text6 = cssVar("--color-text-6", "#2F2E2C");
+    const lineColor = cssVar(`--color-width-${widthKey}`, "#9B7BB3");
+
     const chart = createChart(containerRef.current, {
-      layout: { background: { color: "#111111" }, textColor: "#444444" },
-      grid: { vertLines: { visible: false }, horzLines: { color: "#1a1a1a" } },
+      layout: { background: { color: panel }, textColor: text5 },
+      grid: {
+        vertLines: { visible: false },
+        horzLines: { color: border },
+      },
       crosshair: {
-        vertLine: { color: "#333333" },
-        horzLine: { color: "#333333" },
+        vertLine: { color: text6 },
+        horzLine: { color: text6 },
       },
       rightPriceScale: {
-        borderColor: "#1f1f1f",
+        borderColor: border,
         scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       timeScale: {
-        borderColor: "#1f1f1f",
+        borderColor: border,
         timeVisible: true,
         secondsVisible: false,
       },
@@ -708,14 +709,14 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
       height: containerRef.current.clientHeight,
     });
     const series = chart.addSeries(LineSeries, {
-      color,
+      color: lineColor,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,
     });
     series.createPriceLine({
       price: 0,
-      color: "#333",
+      color: text6,
       lineWidth: 1,
       lineStyle: 2,
       axisLabelVisible: false,
@@ -734,7 +735,7 @@ function FlyMiniChart({ data, color }: { data: FlySnapshot[]; color: string }) {
       window.removeEventListener("resize", handleResize);
       chart.remove();
     };
-  }, [color]);
+  }, [widthKey]);
 
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
@@ -783,28 +784,28 @@ function SmlInputForm() {
   };
 
   return (
-    <div className="flex-1 bg-[#111] rounded p-3 flex flex-col gap-3">
-      <div className="text-xs text-[#555] uppercase tracking-wide">
+    <div className="flex-1 bg-panel rounded p-3 flex flex-col gap-3">
+      <div className="text-xs text-text-4 uppercase tracking-wide">
         adicionar sml fly do dia
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-[#555] w-12">SML</span>
+        <span className="text-xs text-text-4 w-12">SML</span>
         <input
           type="number"
           value={smlRef}
           onChange={(e) => setSmlRef(e.target.value)}
           placeholder="6815"
-          className="flex-1 bg-[#0a0a0a] border border-[#222] rounded px-2 py-1 font-mono text-sm text-[#9ca3af] placeholder-[#333] focus:border-[#444] focus:outline-none"
+          className="flex-1 bg-page border border-border rounded px-2 py-1 font-mono text-sm text-text-2 placeholder-text-6 focus:border-text-5 focus:outline-none"
         />
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-[#555] w-12">Width</span>
+        <span className="text-xs text-text-4 w-12">Width</span>
         <div className="flex gap-1.5">
           {[10, 15, 20, 25, 30].map((w) => (
             <button
               key={w}
               onClick={() => toggleWidth(w)}
-              className={`font-mono text-xs px-2 py-0.5 rounded transition-colors hover:cursor-pointer ${widths.includes(w) ? "bg-[#222] text-[#9ca3af]" : "bg-transparent text-[#444] border border-[#222]"}`}
+              className={`font-mono text-xs px-2 py-0.5 rounded transition-colors hover:cursor-pointer ${widths.includes(w) ? "bg-border-2 text-text-2" : "bg-transparent text-text-5 border border-border"}`}
             >
               {w}
             </button>
@@ -812,13 +813,13 @@ function SmlInputForm() {
         </div>
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-xs text-[#555] w-12">Type</span>
+        <span className="text-xs text-text-4 w-12">Type</span>
         <div className="flex gap-1.5">
           {(["put", "call"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setOptType(t)}
-              className={`text-xs px-2 py-0.5 rounded transition-colors hover:cursor-pointer ${optType === t ? "bg-[#222] text-[#9ca3af]" : "bg-transparent text-[#444] border border-[#222]"}`}
+              className={`text-xs px-2 py-0.5 rounded transition-colors hover:cursor-pointer ${optType === t ? "bg-border-2 text-text-2" : "bg-transparent text-text-5 border border-border"}`}
             >
               {t.charAt(0).toUpperCase() + t.slice(1)}
             </button>
@@ -828,7 +829,7 @@ function SmlInputForm() {
       <button
         onClick={handleSubmit}
         disabled={isSubmitting || !smlRef || widths.length === 0}
-        className="mt-auto bg-[#222] text-xs text-[#9ca3af] py-1.5 rounded hover:bg-[#2a2a2a] transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:cursor-pointer"
+        className="mt-auto bg-border-2 text-xs text-text-2 py-1.5 rounded hover:bg-border-2 hover:text-text transition-colors disabled:opacity-50 disabled:cursor-not-allowed hover:cursor-pointer"
       >
         {isSubmitting ? "Criando..." : "Iniciar"}
       </button>

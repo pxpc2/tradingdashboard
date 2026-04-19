@@ -1,5 +1,8 @@
 // Utilities for computing live session character — skew + price
-// Used by both LiveDashboard and TradingPlanDashboard
+// Used by both LiveDashboard and TradingPlanDashboard.
+// Color constants reference CSS variables — updating globals.css updates everything.
+
+import { THEME, cssVar } from "./theme";
 
 export type SkewCharacter = {
   direction: "rising" | "falling" | "flat";
@@ -59,8 +62,8 @@ export function computeSkewCharacter(
 }
 
 export type PriceCharacter = {
-  magnitude: number; // maxMove / straddle
-  character: number; // currentMoveAbs / maxMove
+  magnitude: number;
+  character: number;
   direction: "up" | "down" | "flat";
   classification:
     | "trending"
@@ -132,8 +135,6 @@ export function computePriceCharacter(
 }
 
 // ─── Post-session classification ──────────────────────────────────────────────
-// Used in /analysis charts and post-session review
-// Takes final EOD numbers (% of straddle) and returns day type
 
 export type SessionType =
   | "Trend day"
@@ -142,33 +143,38 @@ export type SessionType =
   | "Flat day";
 
 export function classifySessionFinal(
-  maxMovePct: number, // max intraday move as % of opening straddle (e.g. 120 = 1.2x)
-  eodMovePct: number, // EOD realized move as % of opening straddle
+  maxMovePct: number,
+  eodMovePct: number,
 ): SessionType {
-  // Convert pct (0-300+) to multiples (0.0-3.0+)
   const magnitude = maxMovePct / 100;
   const character = maxMovePct > 0 ? eodMovePct / maxMovePct : 0;
 
-  // Insufficient magnitude → flat regardless of character
   if (magnitude < 0.3) return "Flat day";
-
-  // Held direction (character ≥ 0.7) → trend day at any magnitude
   if (character >= 0.7) return "Trend day";
-
-  // Below implied AND didn't hold direction → flat
   if (magnitude < 1.0) return "Flat day";
-
-  // Exceeded implied move (magnitude ≥ 1.0):
   if (character >= 0.4) return "Trend with partial reversal";
   return "Reversal day";
 }
 
+// CSS var REFERENCES for JSX inline style use.
+// In JSX: style={{ color: SESSION_TYPE_COLOR[type] }} resolves automatically.
 export const SESSION_TYPE_COLOR: Record<SessionType, string> = {
-  "Trend day": "#f87171",
-  "Trend with partial reversal": "#f59e0b",
-  "Reversal day": "#9CA9FF",
-  "Flat day": "#555",
+  "Trend day": THEME.regime.trend,
+  "Trend with partial reversal": THEME.regime.partial,
+  "Reversal day": THEME.regime.reversal,
+  "Flat day": THEME.regime.flat,
 };
+
+// Resolved hex values for canvas / ECharts use.
+// Call inside useEffect — reads current CSS values at render time.
+export function resolveSessionTypeColors(): Record<SessionType, string> {
+  return {
+    "Trend day": cssVar("--color-regime-trend", "#E55A3F"),
+    "Trend with partial reversal": cssVar("--color-regime-partial", "#E6B84F"),
+    "Reversal day": cssVar("--color-regime-reversal", "#5BB4A0"),
+    "Flat day": cssVar("--color-regime-flat", "#707070"),
+  };
+}
 
 export const SESSION_TYPE_ORDER: SessionType[] = [
   "Trend day",
@@ -254,19 +260,18 @@ function skewDirLabel(dir: "rising" | "falling" | "flat"): string {
   return "flat";
 }
 
-// Color tokens for badges
 export const SKEW_STRENGTH_COLOR: Record<SkewCharacter["strength"], string> = {
-  flat: "#9ca3af",
-  moving: "#9CA9FF",
-  strongly_moving: "#f59e0b",
+  flat: THEME.skew.flat,
+  moving: THEME.skew.moving,
+  strongly_moving: THEME.skew.strong,
 };
 
 export const TONE_COLOR: Record<
   "quiet" | "normal" | "attention" | "alert",
   string
 > = {
-  quiet: "#555",
-  normal: "#9ca3af",
-  attention: "#f59e0b",
-  alert: "#f87171",
+  quiet: THEME.tone.quiet,
+  normal: THEME.tone.normal,
+  attention: THEME.tone.attention,
+  alert: THEME.tone.alert,
 };

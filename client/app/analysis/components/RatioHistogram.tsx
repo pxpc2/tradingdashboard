@@ -4,6 +4,7 @@
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
 import { SessionData } from "../AnalysisDashboard";
+import { resolveChartPalette } from "../../lib/chartPalette";
 
 type Props = { sessions: SessionData[] };
 
@@ -28,8 +29,8 @@ export default function RatioHistogram({ sessions }: Props) {
 
   useEffect(() => {
     if (!chartRef.current) return;
+    const P = resolveChartPalette();
 
-    // Build histogram bins: 0-0.25, 0.25-0.5, ..., up to 2.0+
     const binSize = 0.25;
     const bins: Record<string, number> = {};
     const binLabels: string[] = [];
@@ -59,16 +60,16 @@ export default function RatioHistogram({ sessions }: Props) {
       sessions.length;
 
     chartRef.current.setOption({
-      backgroundColor: "#111111",
+      backgroundColor: P.bg,
       animation: false,
       grid: { top: 16, bottom: 40, left: 32, right: 16 },
       xAxis: {
         type: "category",
         data: binLabels,
-        axisLine: { lineStyle: { color: "#1f1f1f" } },
+        axisLine: { lineStyle: { color: P.border } },
         axisTick: { show: false },
         axisLabel: {
-          color: "#666",
+          color: P.text3,
           fontSize: 9,
           rotate: 35,
           interval: 0,
@@ -80,23 +81,21 @@ export default function RatioHistogram({ sessions }: Props) {
         minInterval: 1,
         axisLine: { show: false },
         axisTick: { show: false },
-        axisLabel: { color: "#666", fontSize: 10 },
-        splitLine: { lineStyle: { color: "#1a1a1a" } },
+        axisLabel: { color: P.text3, fontSize: 10 },
+        splitLine: { lineStyle: { color: P.border } },
       },
       tooltip: {
         trigger: "axis",
-        backgroundColor: "#1a1a1a",
-        borderColor: "#222",
+        backgroundColor: P.bg,
+        borderColor: P.border2,
         padding: [6, 10],
-        textStyle: { color: "#9ca3af", fontSize: 11 },
+        textStyle: { color: P.text2, fontSize: 11 },
         formatter: (p: any) => {
           const item = Array.isArray(p) ? p[0] : p;
-          return `<span style="color:#555;font-size:10px">Ratio ${item.name}</span><br/>
-                  <span style="color:#9ca3af">${item.value} session${item.value !== 1 ? "s" : ""}</span>`;
+          return `<span style="color:${P.text4};font-size:10px">Ratio ${item.name}</span><br/>
+                  <span style="color:${P.text2}">${item.value} session${item.value !== 1 ? "s" : ""}</span>`;
         },
       },
-      // Avg ratio vertical line
-      markLine: { silent: true },
       series: [
         {
           type: "bar",
@@ -105,11 +104,11 @@ export default function RatioHistogram({ sessions }: Props) {
             itemStyle: {
               color: (() => {
                 const ratio = i * binSize;
-                if (ratio >= 1.0) return "#f87171";
-                if (ratio >= 0.75) return "#f59e0b";
-                return "#9CA9FF";
+                if (ratio >= 1.0) return P.regime.trend;
+                if (ratio >= 0.75) return P.regime.partial;
+                return P.text2;
               })(),
-              opacity: 0.8,
+              opacity: 0.85,
             },
           })),
           barMaxWidth: 32,
@@ -120,11 +119,11 @@ export default function RatioHistogram({ sessions }: Props) {
             data: [
               {
                 xAxis: (avg / binSize - 0.5).toString(),
-                lineStyle: { color: "#555", type: "dashed", width: 1 },
+                lineStyle: { color: P.text4, type: "dashed", width: 1 },
                 label: {
                   show: true,
                   formatter: `avg ${avg.toFixed(2)}x`,
-                  color: "#555",
+                  color: P.text3,
                   fontSize: 10,
                   position: "insideEndTop",
                 },

@@ -4,7 +4,7 @@ import { SkewCharacter, SKEW_STRENGTH_COLOR } from "../lib/sessionCharacter";
 
 type Props = {
   skewChar: SkewCharacter;
-  compact?: boolean; // For inline use in metrics strip
+  compact?: boolean;
 };
 
 function strengthLabel(s: SkewCharacter["strength"]): string {
@@ -23,10 +23,10 @@ export default function SkewCharacterBadge({ skewChar, compact }: Props) {
   if (skewChar.openingSkew === null) {
     return (
       <div>
-        <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+        <span className="font-sans text-[11px] text-text-4 uppercase tracking-wide">
           Skew hoje
         </span>
-        <div className="font-mono text-sm text-[#444]">—</div>
+        <div className="font-mono text-sm text-text-5">—</div>
       </div>
     );
   }
@@ -40,7 +40,7 @@ export default function SkewCharacterBadge({ skewChar, compact }: Props) {
       <div className="flex items-center gap-1.5 font-mono text-xs">
         <span style={{ color }}>{arrow}</span>
         <span style={{ color }}>{label}</span>
-        <span className="text-[#444]">
+        <span className="text-text-5">
           {(skewChar.maxExcursion * 1000).toFixed(1)}
         </span>
       </div>
@@ -49,7 +49,7 @@ export default function SkewCharacterBadge({ skewChar, compact }: Props) {
 
   return (
     <div>
-      <span className="font-sans text-[11px] text-[#555] uppercase tracking-wide">
+      <span className="font-sans text-[11px] text-text-4 uppercase tracking-wide">
         Skew hoje
       </span>
       <div
@@ -59,7 +59,7 @@ export default function SkewCharacterBadge({ skewChar, compact }: Props) {
         <span>{arrow}</span>
         <span>{label}</span>
       </div>
-      <div className="font-mono text-[10px] text-[#444]">
+      <div className="font-mono text-[10px] text-text-5">
         max Δ {skewChar.maxExcursion.toFixed(4)}
         {skewChar.netChange !== 0 && (
           <span className="ml-1">

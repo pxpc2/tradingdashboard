@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { TradingPlan, SkewTrend } from "../TradingPlanDashboard";
+import { THEME, withOpacity } from "../../lib/theme";
 
 type Props = {
   plan: TradingPlan | null;
@@ -25,12 +26,13 @@ type Props = {
   onSave: (updates: Partial<TradingPlan>) => Promise<void>;
 };
 
+// Bias colors reference CSS vars via THEME — globals.css changes propagate live.
 const BIAS_COLORS: Record<string, string> = {
-  "TRENDING (high-conf)": "#f87171",
-  "TRENDING (low-conf)": "#f59e0b",
-  UNCLEAR: "#555",
-  "REVERTING (low-conf)": "#60a5fa",
-  "REVERTING (high-conf)": "#9CA9FF",
+  "TRENDING (high-conf)": THEME.amber,
+  "TRENDING (low-conf)": withOpacity(THEME.amber, 0.6),
+  UNCLEAR: THEME.text4,
+  "REVERTING (low-conf)": withOpacity(THEME.indigo, 0.6),
+  "REVERTING (high-conf)": THEME.indigo,
 };
 
 const ACTION_RULES: Record<string, string[]> = {
@@ -64,19 +66,19 @@ const ACTION_RULES: Record<string, string[]> = {
 };
 
 const TREND_LABELS: Record<string, { label: string; color: string }> = {
-  expanding: { label: "↑ expandindo", color: "#f87171" },
-  compressing: { label: "↓ comprimindo", color: "#9CA9FF" },
-  flat: { label: "→ estável", color: "#555" },
+  expanding: { label: "↑ expandindo", color: THEME.amber },
+  compressing: { label: "↓ comprimindo", color: THEME.indigo },
+  flat: { label: "→ estável", color: THEME.text4 },
 };
 
 const RANGE_COLORS: Record<string, string> = {
-  tight: "#9CA9FF",
-  normal: "#9ca3af",
-  wide: "#f87171",
+  tight: THEME.amber,
+  normal: THEME.text3,
+  wide: THEME.indigo,
 };
 
 function ScoreRow({ label, value }: { label: string; value: number }) {
-  const color = value > 0 ? "#f87171" : value < 0 ? "#9CA9FF" : "#444";
+  const color = value > 0 ? THEME.amber : value < 0 ? THEME.indigo : THEME.text5;
   const text =
     value > 0
       ? `+${value} trending`
@@ -84,8 +86,8 @@ function ScoreRow({ label, value }: { label: string; value: number }) {
         ? `${value} reverting`
         : "neutral";
   return (
-    <div className="flex justify-between items-center py-1 border-b border-[#1a1a1a] last:border-0">
-      <span className="font-sans text-xs text-[#555]">{label}</span>
+    <div className="flex justify-between items-center py-1 border-b border-border last:border-0">
+      <span className="font-sans text-xs text-text-4">{label}</span>
       <span className="font-mono text-xs" style={{ color }}>
         {text}
       </span>
@@ -117,7 +119,6 @@ export default function PreMarketSection({
   const [planId, setPlanId] = useState(plan?.id ?? null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Only re-sync when the plan itself changes (different day = different id)
   useEffect(() => {
     if ((plan?.id ?? null) === planId) return;
     setPlanId(plan?.id ?? null);
@@ -132,7 +133,7 @@ export default function PreMarketSection({
   const bias = plan?.regime_bias ?? null;
   const score = plan?.regime_score ?? null;
   const breakdown = plan?.score_breakdown ?? null;
-  const biasColor = bias ? (BIAS_COLORS[bias] ?? "#555") : "#555";
+  const biasColor = bias ? (BIAS_COLORS[bias] ?? THEME.text4) : THEME.text4;
   const actionRules = bias ? (ACTION_RULES[bias] ?? []) : [];
 
   const trendInfo = TREND_LABELS[skewTrend.direction];
@@ -164,32 +165,29 @@ export default function PreMarketSection({
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <div className="w-0.5 h-4 bg-[#333]" />
-        <span className="font-sans text-xs text-[#666] uppercase tracking-wide">
+        <div className="w-0.5 h-4 bg-border-2" />
+        <span className="font-sans text-xs text-text-3 uppercase tracking-wide">
           Pré-Mercado
         </span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Auto-populated metrics */}
-        <div className="bg-[#111] rounded p-4 space-y-2">
-          <div className="font-sans text-[11px] text-[#555] uppercase tracking-wide mb-3">
+        <div className="bg-panel rounded p-4 space-y-2">
+          <div className="font-sans text-[11px] text-text-4 uppercase tracking-wide mb-3">
             Dados automáticos
           </div>
 
-          {/* Skew */}
-          <div className="flex justify-between items-center border-b border-[#1a1a1a] pb-1.5">
-            <span className="font-sans text-xs text-[#555]">Skew</span>
-            <span className="font-mono text-xs text-[#9ca3af]">
+          <div className="flex justify-between items-center border-b border-border pb-1.5">
+            <span className="font-sans text-xs text-text-4">Skew</span>
+            <span className="font-mono text-xs text-text-2">
               {latestSkew
                 ? `${latestSkew.skew.toFixed(3)} (${skewPctile ?? "—"}th %ile)`
                 : "—"}
             </span>
           </div>
 
-          {/* Skew trend */}
-          <div className="flex justify-between items-start border-b border-[#1a1a1a] pb-1.5">
-            <span className="font-sans text-xs text-[#555]">
+          <div className="flex justify-between items-start border-b border-border pb-1.5">
+            <span className="font-sans text-xs text-text-4">
               Skew trend (3 sess.)
             </span>
             <div className="text-right">
@@ -200,44 +198,42 @@ export default function PreMarketSection({
                 {trendInfo.label}
               </div>
               {trendSessionsStr && (
-                <div className="font-mono text-[10px] text-[#444]">
+                <div className="font-mono text-[10px] text-text-5">
                   {trendSessionsStr}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Skew / ATM IV ratio */}
-          <div className="flex justify-between items-center border-b border-[#1a1a1a] pb-1.5">
-            <span className="font-sans text-xs text-[#555]">Skew / ATM IV</span>
+          <div className="flex justify-between items-center border-b border-border pb-1.5">
+            <span className="font-sans text-xs text-text-4">Skew / ATM IV</span>
             <span
               className="font-mono text-xs"
               style={{
                 color:
                   ratioAboveAvg === null
-                    ? "#9ca3af"
+                    ? THEME.text2
                     : ratioAboveAvg
-                      ? "#f87171"
-                      : "#9CA9FF",
+                      ? THEME.amber
+                      : THEME.indigo,
               }}
             >
               {skewTrend.skewAtmRatio !== null
                 ? skewTrend.skewAtmRatio.toFixed(3)
                 : "—"}
               {skewTrend.skewAtmRatioAvg !== null && (
-                <span className="text-[#444] ml-1">
+                <span className="text-text-5 ml-1">
                   / avg {skewTrend.skewAtmRatioAvg.toFixed(3)}
                 </span>
               )}
             </span>
           </div>
 
-          {/* Overnight ES range — auto-computed */}
-          <div className="flex justify-between items-center border-b border-[#1a1a1a] pb-1.5">
-            <span className="font-sans text-xs text-[#555]">ON ES range</span>
+          <div className="flex justify-between items-center border-b border-border pb-1.5">
+            <span className="font-sans text-xs text-text-4">ON ES range</span>
             <div className="flex items-center gap-2">
               {overnightRangePts !== null && (
-                <span className="font-mono text-[10px] text-[#444]">
+                <span className="font-mono text-[10px] text-text-5">
                   {overnightRangePts.toFixed(1)}pts
                 </span>
               )}
@@ -248,16 +244,15 @@ export default function PreMarketSection({
                 >
                   {overnightRangeClass}
                   {isAutoRange && (
-                    <span className="text-[#444] ml-1 text-[10px]">auto</span>
+                    <span className="text-text-5 ml-1 text-[10px]">auto</span>
                   )}
                 </span>
               ) : (
-                <span className="font-mono text-xs text-[#444]">—</span>
+                <span className="font-mono text-xs text-text-5">—</span>
               )}
             </div>
           </div>
 
-          {/* Rest of auto metrics */}
           {[
             ["VIX1D/VIX", plan?.vix1d_vix_ratio?.toFixed(2) ?? "—"],
             [
@@ -283,22 +278,21 @@ export default function PreMarketSection({
           ].map(([label, value]) => (
             <div
               key={label}
-              className="flex justify-between items-center border-b border-[#1a1a1a] pb-1.5 last:border-0 last:pb-0"
+              className="flex justify-between items-center border-b border-border pb-1.5 last:border-0 last:pb-0"
             >
-              <span className="font-sans text-xs text-[#555]">{label}</span>
-              <span className="font-mono text-xs text-[#9ca3af]">{value}</span>
+              <span className="font-sans text-xs text-text-4">{label}</span>
+              <span className="font-mono text-xs text-text-2">{value}</span>
             </div>
           ))}
         </div>
 
-        {/* VS3D / Manual inputs */}
-        <div className="bg-[#111] rounded p-4 space-y-3">
-          <div className="font-sans text-[11px] text-[#555] uppercase tracking-wide mb-3">
+        <div className="bg-panel rounded p-4 space-y-3">
+          <div className="font-sans text-[11px] text-text-4 uppercase tracking-wide mb-3">
             VS3D / Manual
           </div>
 
           <div>
-            <div className="font-sans text-[11px] text-[#555] mb-1.5">
+            <div className="font-sans text-[11px] text-text-4 mb-1.5">
               Gamma regime
             </div>
             <div className="flex gap-2">
@@ -308,8 +302,8 @@ export default function PreMarketSection({
                   onClick={() => setGammaRegime(v)}
                   className={`font-mono text-xs px-2.5 py-1 rounded transition-colors hover:cursor-pointer ${
                     gammaRegime === v
-                      ? "bg-[#222] text-[#9ca3af]"
-                      : "bg-transparent text-[#444] border border-[#222]"
+                      ? "bg-border-2 text-text-2"
+                      : "bg-transparent text-text-5 border border-border"
                   }`}
                 >
                   {v}
@@ -318,14 +312,13 @@ export default function PreMarketSection({
             </div>
           </div>
 
-          {/* Overnight range manual override */}
           <div>
             <div className="flex items-center gap-2 mb-1.5">
-              <div className="font-sans text-[11px] text-[#555]">
+              <div className="font-sans text-[11px] text-text-4">
                 Overnight ES range
               </div>
               {overnightRangeClass && (
-                <span className="font-sans text-[10px] text-[#444]">
+                <span className="font-sans text-[10px] text-text-5">
                   (auto: {overnightRangeClass} · override abaixo)
                 </span>
               )}
@@ -337,8 +330,8 @@ export default function PreMarketSection({
                   onClick={() => setOvernightRange(v)}
                   className={`font-mono text-xs px-2.5 py-1 rounded transition-colors hover:cursor-pointer ${
                     overnightRange === v
-                      ? "bg-[#222] text-[#9ca3af]"
-                      : "bg-transparent text-[#444] border border-[#222]"
+                      ? "bg-border-2 text-text-2"
+                      : "bg-transparent text-text-5 border border-border"
                   }`}
                 >
                   {v}
@@ -348,7 +341,7 @@ export default function PreMarketSection({
           </div>
 
           <div>
-            <div className="font-sans text-[11px] text-[#555] mb-1.5">
+            <div className="font-sans text-[11px] text-text-4 mb-1.5">
               Balance strikes (dealer long)
             </div>
             <input
@@ -356,12 +349,12 @@ export default function PreMarketSection({
               value={balanceStrikes}
               onChange={(e) => setBalanceStrikes(e.target.value)}
               placeholder="ex: 6820, 6800"
-              className="w-full bg-[#0a0a0a] border border-[#222] rounded px-2.5 py-1.5 font-mono text-xs text-[#9ca3af] placeholder-[#333] focus:border-[#444] focus:outline-none"
+              className="w-full bg-page border border-border rounded px-2.5 py-1.5 font-mono text-xs text-text-2 placeholder-text-6 focus:border-text-5 focus:outline-none"
             />
           </div>
 
           <div>
-            <div className="font-sans text-[11px] text-[#555] mb-1.5">
+            <div className="font-sans text-[11px] text-text-4 mb-1.5">
               Test strikes (dealer short)
             </div>
             <input
@@ -369,12 +362,12 @@ export default function PreMarketSection({
               value={testStrikes}
               onChange={(e) => setTestStrikes(e.target.value)}
               placeholder="ex: 6850↑, 6780↓"
-              className="w-full bg-[#0a0a0a] border border-[#222] rounded px-2.5 py-1.5 font-mono text-xs text-[#9ca3af] placeholder-[#333] focus:border-[#444] focus:outline-none"
+              className="w-full bg-page border border-border rounded px-2.5 py-1.5 font-mono text-xs text-text-2 placeholder-text-6 focus:border-text-5 focus:outline-none"
             />
           </div>
 
           <div>
-            <div className="font-sans text-[11px] text-[#555] mb-1.5">
+            <div className="font-sans text-[11px] text-text-4 mb-1.5">
               Contexto VS3D
             </div>
             <textarea
@@ -382,25 +375,24 @@ export default function PreMarketSection({
               onChange={(e) => setVs3dContext(e.target.value)}
               placeholder="Uma frase sobre o posicionamento do dia..."
               rows={2}
-              className="w-full bg-[#0a0a0a] border border-[#222] rounded px-2.5 py-1.5 font-mono text-xs text-[#9ca3af] placeholder-[#333] focus:border-[#444] focus:outline-none resize-none"
+              className="w-full bg-page border border-border rounded px-2.5 py-1.5 font-mono text-xs text-text-2 placeholder-text-6 focus:border-text-5 focus:outline-none resize-none"
             />
           </div>
 
           <button
             onClick={handleSave}
             disabled={isSaving}
-            className="w-full bg-[#222] text-xs text-[#9ca3af] py-1.5 rounded hover:bg-[#2a2a2a] transition-colors disabled:opacity-50 hover:cursor-pointer"
+            className="w-full bg-border-2 text-xs text-text-2 py-1.5 rounded hover:bg-border-2 hover:text-text transition-colors disabled:opacity-50 hover:cursor-pointer"
           >
             {isSaving ? "Salvando..." : "Salvar plano"}
           </button>
         </div>
       </div>
 
-      {/* Score breakdown + regime output */}
       {bias && breakdown && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-[#111] rounded p-4">
-            <div className="font-sans text-[11px] text-[#555] uppercase tracking-wide mb-3">
+          <div className="bg-panel rounded p-4">
+            <div className="font-sans text-[11px] text-text-4 uppercase tracking-wide mb-3">
               Score breakdown
             </div>
             <ScoreRow
@@ -423,16 +415,16 @@ export default function PreMarketSection({
               label="Balance at price (1pt)"
               value={breakdown.balance ?? 0}
             />
-            <div className="flex justify-between items-center pt-2 mt-1 border-t border-[#222]">
-              <span className="font-sans text-xs text-[#666]">Total</span>
+            <div className="flex justify-between items-center pt-2 mt-1 border-t border-border-2">
+              <span className="font-sans text-xs text-text-3">Total</span>
               <span className="font-mono text-sm" style={{ color: biasColor }}>
                 {score !== null && score > 0 ? `+${score}` : score}
               </span>
             </div>
           </div>
 
-          <div className="bg-[#111] rounded p-4">
-            <div className="font-sans text-[11px] text-[#555] uppercase tracking-wide mb-3">
+          <div className="bg-panel rounded p-4">
+            <div className="font-sans text-[11px] text-text-4 uppercase tracking-wide mb-3">
               Regime
             </div>
             <div
@@ -444,8 +436,8 @@ export default function PreMarketSection({
             {actionRules.length > 0 && (
               <div className="space-y-1.5">
                 {actionRules.map((rule, i) => (
-                  <div key={i} className="flex gap-2 text-xs text-[#666]">
-                    <span className="text-[#333] shrink-0">→</span>
+                  <div key={i} className="flex gap-2 text-xs text-text-3">
+                    <span className="text-text-6 shrink-0">→</span>
                     <span>{rule}</span>
                   </div>
                 ))}

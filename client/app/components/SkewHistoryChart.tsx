@@ -12,6 +12,7 @@ import {
   createTextWatermark,
 } from "lightweight-charts";
 import { SkewSnapshot } from "../types";
+import { cssVar } from "../lib/theme";
 
 type Props = {
   data: SkewSnapshot[];
@@ -66,11 +67,13 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, w, h);
 
+    const strokeColor = cssVar("--color-text-5", "#44433F");
+
     for (const ts of boundariesRef.current) {
       const x = chartRef.current.timeScale().timeToCoordinate(ts);
       if (x === null || x < 0 || x > w) continue;
       ctx.save();
-      ctx.strokeStyle = "#444";
+      ctx.strokeStyle = strokeColor;
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
@@ -81,25 +84,30 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
     }
   }, []);
 
-  // Chart creation
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const panel = cssVar("--color-panel", "#121214");
+    const border = cssVar("--color-border", "#1f1f21");
+    const text5 = cssVar("--color-text-5", "#44433F");
+    const text6 = cssVar("--color-text-6", "#2F2E2C");
+    const skewMoving = cssVar("--color-skew-moving", "#9B7BB3");
+
     const chart = createChart(containerRef.current, {
       layout: {
-        background: { color: "#111111" },
-        textColor: "#444444",
+        background: { color: panel },
+        textColor: text5,
       },
       grid: {
-        vertLines: { color: "#1a1a1a" },
-        horzLines: { color: "#1a1a1a" },
+        vertLines: { color: border },
+        horzLines: { color: border },
       },
       crosshair: {
-        vertLine: { color: "#333333" },
-        horzLine: { color: "#333333" },
+        vertLine: { color: text6 },
+        horzLine: { color: text6 },
       },
       rightPriceScale: {
-        borderColor: "#1f1f1f",
+        borderColor: border,
         scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       localization: {
@@ -113,7 +121,7 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
         },
       },
       timeScale: {
-        borderColor: "#1f1f1f",
+        borderColor: border,
         timeVisible: true,
         secondsVisible: false,
         rightOffset: 80,
@@ -131,7 +139,7 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
     });
 
     const series = chart.addSeries(LineSeries, {
-      color: "#9CA9FF",
+      color: skewMoving,
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,
@@ -144,7 +152,7 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
       lines: [
         {
           text: "25Δ Skew History",
-          color: "rgba(204, 204, 204, 0.15)",
+          color: "rgba(232, 230, 224, 0.10)",
           fontSize: 18,
         },
       ],
@@ -170,7 +178,6 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
     };
   }, [drawSeparators]);
 
-  // Data updates
   useEffect(() => {
     if (!seriesRef.current || !chartRef.current) return;
 
@@ -187,7 +194,6 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
 
     seriesRef.current.setData(points);
 
-    // Remove existing avg line before recreating
     if (avgLineRef.current) {
       try {
         seriesRef.current.removePriceLine(avgLineRef.current);
@@ -199,10 +205,10 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
       try {
         avgLineRef.current = seriesRef.current.createPriceLine({
           price: avgSkew,
-          color: "#555",
+          color: cssVar("--color-text-4", "#555350"),
           lineWidth: 1,
           lineStyle: 2,
-          axisLabelTextColor: "#111",
+          axisLabelTextColor: cssVar("--color-page", "#0a0a0a"),
           axisLabelVisible: true,
           title: "",
         });
@@ -219,11 +225,11 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
   return (
     <div>
       <div className="flex justify-between items-center mb-1.5">
-        <span className="font-sans text-xs text-[#555] uppercase tracking-wide">
+        <span className="font-sans text-xs text-text-4 uppercase tracking-wide">
           25Δ Skew
         </span>
         {avgSkew !== null && (
-          <span className="font-mono text-xs text-[#444]">
+          <span className="font-mono text-xs text-text-5">
             média {avgSkew.toFixed(3)}
           </span>
         )}
