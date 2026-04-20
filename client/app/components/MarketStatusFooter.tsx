@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type VenueStatus = {
   code: string;
-  isOpen: () => boolean;
+  isOpen: (d: Date) => boolean;
 };
 
 function nyTime(d: Date): string {
