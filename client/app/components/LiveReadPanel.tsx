@@ -32,7 +32,8 @@ function priceNarrative(p: PriceCharacter): string {
       p.direction === "up" ? " ↑" : p.direction === "down" ? " ↓" : "";
     return `PRICE TRENDING${arrow}`;
   }
-  if (p.classification === "partial_reversal") return "PRICE PARTIALLY REVERSING";
+  if (p.classification === "partial_reversal")
+    return "PRICE PARTIALLY REVERSING";
   if (p.classification === "reversal") return "PRICE REVERSED";
   return "PRICE —";
 }
@@ -106,7 +107,10 @@ function Evidence({
       <span className="text-text-4">PRICE </span>
       <span className="text-text-2">{price.magnitude.toFixed(2)}×</span>
       <span className="text-text-4"> peak · </span>
-      <span className="text-text-2">{price.character.toFixed(2)}×</span>
+      <span className="text-text-2">
+        {" "}
+        {(price.magnitude * price.character).toFixed(2)}×
+      </span>
       <span className="text-text-4"> held</span>
       {showArrow && (
         <>
