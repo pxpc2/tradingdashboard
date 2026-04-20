@@ -179,7 +179,10 @@ export const SESSION_TYPE_ORDER: SessionType[] = [
   "Flat day",
 ];
 
-// ─── Live read (price + skew narration) ───────────────────────────────────────
+// ─── Legacy live read (PT narration) ──────────────────────────────────────────
+// Kept for backward compatibility with the old `/` LiveDashboard and
+// TradingPlanDashboard. The new LiveTab uses LiveReadPanel's internal
+// narrative composer (English) instead of this function.
 
 export function buildLiveRead(
   price: PriceCharacter,
@@ -275,18 +278,14 @@ export const TONE_COLOR: Record<
 // ─── Auto-generated condition tags ────────────────────────────────────────────
 
 export type TagCode =
-  | "MACRO-DAY"
-  | "PIN-RISK"
   | "CONFIRMED-TREND"
   | "UNCONFIRMED-TREND"
-  | "REVERSING"
-  | "VOL-CRUSH"
+  | "CONFIRMED-REVERSAL"
+  | "UNCONFIRMED-REVERSAL"
+  | "FLAT-DAY"
   | "SKEW-RISING"
   | "SKEW-FALLING"
-  | "PUT-IV-BID"
-  | "CALL-IV-BID"
-  | "VIX1D-HOT"
-  | "VIX1D-COOL";
+  | "RV<IV";
 
 export type Tag = {
   code: TagCode;
@@ -297,11 +296,6 @@ export type Tag = {
 export type TagContext = {
   price: PriceCharacter;
   skew: SkewCharacter;
-  putIv: number | null;
-  callIv: number | null;
-  atmIv: number | null;
-  vix1dVixRatio: number | null;
-  hasMacro: boolean;
   minutesSinceOpen: number;
 };
 
@@ -310,50 +304,55 @@ export type TagContext = {
 export function computeTags(ctx: TagContext): Tag[] {
   const tags: Tag[] = [];
 
-  // Macro day — always highest priority when present
-  if (ctx.hasMacro) {
-    tags.push({ code: "MACRO-DAY", color: THEME.amber, priority: 1 });
-  }
-
-  // Price + skew cross-reference (only when we have enough data)
+  // Guard: need enough data for meaningful classification.
   if (
-    ctx.price.classification !== "insufficient" &&
-    ctx.skew.openingSkew !== null
+    ctx.price.classification === "insufficient" ||
+    ctx.skew.openingSkew === null
   ) {
-    if (ctx.price.classification === "trending") {
-      const skewMoves =
-        ctx.skew.strength === "moving" ||
-        ctx.skew.strength === "strongly_moving";
-      if (skewMoves) {
-        tags.push({ code: "CONFIRMED-TREND", color: THEME.up, priority: 2 });
-      } else {
-        tags.push({
-          code: "UNCONFIRMED-TREND",
-          color: THEME.down,
-          priority: 2,
-        });
-      }
-    } else if (ctx.price.classification === "reversal") {
-      tags.push({ code: "REVERSING", color: THEME.skew.moving, priority: 2 });
-    } else if (
-      ctx.price.classification === "flat" &&
-      ctx.price.magnitude < 0.3 &&
-      ctx.price.character < 0.3
-    ) {
-      tags.push({ code: "PIN-RISK", color: THEME.amber, priority: 3 });
-    }
-
-    // Vol crush — only meaningful after ~2h into session
-    if (
-      ctx.minutesSinceOpen >= 120 &&
-      ctx.price.classification === "flat" &&
-      ctx.price.magnitude < 0.5
-    ) {
-      tags.push({ code: "VOL-CRUSH", color: THEME.indigo, priority: 5 });
-    }
+    return [];
   }
 
-  // Skew direction — only tag when strongly moving
+  const skewActive =
+    ctx.skew.strength === "moving" || ctx.skew.strength === "strongly_moving";
+
+  const dirColor =
+    ctx.price.direction === "up"
+      ? THEME.up
+      : ctx.price.direction === "down"
+        ? THEME.down
+        : THEME.text;
+
+  // ── TREND variants ────────────────────────────────────────────────────
+  if (ctx.price.classification === "trending") {
+    tags.push(
+      skewActive
+        ? { code: "CONFIRMED-TREND", color: dirColor, priority: 2 }
+        : { code: "UNCONFIRMED-TREND", color: THEME.amber, priority: 2 },
+    );
+  }
+
+  // ── REVERSAL variants ─────────────────────────────────────────────────
+  // Skew still moving while price reverts → options haven't accepted the
+  // reversal yet, possibly a new trend forming in the opposite direction.
+  // Skew calm while price reverts → options confirm the move is done.
+  if (ctx.price.classification === "reversal") {
+    tags.push(
+      skewActive
+        ? { code: "UNCONFIRMED-REVERSAL", color: THEME.amber, priority: 2 }
+        : { code: "CONFIRMED-REVERSAL", color: THEME.indigo, priority: 2 },
+    );
+  }
+
+  // ── FLAT DAY (pin risk) ───────────────────────────────────────────────
+  if (
+    ctx.price.classification === "flat" &&
+    ctx.price.magnitude < 0.3 &&
+    ctx.price.character < 0.3
+  ) {
+    tags.push({ code: "FLAT-DAY", color: THEME.indigo, priority: 3 });
+  }
+
+  // ── Skew acceleration ─────────────────────────────────────────────────
   if (ctx.skew.strength === "strongly_moving") {
     if (ctx.skew.direction === "rising") {
       tags.push({ code: "SKEW-RISING", color: THEME.amber, priority: 4 });
@@ -362,23 +361,13 @@ export function computeTags(ctx: TagContext): Tag[] {
     }
   }
 
-  // IV structure — call/put dominance
-  if (ctx.putIv !== null && ctx.callIv !== null) {
-    const spread = ctx.putIv - ctx.callIv;
-    if (spread > 0.02) {
-      tags.push({ code: "PUT-IV-BID", color: THEME.down, priority: 6 });
-    } else if (spread < -0.01) {
-      tags.push({ code: "CALL-IV-BID", color: THEME.up, priority: 6 });
-    }
-  }
-
-  // VIX1D/VIX ratio — term-structure signal
-  if (ctx.vix1dVixRatio !== null) {
-    if (ctx.vix1dVixRatio > 1.1) {
-      tags.push({ code: "VIX1D-HOT", color: THEME.amber, priority: 7 });
-    } else if (ctx.vix1dVixRatio < 0.9) {
-      tags.push({ code: "VIX1D-COOL", color: THEME.indigo, priority: 7 });
-    }
+  // ── RV < IV (realized tracking well below implied, late session) ──────
+  if (
+    ctx.minutesSinceOpen >= 120 &&
+    ctx.price.classification === "flat" &&
+    ctx.price.magnitude < 0.5
+  ) {
+    tags.push({ code: "RV<IV", color: THEME.indigo, priority: 5 });
   }
 
   return tags.sort((a, b) => a.priority - b.priority).slice(0, 5);

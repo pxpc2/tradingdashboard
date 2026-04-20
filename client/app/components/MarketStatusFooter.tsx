@@ -47,7 +47,7 @@ function isGlobexOpen(d: Date): boolean {
 const VENUES: VenueStatus[] = [
   { code: "NYSE", isOpen: isRegularOpen },
   { code: "CBOE", isOpen: isRegularOpen },
-  { code: "GLBX", isOpen: isGlobexOpen },
+  { code: "GLOBEX", isOpen: isGlobexOpen },
 ];
 
 export default function MarketStatusFooter() {

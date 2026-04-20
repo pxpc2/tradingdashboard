@@ -15,35 +15,51 @@ type Props = {
   atmIv: number | null;
 };
 
-function skewLabel(s: SkewCharacter): string {
-  if (s.strength === "flat") return "FLAT";
-  if (s.strength === "moving") return "MOVING";
-  return "STRONG";
+// ─── Skew row helpers ─────────────────────────────────────────────────────
+
+function skewStateLabel(s: SkewCharacter): string {
+  if (s.strength === "flat" || s.direction === "flat") return "FLAT";
+  const base = s.direction === "rising" ? "RISING" : "FALLING";
+  const suffix = s.strength === "strongly_moving" ? " STRONG" : "";
+  return `${base}${suffix}`;
 }
 
-function priceLabel(p: PriceCharacter): string {
+function skewStateColor(s: SkewCharacter): string {
+  if (s.strength === "flat" || s.direction === "flat") {
+    return SKEW_STRENGTH_COLOR.flat;
+  }
+  return SKEW_STRENGTH_COLOR[s.strength];
+}
+
+function skewNumbers(s: SkewCharacter): string | null {
+  if (s.currentSkew === null) return null;
+  const sign = s.netChange >= 0 ? "+" : "";
+  return `Δ${sign}${s.netChange.toFixed(3)} · max ${s.maxExcursion.toFixed(3)}`;
+}
+
+// ─── Price row helpers ────────────────────────────────────────────────────
+
+function priceStateLabel(p: PriceCharacter): string {
   if (p.classification === "insufficient") return "—";
   if (p.classification === "flat") {
     return p.magnitude < 0.3 ? "PINNED" : "CHOPPY";
   }
   if (p.classification === "trending") {
-    if (p.direction === "up") return "TRENDING ↑";
-    if (p.direction === "down") return "TRENDING ↓";
+    if (p.direction === "up") return "TRENDING UP";
+    if (p.direction === "down") return "TRENDING DOWN";
     return "TRENDING";
   }
-  if (p.classification === "partial_reversal") return "PART REV";
-  if (p.classification === "reversal") return "REVERSING";
+  if (p.classification === "partial_reversal") return "PARTIAL REVERSAL";
+  if (p.classification === "reversal") return "FULL REVERSAL";
   return "—";
 }
 
-function priceColor(p: PriceCharacter): string {
+function priceStateColor(p: PriceCharacter): string {
   if (p.classification === "insufficient") return THEME.text5;
   if (p.classification === "trending") {
-    return p.direction === "up"
-      ? THEME.up
-      : p.direction === "down"
-        ? THEME.down
-        : THEME.text;
+    if (p.direction === "up") return THEME.up;
+    if (p.direction === "down") return THEME.down;
+    return THEME.text;
   }
   if (p.classification === "partial_reversal") return THEME.amber;
   if (p.classification === "reversal") return THEME.amber;
@@ -52,6 +68,33 @@ function priceColor(p: PriceCharacter): string {
   }
   return THEME.text;
 }
+
+function priceNumbers(p: PriceCharacter): {
+  text: string;
+  arrow: { glyph: string; color: string } | null;
+} | null {
+  if (p.classification === "insufficient") return null;
+
+  const text = `${p.maxMove.toFixed(1)}pt max · ${p.currentMove.toFixed(1)}pt held`;
+
+  // Drop arrow for reversal states — focus isn't direction there.
+  const showArrow =
+    p.classification !== "partial_reversal" &&
+    p.classification !== "reversal" &&
+    p.direction !== "flat";
+
+  if (!showArrow) return { text, arrow: null };
+
+  return {
+    text,
+    arrow: {
+      glyph: p.direction === "up" ? "↑" : "↓",
+      color: p.direction === "up" ? THEME.up : THEME.down,
+    },
+  };
+}
+
+// ─── IV bars ──────────────────────────────────────────────────────────────
 
 function IvBar({
   label,
@@ -65,9 +108,7 @@ function IvBar({
   maxIv: number;
 }) {
   const pct =
-    value === null || maxIv === 0
-      ? 0
-      : Math.min(100, (value / maxIv) * 100);
+    value === null || maxIv === 0 ? 0 : Math.min(100, (value / maxIv) * 100);
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className="font-sans text-text-4 uppercase tracking-[0.05em] w-10 shrink-0">
@@ -86,6 +127,8 @@ function IvBar({
   );
 }
 
+// ─── Main ─────────────────────────────────────────────────────────────────
+
 export default function CharacterIvStructure({
   skewChar,
   priceChar,
@@ -96,6 +139,9 @@ export default function CharacterIvStructure({
   const ivs = [callIv, putIv, atmIv].filter((v): v is number => v !== null);
   const maxIv = ivs.length > 0 ? Math.max(...ivs) : 0;
 
+  const skewNums = skewNumbers(skewChar);
+  const priceNums = priceNumbers(priceChar);
+
   return (
     <div className="grid grid-cols-2 border border-border-2">
       {/* CHARACTER */}
@@ -104,26 +150,49 @@ export default function CharacterIvStructure({
           Character
         </div>
         <div className="space-y-1.5">
+          {/* Skew row */}
           <div className="flex items-center gap-3">
             <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-4 w-12 shrink-0">
               Skew
             </span>
+            <span className="flex-1 font-mono text-[11px] text-text-3 truncate">
+              {skewNums ?? "—"}
+            </span>
             <span
-              className="font-mono text-sm font-medium"
-              style={{ color: SKEW_STRENGTH_COLOR[skewChar.strength] }}
+              className="font-mono text-sm font-medium shrink-0 whitespace-nowrap"
+              style={{ color: skewStateColor(skewChar) }}
             >
-              {skewLabel(skewChar)}
+              {skewStateLabel(skewChar)}
             </span>
           </div>
+
+          {/* Price row */}
           <div className="flex items-center gap-3">
             <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-4 w-12 shrink-0">
               Price
             </span>
+            <span className="flex-1 font-mono text-[11px] text-text-3 truncate">
+              {priceNums ? (
+                <>
+                  {priceNums.text}
+                  {priceNums.arrow && (
+                    <>
+                      <span className="text-text-4"> </span>
+                      <span style={{ color: priceNums.arrow.color }}>
+                        {priceNums.arrow.glyph}
+                      </span>
+                    </>
+                  )}
+                </>
+              ) : (
+                "—"
+              )}
+            </span>
             <span
-              className="font-mono text-sm font-medium"
-              style={{ color: priceColor(priceChar) }}
+              className="font-mono text-sm font-medium shrink-0 whitespace-nowrap"
+              style={{ color: priceStateColor(priceChar) }}
             >
-              {priceLabel(priceChar)}
+              {priceStateLabel(priceChar)}
             </span>
           </div>
         </div>

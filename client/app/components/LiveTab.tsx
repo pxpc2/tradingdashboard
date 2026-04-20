@@ -207,7 +207,6 @@ export default function LiveTab({
   const callIv = latestSkew?.call_iv ?? null;
   const putIv = latestSkew?.put_iv ?? null;
 
-  // 4-up instrument cards — no more bid/ask, cleaner visual density
   const instruments = useMemo(
     () => [
       {
@@ -250,19 +249,15 @@ export default function LiveTab({
 
   const lastSnapshotTs = latest?.created_at ?? null;
 
-  // TODO: wire hasMacro from trading_plans.has_high_impact_macro in Chunk 3
-  const hasMacro = false;
-
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 space-y-3">
       <LiveReadPanel
         price={priceChar}
         skew={skewChar}
-        putIv={putIv}
-        callIv={callIv}
-        atmIv={atmIv}
-        vix1dVixRatio={vix1dVixRatio}
-        hasMacro={hasMacro}
+        skewPctile={skewPctile}
+        realizedPts={currentMovePts}
+        realizedPct={realizedPct}
+        openingStraddle={opening?.straddle_mid ?? null}
         minutesSinceOpen={minutesSinceOpen}
         timestamp={lastSnapshotTs}
       />
