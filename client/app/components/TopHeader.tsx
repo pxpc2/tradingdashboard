@@ -33,17 +33,19 @@ function formatHMS(tz: string, d: Date): string {
 }
 
 export default function TopHeader() {
-  const [now, setNow] = useState<Date>(new Date());
+  // null on server and during first client render; populated after mount.
+  // This guarantees server HTML === initial client HTML, no hydration mismatch.
+  const [now, setNow] = useState<Date | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
   useEffect(() => {
+    setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  // TODO: wire real tick latency from useLiveTick in a later chunk.
-  // For now static to match the mockup aesthetic.
   useEffect(() => {
+    // TODO: wire real tick latency from useLiveTick in a later chunk.
     setLatencyMs(12);
   }, []);
 
@@ -55,9 +57,7 @@ export default function TopHeader() {
         {/* Brand */}
         <div className="flex items-center gap-2 pr-3 border-r border-border-2">
           <div className="w-[13px] h-[13px] bg-skew-moving flex items-center justify-center">
-            <span className="text-[9px] font-mono text-page font-medium">
-              V
-            </span>
+            <span className="text-[9px] font-mono text-page font-medium">V</span>
           </div>
           <span className="font-sans text-[10px] text-text-2 tracking-[0.06em]">
             vovonacci·TERMINAL
@@ -75,7 +75,7 @@ export default function TopHeader() {
                 {z.label}
               </span>
               <span className="font-mono text-text-2">
-                {formatHM(z.tz, now)}
+                {now ? formatHM(z.tz, now) : "--:--"}
               </span>
             </div>
           ))}
@@ -96,7 +96,7 @@ export default function TopHeader() {
           </div>
           <div className="w-px h-4 bg-border-2" />
           <span className="font-mono text-[10px] text-text-2">
-            {formatHMS("America/Chicago", now)} CT
+            {now ? `${formatHMS("America/Chicago", now)} CT` : "--:--:-- CT"}
           </span>
           <div className="w-px h-4 bg-border-2" />
           <form action={signOut}>

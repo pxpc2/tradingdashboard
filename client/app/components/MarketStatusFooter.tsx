@@ -32,7 +32,7 @@ function isRegularOpen(d: Date): boolean {
   return t >= "09:30:00" && t < "16:00:00";
 }
 
-// Globex (ES, etc.) — 18:00 ET Sun through 17:00 ET Fri with daily 17:00–18:00 halt
+// Globex — 18:00 ET Sun through 17:00 ET Fri with daily 17:00–18:00 halt
 function isGlobexOpen(d: Date): boolean {
   const day = nyDay(d);
   const t = nyTime(d);
@@ -51,9 +51,10 @@ const VENUES: VenueStatus[] = [
 ];
 
 export default function MarketStatusFooter() {
-  const [now, setNow] = useState<Date>(new Date());
+  const [now, setNow] = useState<Date | null>(null);
 
   useEffect(() => {
+    setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 5000);
     return () => clearInterval(t);
   }, []);
@@ -62,15 +63,21 @@ export default function MarketStatusFooter() {
     <div className="bg-panel border-t border-border">
       <div className="max-w-7xl mx-auto px-4 h-6 flex items-center gap-3 text-[10px]">
         {VENUES.map((v) => {
-          const open = v.isOpen(now);
+          // Pre-mount: render in neutral color. Post-mount: compute real status.
+          const open = now ? v.isOpen(now) : false;
+          const color = now
+            ? open
+              ? "text-up"
+              : "text-text-6"
+            : "text-text-6";
           return (
             <div key={v.code} className="flex items-center gap-1">
               <span className="font-sans text-text-4 uppercase tracking-wide">
                 {v.code}
               </span>
               <span
-                className={open ? "text-up" : "text-text-6"}
-                aria-label={open ? "open" : "closed"}
+                className={color}
+                aria-label={now ? (open ? "open" : "closed") : "loading"}
               >
                 ●
               </span>

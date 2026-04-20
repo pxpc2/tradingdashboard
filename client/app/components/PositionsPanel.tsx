@@ -22,9 +22,15 @@ type Props = {
   realTicks: Record<string, TickData>;
   realIsLoading: boolean;
   realError: string | null;
+  /**
+   * When provided, renders only that view without the Real↔SML toggle.
+   * Used by `PositionsSideBySide` to show both views simultaneously.
+   * When omitted, the panel behaves as before (with toggle) for the
+   * old `/` route.
+   */
+  lockedView?: "real" | "sml";
 };
 
-// SML fly width colors — CSS var refs, update live via globals.css
 const WIDTH_COLORS = THEME.width;
 
 // ─── Trade Grouping ───────────────────────────────────────────────────────────
@@ -258,9 +264,12 @@ export default function PositionsPanel({
   realTicks,
   realIsLoading,
   realError,
+  lockedView,
 }: Props) {
-  const [view, setView] = useState<"sml" | "real">("real");
+  const [internalView, setInternalView] = useState<"sml" | "real">("real");
   const [activeWidth, setActiveWidth] = useState<number | null>(null);
+
+  const view = lockedView ?? internalView;
 
   const widths = smlSession?.widths ?? [];
   const effectiveWidth = activeWidth ?? widths[0] ?? null;
@@ -276,10 +285,6 @@ export default function PositionsPanel({
   const latest = widthSnapshots[widthSnapshots.length - 1] ?? null;
   const entry = widthSnapshots[0] ?? null;
   const pnl = latest && entry ? latest.mid - entry.mid : null;
-  const color =
-    effectiveWidth !== null
-      ? (WIDTH_COLORS[effectiveWidth] ?? THEME.text3)
-      : THEME.text3;
   const hasSession = smlSession?.sml_ref != null;
 
   const groups = useMemo(
@@ -300,26 +305,35 @@ export default function PositionsPanel({
     return hasAny ? total : null;
   }, [groups]);
 
+  const headerTitle =
+    lockedView === "real"
+      ? "Real Positions"
+      : lockedView === "sml"
+        ? "SML Fly"
+        : "Posições";
+
   return (
     <div className="h-full flex flex-col">
       <div className="flex items-center mb-2">
         <span className="font-sans text-xs text-text-4 uppercase tracking-wide">
-          Posições
+          {headerTitle}
         </span>
-        <div className="ml-auto flex gap-3 text-xs">
-          <button
-            onClick={() => setView("real")}
-            className={`transition-colors hover:cursor-pointer ${view === "real" ? "text-text-3 border-b border-text-4" : "text-text-5"}`}
-          >
-            Real
-          </button>
-          <button
-            onClick={() => setView("sml")}
-            className={`transition-colors hover:cursor-pointer ${view === "sml" ? "text-text-3 border-b border-text-4" : "text-text-5"}`}
-          >
-            SML Fly
-          </button>
-        </div>
+        {!lockedView && (
+          <div className="ml-auto flex gap-3 text-xs">
+            <button
+              onClick={() => setInternalView("real")}
+              className={`transition-colors hover:cursor-pointer ${view === "real" ? "text-text-3 border-b border-text-4" : "text-text-5"}`}
+            >
+              Real
+            </button>
+            <button
+              onClick={() => setInternalView("sml")}
+              className={`transition-colors hover:cursor-pointer ${view === "sml" ? "text-text-3 border-b border-text-4" : "text-text-5"}`}
+            >
+              SML Fly
+            </button>
+          </div>
+        )}
       </div>
 
       {view === "sml" ? (
@@ -352,10 +366,7 @@ export default function PositionsPanel({
                   {latest?.mid.toFixed(2) ?? "—"}
                 </span>
               </span>
-              <span
-                className="font-mono"
-                style={{ color: pnlColor(pnl) }}
-              >
+              <span className="font-mono" style={{ color: pnlColor(pnl) }}>
                 {pnl !== null ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}` : "—"}
               </span>
             </div>
@@ -667,6 +678,41 @@ function RealPositionsView({
 
 // ─── Fly Mini Chart ───────────────────────────────────────────────────────────
 
+/**
+ * CT formatter used by the lightweight-charts time axis and tooltip.
+ * Supabase stores timestamps in UTC; without these formatters the axis
+ * ticks and crosshair label would display UTC, breaking consistency with
+ * the rest of the dashboard which is CT-native.
+ */
+function formatAxisTickCt(time: unknown): string {
+  if (typeof time !== "number") return "";
+  const date = new Date(time * 1000);
+  return date.toLocaleTimeString("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function formatTooltipCt(time: unknown): string {
+  if (typeof time !== "number") return "";
+  const date = new Date(time * 1000);
+  const datePart = date.toLocaleDateString("en-US", {
+    timeZone: "America/Chicago",
+    month: "short",
+    day: "numeric",
+  });
+  const timePart = date.toLocaleTimeString("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  return `${datePart} ${timePart} CT`;
+}
+
 function FlyMiniChart({
   data,
   widthKey,
@@ -704,6 +750,10 @@ function FlyMiniChart({
         borderColor: border,
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: formatAxisTickCt,
+      },
+      localization: {
+        timeFormatter: formatTooltipCt,
       },
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight,

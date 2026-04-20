@@ -1,5 +1,5 @@
 // Utilities for computing live session character — skew + price
-// Used by both LiveDashboard and TradingPlanDashboard.
+// Used by LiveDashboard, LiveTab, and TradingPlanDashboard.
 // Color constants reference CSS variables — updating globals.css updates everything.
 
 import { THEME, cssVar } from "./theme";
@@ -156,8 +156,6 @@ export function classifySessionFinal(
   return "Reversal day";
 }
 
-// CSS var REFERENCES for JSX inline style use.
-// In JSX: style={{ color: SESSION_TYPE_COLOR[type] }} resolves automatically.
 export const SESSION_TYPE_COLOR: Record<SessionType, string> = {
   "Trend day": THEME.regime.trend,
   "Trend with partial reversal": THEME.regime.partial,
@@ -165,8 +163,6 @@ export const SESSION_TYPE_COLOR: Record<SessionType, string> = {
   "Flat day": THEME.regime.flat,
 };
 
-// Resolved hex values for canvas / ECharts use.
-// Call inside useEffect — reads current CSS values at render time.
 export function resolveSessionTypeColors(): Record<SessionType, string> {
   return {
     "Trend day": cssVar("--color-regime-trend", "#E55A3F"),
@@ -275,3 +271,115 @@ export const TONE_COLOR: Record<
   attention: THEME.tone.attention,
   alert: THEME.tone.alert,
 };
+
+// ─── Auto-generated condition tags ────────────────────────────────────────────
+
+export type TagCode =
+  | "MACRO-DAY"
+  | "PIN-RISK"
+  | "CONFIRMED-TREND"
+  | "UNCONFIRMED-TREND"
+  | "REVERSING"
+  | "VOL-CRUSH"
+  | "SKEW-RISING"
+  | "SKEW-FALLING"
+  | "PUT-IV-BID"
+  | "CALL-IV-BID"
+  | "VIX1D-HOT"
+  | "VIX1D-COOL";
+
+export type Tag = {
+  code: TagCode;
+  color: string;
+  priority: number;
+};
+
+export type TagContext = {
+  price: PriceCharacter;
+  skew: SkewCharacter;
+  putIv: number | null;
+  callIv: number | null;
+  atmIv: number | null;
+  vix1dVixRatio: number | null;
+  hasMacro: boolean;
+  minutesSinceOpen: number;
+};
+
+// Priority: lower number = higher priority (renders first).
+// Max 5 shown.
+export function computeTags(ctx: TagContext): Tag[] {
+  const tags: Tag[] = [];
+
+  // Macro day — always highest priority when present
+  if (ctx.hasMacro) {
+    tags.push({ code: "MACRO-DAY", color: THEME.amber, priority: 1 });
+  }
+
+  // Price + skew cross-reference (only when we have enough data)
+  if (
+    ctx.price.classification !== "insufficient" &&
+    ctx.skew.openingSkew !== null
+  ) {
+    if (ctx.price.classification === "trending") {
+      const skewMoves =
+        ctx.skew.strength === "moving" ||
+        ctx.skew.strength === "strongly_moving";
+      if (skewMoves) {
+        tags.push({ code: "CONFIRMED-TREND", color: THEME.up, priority: 2 });
+      } else {
+        tags.push({
+          code: "UNCONFIRMED-TREND",
+          color: THEME.down,
+          priority: 2,
+        });
+      }
+    } else if (ctx.price.classification === "reversal") {
+      tags.push({ code: "REVERSING", color: THEME.skew.moving, priority: 2 });
+    } else if (
+      ctx.price.classification === "flat" &&
+      ctx.price.magnitude < 0.3 &&
+      ctx.price.character < 0.3
+    ) {
+      tags.push({ code: "PIN-RISK", color: THEME.amber, priority: 3 });
+    }
+
+    // Vol crush — only meaningful after ~2h into session
+    if (
+      ctx.minutesSinceOpen >= 120 &&
+      ctx.price.classification === "flat" &&
+      ctx.price.magnitude < 0.5
+    ) {
+      tags.push({ code: "VOL-CRUSH", color: THEME.indigo, priority: 5 });
+    }
+  }
+
+  // Skew direction — only tag when strongly moving
+  if (ctx.skew.strength === "strongly_moving") {
+    if (ctx.skew.direction === "rising") {
+      tags.push({ code: "SKEW-RISING", color: THEME.amber, priority: 4 });
+    } else if (ctx.skew.direction === "falling") {
+      tags.push({ code: "SKEW-FALLING", color: THEME.indigo, priority: 4 });
+    }
+  }
+
+  // IV structure — call/put dominance
+  if (ctx.putIv !== null && ctx.callIv !== null) {
+    const spread = ctx.putIv - ctx.callIv;
+    if (spread > 0.02) {
+      tags.push({ code: "PUT-IV-BID", color: THEME.down, priority: 6 });
+    } else if (spread < -0.01) {
+      tags.push({ code: "CALL-IV-BID", color: THEME.up, priority: 6 });
+    }
+  }
+
+  // VIX1D/VIX ratio — term-structure signal
+  if (ctx.vix1dVixRatio !== null) {
+    if (ctx.vix1dVixRatio > 1.1) {
+      tags.push({ code: "VIX1D-HOT", color: THEME.amber, priority: 7 });
+    } else if (ctx.vix1dVixRatio < 0.9) {
+      tags.push({ code: "VIX1D-COOL", color: THEME.indigo, priority: 7 });
+    }
+  }
+
+  return tags.sort((a, b) => a.priority - b.priority).slice(0, 5);
+}
