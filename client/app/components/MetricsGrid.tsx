@@ -13,6 +13,8 @@ type Props = {
   vix1dVixRatio: number | null;
   dealerTotal: number | null;
   dealerLocal: number | null;
+  dealerCexTotal: number | null;
+  dealerCexLocal: number | null;
   dealerTopPosStrike: number | null;
   dealerTopPosValue: number | null;
   dealerTopNegStrike: number | null;
@@ -49,6 +51,8 @@ type CellSpec = {
   label: string;
   value: string;
   valueColor?: string;
+  value2?: string;
+  value2Color?: string;
   context?: string;
   contextColor?: string;
 };
@@ -57,6 +61,8 @@ function Cell({
   label,
   value,
   valueColor,
+  value2,
+  value2Color,
   context,
   contextColor,
   col,
@@ -80,6 +86,14 @@ function Cell({
       >
         {value}
       </div>
+      {value2 !== undefined && (
+        <div
+          className="font-mono text-sm font-medium leading-tight"
+          style={{ color: value2Color ?? THEME.text3 }}
+        >
+          {value2}
+        </div>
+      )}
       {context && (
         <div
           className="font-sans text-[9px] uppercase tracking-wide mt-0.5"
@@ -103,6 +117,8 @@ export default function MetricsGrid({
   vix1dVixRatio,
   dealerTotal,
   dealerLocal,
+  dealerCexTotal,
+  dealerCexLocal,
   dealerTopPosStrike,
   dealerTopPosValue,
   dealerTopNegStrike,
@@ -150,9 +166,11 @@ export default function MetricsGrid({
       contextColor: realizedColor,
     },
     {
-      label: "OVERALL GEX",
+      label: "OVERALL GEX/CEX",
       value: fmtGex(dealerTotal),
       valueColor: gexColor(dealerTotal),
+      value2: fmtGex(dealerCexTotal),
+      value2Color: gexColor(dealerCexTotal),
       context:
         dealerTotal === null
           ? undefined
@@ -161,9 +179,11 @@ export default function MetricsGrid({
             : "NEG · OVERALL",
     },
     {
-      label: "SPOT GEX",
+      label: "SPOT GEX/CEX",
       value: fmtGex(dealerLocal),
       valueColor: gexColor(dealerLocal),
+      value2: fmtGex(dealerCexLocal),
+      value2Color: gexColor(dealerCexLocal),
       context: localDiverges
         ? "DIVERGES"
         : dealerLocal === null

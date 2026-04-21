@@ -16,11 +16,8 @@ type Props = {
   openingStraddle: number | null;
   minutesSinceOpen: number;
   timestamp: string | null;
+  charmFlipStrike: number | null; // observation only — gated to afternoon
 };
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Narrative
-// ═══════════════════════════════════════════════════════════════════════════
 
 function priceNarrative(p: PriceCharacter): string {
   if (p.classification === "insufficient") return "AWAITING DATA";
@@ -45,16 +42,10 @@ function skewNarrative(s: SkewCharacter): string {
   return `SKEW ${dir}${suffix}`;
 }
 
-/**
- * Synthesis fires only on clear confirmation / divergence cases.
- * Partial-reversal, pinned, and choppy days get no synthesis — the
- * price + skew phrases alone carry the read.
- */
 function synthesis(p: PriceCharacter, s: SkewCharacter): string {
   if (p.classification === "insufficient") return "";
   const skewActive =
     s.strength === "moving" || s.strength === "strongly_moving";
-
   if (p.classification === "trending") {
     return skewActive ? "SKEW CONFIRMING" : "SKEW DIVERGING";
   }
@@ -69,10 +60,6 @@ function buildNarrative(p: PriceCharacter, s: SkewCharacter): string {
   const synth = synthesis(p, s);
   return synth ? `${base} — ${synth}` : base;
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Evidence line
-// ═══════════════════════════════════════════════════════════════════════════
 
 function Evidence({
   price,
@@ -93,7 +80,6 @@ function Evidence({
   const hasSkew = skew.currentSkew !== null;
   const hasRv = realizedPts !== null && openingStraddle !== null;
 
-  // Arrow hidden for reversal states — focus isn't direction there.
   const showArrow =
     hasPrice &&
     price.classification !== "partial_reversal" &&
@@ -108,7 +94,6 @@ function Evidence({
       <span className="text-text-2">{price.magnitude.toFixed(2)}×</span>
       <span className="text-text-4"> peak · </span>
       <span className="text-text-2">
-        {" "}
         {(price.magnitude * price.character).toFixed(2)}×
       </span>
       <span className="text-text-4"> held</span>
@@ -175,10 +160,6 @@ function Evidence({
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Pill
-// ═══════════════════════════════════════════════════════════════════════════
-
 function Pill({ code, color }: { code: string; color: string }) {
   return (
     <span
@@ -189,10 +170,6 @@ function Pill({ code, color }: { code: string; color: string }) {
     </span>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Main
-// ═══════════════════════════════════════════════════════════════════════════
 
 function formatTimestamp(ts: string | null): string | null {
   if (!ts) return null;
@@ -218,10 +195,14 @@ export default function LiveReadPanel({
   openingStraddle,
   minutesSinceOpen,
   timestamp,
+  charmFlipStrike,
 }: Props) {
   const tags = computeTags({ price, skew, minutesSinceOpen });
   const narrative = buildNarrative(price, skew);
   const timeStr = formatTimestamp(timestamp);
+
+  // Charm flip shown only after 13:00 ET (210min since open) — noise before then
+  const showCharmFlip = charmFlipStrike !== null && minutesSinceOpen >= 210;
 
   return (
     <div className="relative bg-page border border-border-2 border-l-2 border-l-amber px-3 py-2.5">
@@ -255,6 +236,15 @@ export default function LiveReadPanel({
         realizedPct={realizedPct}
         openingStraddle={openingStraddle}
       />
+
+      {showCharmFlip && (
+        <div className="font-mono text-[10px] text-text-5 mt-1.5">
+          <span className="text-text-6 uppercase tracking-wide">
+            charm flip obs{" "}
+          </span>
+          {charmFlipStrike}
+        </div>
+      )}
     </div>
   );
 }

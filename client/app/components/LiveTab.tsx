@@ -15,7 +15,7 @@ import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
 import { useWatchlist } from "../hooks/useWatchlist";
 import { useRealPositions } from "../hooks/useRealPositions";
 import { useDealerSnapshot } from "../hooks/useDealerSnapshot";
-import { StraddleSnapshot, RtmSession } from "../types";
+import { StraddleSnapshot, RtmSession, DealerStrikeRow } from "../types";
 import {
   computeSkewCharacter,
   computePriceCharacter,
@@ -27,6 +27,8 @@ type Props = {
 };
 
 const CORE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL, "VIX", "VIX1D"];
+const CHARM_FLIP_MIN_MINUTES = 210; // 13:00 ET — before this charm flip is noise
+const CHARM_FLIP_RANGE_PT = 50; // only look ±50pt from spot
 
 function isSpxOpenFor(d: Date): boolean {
   const day = d.toLocaleDateString("en-US", {
@@ -76,6 +78,40 @@ function minutesSinceOpenFor(d: Date): number {
   return Math.max(0, mins - openMins);
 }
 
+// Walk CEX strikes near spot, find first adjacent sign change = charm flip level
+function computeCharmFlip(
+  strikes: DealerStrikeRow[] | null,
+  spot: number | null,
+): number | null {
+  if (!strikes || !spot || strikes.length === 0) return null;
+
+  const near = strikes
+    .filter((r) => Math.abs(r[0] - spot) <= CHARM_FLIP_RANGE_PT && r[1] !== 0)
+    .sort((a, b) => a[0] - b[0]);
+
+  if (near.length < 2) return null;
+
+  let closest: number | null = null;
+  let closestDist = Infinity;
+
+  for (let i = 0; i < near.length - 1; i++) {
+    const curr = near[i];
+    const next = near[i + 1];
+    if (Math.sign(curr[1]) !== Math.sign(next[1])) {
+      // Pick whichever of the two strikes is closer to spot
+      const candidate =
+        Math.abs(curr[0] - spot) < Math.abs(next[0] - spot) ? curr[0] : next[0];
+      const dist = Math.abs(candidate - spot);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = candidate;
+      }
+    }
+  }
+
+  return closest;
+}
+
 export default function LiveTab({
   initialStraddleData,
   initialSmlSession,
@@ -97,7 +133,7 @@ export default function LiveTab({
   const { skewHistory, latestSkew, avgSkew } = useSkewHistory();
   const { smlSession, flySnapshots } = useFlyData(today, initialSmlSession);
   const { entries: watchlistEntries } = useWatchlist();
-  const { gex: latestGex } = useDealerSnapshot(today);
+  const { gex: latestGex, cex: latestCex } = useDealerSnapshot(today);
 
   const {
     legs: realLegs,
@@ -206,6 +242,12 @@ export default function LiveTab({
 
   const atmIv = latestSkew?.atm_iv ?? null;
 
+  // Charm flip — computed from latest CEX snapshot strikes
+  const charmFlipStrike = useMemo(
+    () => computeCharmFlip(latestCex?.strikes ?? null, liveSpx),
+    [latestCex, liveSpx],
+  );
+
   const instruments = useMemo(
     () => [
       {
@@ -259,6 +301,7 @@ export default function LiveTab({
         openingStraddle={opening?.straddle_mid ?? null}
         minutesSinceOpen={minutesSinceOpen}
         timestamp={lastSnapshotTs}
+        charmFlipStrike={charmFlipStrike}
       />
 
       <InstrumentCards instruments={instruments} />
@@ -274,6 +317,8 @@ export default function LiveTab({
         vix1dVixRatio={vix1dVixRatio}
         dealerTotal={latestGex?.total ?? null}
         dealerLocal={latestGex?.local_total ?? null}
+        dealerCexTotal={latestCex?.total ?? null}
+        dealerCexLocal={latestCex?.local_total ?? null}
         dealerTopPosStrike={latestGex?.top_pos_strike ?? null}
         dealerTopPosValue={latestGex?.top_pos_value ?? null}
         dealerTopNegStrike={latestGex?.top_neg_strike ?? null}
