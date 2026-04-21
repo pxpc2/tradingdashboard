@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { signOut } from "../login/actions";
 import { FaSignOutAlt } from "react-icons/fa";
+import Converter from "./Converter";
 
 type Zone = { label: string; tz: string };
 
@@ -32,9 +33,11 @@ function formatHMS(tz: string, d: Date): string {
   });
 }
 
-export default function TopHeader() {
-  // null on server and during first client render; populated after mount.
-  // This guarantees server HTML === initial client HTML, no hydration mismatch.
+type Props = {
+  initialBasis: number | null;
+};
+
+export default function TopHeader({ initialBasis }: Props) {
   const [now, setNow] = useState<Date | null>(null);
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
 
@@ -45,8 +48,7 @@ export default function TopHeader() {
   }, []);
 
   useEffect(() => {
-    // TODO: wire real tick latency from useLiveTick in a later chunk.
-    setLatencyMs(12);
+    setLatencyMs(12); // TODO: wire real tick latency from useLiveTick
   }, []);
 
   const isLive = latencyMs !== null;
@@ -55,9 +57,11 @@ export default function TopHeader() {
     <div className="border-b border-border bg-panel sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 flex items-center h-7 gap-3">
         {/* Brand */}
-        <div className="flex items-center gap-2 pr-3 border-r border-border-2">
+        <div className="flex items-center gap-2 pr-3 border-r border-border-2 shrink-0">
           <div className="w-[13px] h-[13px] bg-skew-moving flex items-center justify-center">
-            <span className="text-[9px] font-mono text-page font-medium">V</span>
+            <span className="text-[9px] font-mono text-page font-medium">
+              V
+            </span>
           </div>
           <span className="font-sans text-[10px] text-text-2 tracking-[0.06em]">
             vovonacci·TERMINAL
@@ -65,7 +69,7 @@ export default function TopHeader() {
         </div>
 
         {/* Timezones */}
-        <div className="flex-1 flex items-center gap-3 text-[10px] overflow-hidden">
+        <div className="flex items-center gap-3 text-[10px]">
           {ZONES.map((z) => (
             <div
               key={z.label}
@@ -80,6 +84,14 @@ export default function TopHeader() {
             </div>
           ))}
         </div>
+
+        <div className="w-px h-4 bg-border-2" />
+
+        {/* Converter */}
+        <Converter basis={initialBasis} />
+
+        {/* Spacer */}
+        <div className="flex-1" />
 
         {/* Latency + clock + sign out */}
         <div className="flex items-center gap-3 shrink-0">
