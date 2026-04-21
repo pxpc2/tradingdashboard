@@ -88,7 +88,7 @@ export default function TopHeader({ initialBasis }: Props) {
         <div className="w-px h-4 bg-border-2" />
 
         {/* Converter */}
-        <Converter basis={initialBasis} />
+        <Converter initialBasis={initialBasis} />
 
         {/* Spacer */}
         <div className="flex-1" />
