@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import LiveReadPanel from "./LiveReadPanel";
 import InstrumentCards from "./InstrumentCards";
 import MetricsGrid from "./MetricsGrid";
-import CharacterIvStructure from "./CharacterIvStructure";
 import IntradayCharts from "./IntradayCharts";
 import PositionsSideBySide from "./PositionsSideBySide";
 import CalendarFixedHeight from "./CalendarFixedHeight";
@@ -15,6 +14,7 @@ import { useFlyData } from "../hooks/useFlyData";
 import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
 import { useWatchlist } from "../hooks/useWatchlist";
 import { useRealPositions } from "../hooks/useRealPositions";
+import { useDealerSnapshot } from "../hooks/useDealerSnapshot";
 import { StraddleSnapshot, RtmSession } from "../types";
 import {
   computeSkewCharacter,
@@ -97,6 +97,7 @@ export default function LiveTab({
   const { skewHistory, latestSkew, avgSkew } = useSkewHistory();
   const { smlSession, flySnapshots } = useFlyData(today, initialSmlSession);
   const { entries: watchlistEntries } = useWatchlist();
+  const { gex: latestGex } = useDealerSnapshot(today);
 
   const {
     legs: realLegs,
@@ -149,16 +150,16 @@ export default function LiveTab({
   const opening = todayRows[0] ?? null;
   const liveSpx = spxTick?.mid ?? latest?.spx_ref ?? null;
 
-  const openingSkew = useMemo(() => {
-    return (
+  const openingSkew = useMemo(
+    () =>
       skewHistory.find(
         (s) =>
           new Date(s.created_at).toLocaleDateString("en-CA", {
             timeZone: "America/New_York",
           }) === today,
-      ) ?? null
-    );
-  }, [skewHistory, today]);
+      ) ?? null,
+    [skewHistory, today],
+  );
 
   const skewPctile = useMemo(() => {
     if (!latestSkew || skewHistory.length === 0) return null;
@@ -204,8 +205,6 @@ export default function LiveTab({
     vix1dLast && vixLast && vixLast > 0 ? vix1dLast / vixLast : null;
 
   const atmIv = latestSkew?.atm_iv ?? null;
-  const callIv = latestSkew?.call_iv ?? null;
-  const putIv = latestSkew?.put_iv ?? null;
 
   const instruments = useMemo(
     () => [
@@ -273,6 +272,12 @@ export default function LiveTab({
         skew={latestSkew?.skew ?? null}
         skewPctile={skewPctile}
         vix1dVixRatio={vix1dVixRatio}
+        dealerTotal={latestGex?.total ?? null}
+        dealerLocal={latestGex?.local_total ?? null}
+        dealerTopPosStrike={latestGex?.top_pos_strike ?? null}
+        dealerTopPosValue={latestGex?.top_pos_value ?? null}
+        dealerTopNegStrike={latestGex?.top_neg_strike ?? null}
+        dealerTopNegValue={latestGex?.top_neg_value ?? null}
       />
 
       <IntradayCharts

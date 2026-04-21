@@ -61,3 +61,54 @@ export type SpxSnapshot = {
 };
 
 export type ChartRange = "1H" | "4H" | "1D" | "3D" | "5D";
+
+// ── Dealer data ──────────────────────────────────────────────────────────────
+
+// One element of the strikes array from the API
+// [strike, net, call_metric, put_metric, call_mid, put_mid]
+export type DealerStrikeRow = [
+  number, // strike
+  number, // net (gex or cex)
+  number, // call side
+  number, // put side
+  number | null, // call_mid
+  number | null, // put_mid
+];
+
+export type DealerMetric = "gex" | "cex";
+
+export type DealerStrikeSnapshot = {
+  id: number;
+  created_at: string;
+  date: string; // YYYY-MM-DD
+  bar_time: string; // HH:MM ET
+  metric: DealerMetric;
+  total: number;
+  strikes: DealerStrikeRow[];
+  spot_ref: number | null;
+  local_total: number | null;
+  top_pos_strike: number | null;
+  top_pos_value: number | null;
+  top_neg_strike: number | null;
+  top_neg_value: number | null;
+};
+
+export type DealerTimelineBar = {
+  ts: string; // HH:MM ET
+  gex: number;
+  call_gex: number;
+  put_gex: number;
+  dex: number;
+};
+
+export type DealerTimelineSnapshot = {
+  id: number;
+  created_at: string;
+  date: string;
+  data: DealerTimelineBar[];
+  open_gex: number | null;
+  close_gex: number | null;
+  min_gex: number | null;
+  max_gex: number | null;
+  regime_open: "neg" | "pos" | null;
+};
