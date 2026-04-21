@@ -226,7 +226,7 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
     <div>
       <div className="flex justify-between items-center mb-1.5">
         <span className="font-sans text-xs text-text-4 uppercase tracking-wide">
-          25Δ Skew
+          25Δ Skew historical
         </span>
         {avgSkew !== null && (
           <span className="font-mono text-xs text-text-5">

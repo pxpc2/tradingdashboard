@@ -119,7 +119,7 @@ export default function MetricsGrid({
         skewPctile !== null && skewPctile >= 75 ? THEME.amber : THEME.text4,
     },
     {
-      label: "VOL RATIO",
+      label: "1D VOL RATIO",
       value: fmtNum(vix1dVixRatio),
       valueColor: volRatioColor,
       context: "1D/30D",

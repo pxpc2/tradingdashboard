@@ -99,7 +99,7 @@ export default function StraddleSpxChart({
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,
-      title: "STR",
+      title: "STRAD",
       priceScaleId: "right",
     });
 
@@ -152,14 +152,18 @@ export default function StraddleSpxChart({
 
     const straddlePoints = data
       .map((s) => ({
-        time: Math.floor(new Date(s.created_at).getTime() / 1000) as UTCTimestamp,
+        time: Math.floor(
+          new Date(s.created_at).getTime() / 1000,
+        ) as UTCTimestamp,
         value: s.straddle_mid,
       }))
       .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
 
     const spxPoints = data
       .map((s) => ({
-        time: Math.floor(new Date(s.created_at).getTime() / 1000) as UTCTimestamp,
+        time: Math.floor(
+          new Date(s.created_at).getTime() / 1000,
+        ) as UTCTimestamp,
         value: s.spx_ref,
       }))
       .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
@@ -238,7 +242,7 @@ export default function StraddleSpxChart({
     <div>
       <div className="flex justify-between items-center mb-1.5">
         <span className="font-sans text-xs text-text-4 uppercase tracking-wide">
-          IV vs RV
+          Implied vs Realized intraday
         </span>
         <div className="flex gap-3 text-xs">
           <span className="flex items-center gap-1">

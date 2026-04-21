@@ -275,14 +275,6 @@ export default function LiveTab({
         vix1dVixRatio={vix1dVixRatio}
       />
 
-      <CharacterIvStructure
-        skewChar={skewChar}
-        priceChar={priceChar}
-        callIv={callIv}
-        putIv={putIv}
-        atmIv={atmIv}
-      />
-
       <IntradayCharts
         straddleData={todayRows}
         currentSpx={spxTick?.mid ?? null}
