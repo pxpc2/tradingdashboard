@@ -7,7 +7,7 @@ import SkewHistoryChart from "./SkewHistoryChart";
 import MacroEvents from "./MacroEvents";
 import PositionsPanel from "./PositionsPanel";
 import WatchlistStrip from "./WatchlistStrip";
-import EsSpxConverter from "./Converter";
+import Converter from "./Converter";
 import SkewCharacterBadge from "./SkewCharacterBadge";
 import LiveReadLine from "./LiveReadLine";
 import { useStraddleData } from "../hooks/useStraddleData";
@@ -249,7 +249,7 @@ export default function LiveDashboard({
             )}
             <div className="hidden md:flex items-center gap-3">
               <div className="w-px h-4 bg-border" />
-              <EsSpxConverter initialBasis={liveBasis} compact />
+              <Converter initialBasis={liveBasis} />
             </div>
             <div className="w-px h-4 bg-border" />
             <Link href="/analysis">
