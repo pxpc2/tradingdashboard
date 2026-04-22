@@ -2,7 +2,7 @@
 
 import StraddleSpxChart from "./StraddleSpxChart";
 import SkewHistoryChart from "./SkewHistoryChart";
-import { StraddleSnapshot, SkewSnapshot } from "../types";
+import { StraddleSnapshot, SkewSnapshot, DealerStrikeSnapshot } from "../types";
 
 type Props = {
   straddleData: StraddleSnapshot[];
@@ -10,6 +10,7 @@ type Props = {
   openingSkew: SkewSnapshot | null;
   skewHistory: SkewSnapshot[];
   avgSkew: number | null;
+  dealerGex: DealerStrikeSnapshot | null;
 };
 
 export default function IntradayCharts({
@@ -18,6 +19,7 @@ export default function IntradayCharts({
   openingSkew,
   skewHistory,
   avgSkew,
+  dealerGex,
 }: Props) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 border border-border-2">
@@ -26,6 +28,7 @@ export default function IntradayCharts({
           data={straddleData}
           currentSpxPrice={currentSpx}
           openingSkew={openingSkew}
+          dealerGex={dealerGex}
         />
       </div>
       <div className="bg-page p-2 md:border-l md:border-border-2">

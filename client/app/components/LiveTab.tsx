@@ -124,7 +124,9 @@ export default function LiveTab({
 
   const [clockTick, setClockTick] = useState<Date | null>(null);
   useEffect(() => {
-    setClockTick(new Date());
+    // Defer initial set to the next microtask — avoids React 19's
+    // "setState synchronously in effect" cascading-render warning.
+    queueMicrotask(() => setClockTick(new Date()));
     const t = setInterval(() => setClockTick(new Date()), 10_000);
     return () => clearInterval(t);
   }, []);
@@ -331,6 +333,7 @@ export default function LiveTab({
         openingSkew={openingSkew}
         skewHistory={skewHistory}
         avgSkew={avgSkew}
+        dealerGex={latestGex}
       />
 
       <PositionsSideBySide

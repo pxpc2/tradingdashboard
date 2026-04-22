@@ -1,17 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useMemo, useCallback } from "react";
-import {
-  createChart,
-  LineSeries,
-  UTCTimestamp,
-  ISeriesApi,
-  SeriesType,
-  IChartApi,
-  IPriceLine,
-  createTextWatermark,
-} from "lightweight-charts";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useRef } from "react";
+import * as echarts from "echarts";
 import { SkewSnapshot } from "../types";
+import { resolveChartPalette } from "../lib/chartPalette";
 import { cssVar } from "../lib/theme";
 
 type Props = {
@@ -19,214 +12,277 @@ type Props = {
   avgSkew: number | null;
 };
 
-function findDayBoundaries(data: SkewSnapshot[]): UTCTimestamp[] {
-  const boundaries: UTCTimestamp[] = [];
-  let prevDate: string | null = null;
-  for (const s of data) {
-    const etDate = new Date(s.created_at).toLocaleDateString("en-CA", {
-      timeZone: "America/New_York",
-    });
-    if (prevDate !== null && etDate !== prevDate) {
-      boundaries.push(
-        Math.floor(new Date(s.created_at).getTime() / 1000) as UTCTimestamp,
-      );
-    }
-    prevDate = etDate;
-  }
-  return boundaries;
+const SESSION_BREAK_MS = 30 * 60 * 1000;
+
+function formatCTDate(utcMs: number): string {
+  return new Date(utcMs).toLocaleDateString("en-US", {
+    timeZone: "America/Chicago",
+    month: "numeric",
+    day: "numeric",
+  });
+}
+
+function formatCTDateTime(utcMs: number): string {
+  const date = new Date(utcMs).toLocaleDateString("en-US", {
+    timeZone: "America/Chicago",
+    month: "short",
+    day: "numeric",
+  });
+  const time = new Date(utcMs).toLocaleTimeString("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return `${date} ${time} CT`;
 }
 
 export default function SkewHistoryChart({ data, avgSkew }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const overlayRef = useRef<HTMLCanvasElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<SeriesType> | null>(null);
-  const avgLineRef = useRef<IPriceLine | null>(null);
-  const boundariesRef = useRef<UTCTimestamp[]>([]);
+  const chartRef = useRef<any>(null);
+  const indexMapRef = useRef<(number | null)[]>([]);
 
-  const today = useMemo(
-    () =>
-      new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" }),
-    [],
-  );
-
-  const drawSeparators = useCallback(() => {
-    if (!overlayRef.current || !chartRef.current || !containerRef.current)
-      return;
-    const canvas = overlayRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const w = containerRef.current.clientWidth;
-    const h = 150;
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, w, h);
-
-    const strokeColor = cssVar("--color-text-5", "#44433F");
-
-    for (const ts of boundariesRef.current) {
-      const x = chartRef.current.timeScale().timeToCoordinate(ts);
-      if (x === null || x < 0 || x > w) continue;
-      ctx.save();
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = 1;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
-      ctx.stroke();
-      ctx.restore();
-    }
-  }, []);
-
+  // ── Init ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
-
-    const panel = cssVar("--color-panel", "#121214");
-    const border = cssVar("--color-border", "#1f1f21");
-    const text5 = cssVar("--color-text-5", "#44433F");
-    const text6 = cssVar("--color-text-6", "#2F2E2C");
+    const P = resolveChartPalette();
     const skewMoving = cssVar("--color-skew-moving", "#9B7BB3");
+    const panel = cssVar("--color-panel", "#121214");
 
-    const chart = createChart(containerRef.current, {
-      layout: {
-        background: { color: panel },
-        textColor: text5,
-      },
-      grid: {
-        vertLines: { color: border },
-        horzLines: { color: border },
-      },
-      crosshair: {
-        vertLine: { color: text6 },
-        horzLine: { color: text6 },
-      },
-      rightPriceScale: {
-        borderColor: border,
-        scaleMargins: { top: 0.1, bottom: 0.1 },
-      },
-      localization: {
-        timeFormatter: (time: number) => {
-          const d = new Date(time * 1000);
-          return d.toLocaleDateString("en-US", {
-            timeZone: "America/Chicago",
-            month: "short",
-            day: "numeric",
-          });
+    const chart = echarts.init(containerRef.current, null, {
+      renderer: "canvas",
+    });
+    chartRef.current = chart;
+
+    chart.setOption({
+      backgroundColor: P.bg,
+      animation: false,
+      grid: { top: 8, right: 56, bottom: 40, left: 8 },
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: P.bg,
+        borderColor: P.border2,
+        textStyle: { color: P.text2, fontFamily: "monospace", fontSize: 11 },
+        axisPointer: {
+          type: "cross",
+          crossStyle: { color: P.text6, width: 1 },
+        },
+        formatter: (params: any[]) => {
+          if (!params?.length) return "";
+          const p = params.find((x: any) => x.value[1] !== null);
+          if (!p) return "";
+          const idx = p.value[0];
+          const utcMs = indexMapRef.current[idx];
+          if (utcMs === null || utcMs === undefined) return "";
+          return (
+            `<span style="color:${skewMoving}">Skew: ${(p.value[1] as number).toFixed(3)}</span><br/>` +
+            `<span style="color:${P.text5};font-size:10px">${formatCTDateTime(utcMs)}</span>`
+          );
         },
       },
-      timeScale: {
-        borderColor: border,
-        timeVisible: true,
-        secondsVisible: false,
-        rightOffset: 120,
-        tickMarkFormatter: (time: number) => {
-          const d = new Date(time * 1000);
-          return d.toLocaleDateString("en-US", {
-            timeZone: "America/Chicago",
-            month: "numeric",
-            day: "numeric",
-          });
+      xAxis: {
+        type: "category",
+        boundaryGap: false,
+        axisLine: { lineStyle: { color: P.border } },
+        axisTick: { show: false },
+        axisPointer: {
+          label: {
+            backgroundColor: panel,
+            borderColor: P.border2,
+            borderWidth: 1,
+            color: P.text2,
+            fontFamily: "monospace",
+            fontSize: 10,
+            padding: [3, 6],
+            formatter: (params: any) => {
+              const idx = parseInt(params.value, 10);
+              const utcMs = indexMapRef.current[idx];
+              if (!utcMs) return "";
+              return formatCTDateTime(utcMs);
+            },
+          },
         },
+        axisLabel: {
+          color: P.text5,
+          fontSize: 10,
+          hideOverlap: true,
+          formatter: (value: string) => {
+            const idx = parseInt(value, 10);
+            const utcMs = indexMapRef.current[idx];
+            if (!utcMs) return "";
+            return formatCTDate(utcMs);
+          },
+        },
+        splitLine: { lineStyle: { color: P.border, opacity: 0.5 } },
       },
-      width: containerRef.current.clientWidth,
-      height: 150,
-    });
-
-    const series = chart.addSeries(LineSeries, {
-      color: skewMoving,
-      lineWidth: 1,
-      priceLineVisible: false,
-      lastValueVisible: true,
-      title: "Skew",
-    });
-
-    createTextWatermark(chart.panes()[0], {
-      horzAlign: "center",
-      vertAlign: "center",
-      lines: [
+      yAxis: {
+        type: "value",
+        position: "right",
+        axisLine: { lineStyle: { color: P.border } },
+        axisLabel: { color: P.text5, fontSize: 10 },
+        splitLine: { lineStyle: { color: P.border, opacity: 0.5 } },
+        scale: true,
+      },
+      dataZoom: [
         {
-          text: "25Δ Skew History",
-          color: "rgba(232, 230, 224, 0.10)",
-          fontSize: 18,
+          type: "inside",
+          throttle: 40,
+          zoomOnMouseWheel: true,
+          moveOnMouseMove: true,
+          moveOnMouseWheel: false,
+          preventDefaultMouseMove: true,
+        },
+        {
+          type: "slider",
+          height: 14,
+          bottom: 4,
+          borderColor: "transparent",
+          backgroundColor: panel,
+          fillerColor: `${P.text6}88`,
+          handleStyle: { color: P.text5, borderColor: P.border2 },
+          moveHandleStyle: { color: P.text5 },
+          textStyle: { color: P.text5, fontSize: 9 },
+          labelFormatter: (value: number) => {
+            const utcMs = indexMapRef.current[Math.round(value)];
+            return utcMs ? formatCTDate(utcMs) : "";
+          },
+        },
+      ],
+      series: [
+        {
+          name: "Skew",
+          type: "line",
+          data: [],
+          lineStyle: { color: skewMoving, width: 1 },
+          itemStyle: { color: skewMoving },
+          symbol: "none",
+          connectNulls: false,
+          endLabel: {
+            show: true,
+            formatter: (params: any) =>
+              typeof params.value[1] === "number"
+                ? params.value[1].toFixed(3)
+                : "",
+            backgroundColor: skewMoving,
+            color: P.bg,
+            padding: [2, 4],
+            borderRadius: 2,
+            fontSize: 10,
+            fontFamily: "monospace",
+            fontWeight: 500,
+          },
+          markLine: { silent: true, symbol: "none", data: [] },
         },
       ],
     });
 
-    chartRef.current = chart;
-    seriesRef.current = series;
-
-    chart.timeScale().subscribeVisibleTimeRangeChange(drawSeparators);
-
-    const handleResize = () => {
-      if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth });
-        drawSeparators();
-      }
-    };
-    window.addEventListener("resize", handleResize);
+    const observer = new ResizeObserver(() => chart.resize());
+    observer.observe(containerRef.current);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
-      chart.timeScale().unsubscribeVisibleTimeRangeChange(drawSeparators);
-      chart.remove();
+      observer.disconnect();
+      chart.dispose();
+      chartRef.current = null;
     };
-  }, [drawSeparators]);
+  }, []);
 
+  // ── Data ────────────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!seriesRef.current || !chartRef.current) return;
+    if (!chartRef.current || !data.length) return;
+    const P = resolveChartPalette();
 
-    boundariesRef.current = findDayBoundaries(data);
+    const seen = new Set<number>();
+    const sorted = data
+      .filter((s) => {
+        const t = new Date(s.created_at).getTime();
+        if (seen.has(t)) return false;
+        seen.add(t);
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+      );
 
-    const points = data
-      .map((s) => ({
-        time: Math.floor(
-          new Date(s.created_at).getTime() / 1000,
-        ) as UTCTimestamp,
-        value: s.skew,
-      }))
-      .filter((p, i, arr) => i === 0 || p.time > arr[i - 1].time);
+    const indexMap: (number | null)[] = [];
+    const points: ([number, number] | [number, null])[] = [];
+    const sessionStartIndices: number[] = [];
+    let prevUtcMs: number | null = null;
+    let prevDateCT: string | null = null;
+    let idx = 0;
 
-    seriesRef.current.setData(points);
+    for (const s of sorted) {
+      const utcMs = new Date(s.created_at).getTime();
+      const dateCT = new Date(utcMs).toLocaleDateString("en-CA", {
+        timeZone: "America/Chicago",
+      });
 
-    if (avgLineRef.current) {
-      try {
-        seriesRef.current.removePriceLine(avgLineRef.current);
-      } catch {}
-      avgLineRef.current = null;
+      if (prevUtcMs !== null && utcMs - prevUtcMs > SESSION_BREAK_MS) {
+        indexMap.push(null);
+        points.push([idx, null]);
+        idx++;
+      }
+
+      if (prevDateCT !== dateCT) {
+        sessionStartIndices.push(idx);
+      }
+
+      indexMap.push(utcMs);
+      points.push([idx, s.skew]);
+      idx++;
+      prevUtcMs = utcMs;
+      prevDateCT = dateCT;
     }
+
+    indexMapRef.current = indexMap;
+    const categories = indexMap.map((_, i) => String(i));
+
+    const markLineData: any[] = [];
 
     if (avgSkew !== null) {
-      try {
-        avgLineRef.current = seriesRef.current.createPriceLine({
-          price: avgSkew,
-          color: cssVar("--color-text-4", "#555350"),
-          lineWidth: 1,
-          lineStyle: 2,
-          axisLabelTextColor: cssVar("--color-page", "#0a0a0a"),
-          axisLabelVisible: true,
-          title: "",
-        });
-      } catch {}
+      markLineData.push({
+        yAxis: avgSkew,
+        lineStyle: { color: P.text4, type: "dashed", width: 1 },
+        label: {
+          show: true,
+          position: "insideEndTop",
+          formatter: `avg ${avgSkew.toFixed(3)}`,
+          color: P.text4,
+          fontSize: 9,
+          fontFamily: "monospace",
+        },
+      });
     }
 
-    try {
-      chartRef.current.timeScale().fitContent();
-    } catch {}
+    // Day separators — more visible now
+    sessionStartIndices.slice(1).forEach((startIdx) => {
+      markLineData.push({
+        xAxis: startIdx,
+        lineStyle: { color: P.text4, type: "dashed", width: 1, opacity: 0.6 },
+        label: { show: false },
+      });
+    });
 
-    drawSeparators();
-  }, [data, avgSkew, today, drawSeparators]);
+    chartRef.current.setOption(
+      {
+        xAxis: { data: categories },
+        series: [
+          {
+            name: "Skew",
+            data: points,
+            markLine: { silent: true, symbol: "none", data: markLineData },
+          },
+        ],
+      },
+      false,
+    );
+  }, [data, avgSkew]);
 
   return (
     <div>
       <div className="flex justify-between items-center mb-1.5">
         <span className="font-sans text-xs text-text-4 uppercase tracking-wide">
-          25Δ Skew historical
+          25Δ Skew Historical
         </span>
         {avgSkew !== null && (
           <span className="font-mono text-xs text-text-5">
@@ -234,19 +290,7 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
           </span>
         )}
       </div>
-      <div style={{ position: "relative" }}>
-        <div ref={containerRef} className="w-full rounded overflow-hidden" />
-        <canvas
-          ref={overlayRef}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            pointerEvents: "none",
-            zIndex: 10,
-          }}
-        />
-      </div>
+      <div ref={containerRef} className="w-full" style={{ height: 150 }} />
     </div>
   );
 }
