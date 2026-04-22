@@ -112,16 +112,18 @@ export function computePriceCharacter(
   if (currentMoveAbs < 2) direction = "flat";
   else direction = currentMoveSigned > 0 ? "up" : "down";
 
+  // Unified classification — no more magnitude-dependent branches.
+  // A 0.5× range session that holds half its move is a partial reversal
+  // just as much as a 1.5× range session that holds half.
   let classification: PriceCharacter["classification"];
   if (magnitude < 0.3) {
     classification = "flat";
   } else if (character >= 0.7) {
     classification = "trending";
-  } else if (magnitude >= 1.0) {
-    if (character >= 0.4) classification = "partial_reversal";
-    else classification = "reversal";
+  } else if (character >= 0.4) {
+    classification = "partial_reversal";
   } else {
-    classification = "flat";
+    classification = "reversal";
   }
 
   return {
@@ -265,16 +267,14 @@ export const SKEW_STRENGTH_COLOR: Record<SkewCharacter["strength"], string> = {
   strongly_moving: THEME.skew.strong,
 };
 
-export const TONE_COLOR: Record<
-  "quiet" | "normal" | "attention" | "alert",
-  string
-> = {
+type Tone = "quiet" | "normal" | "attention" | "alert";
+
+export const TONE_COLOR: Record<Tone, string> = {
   quiet: THEME.tone.quiet,
   normal: THEME.tone.normal,
   attention: THEME.tone.attention,
   alert: THEME.tone.alert,
 };
-
 // ─── Auto-generated condition tags ────────────────────────────────────────────
 
 export type TagCode =
@@ -304,7 +304,6 @@ export type TagContext = {
 export function computeTags(ctx: TagContext): Tag[] {
   const tags: Tag[] = [];
 
-  // Guard: need enough data for meaningful classification.
   if (
     ctx.price.classification === "insufficient" ||
     ctx.skew.openingSkew === null
@@ -322,7 +321,6 @@ export function computeTags(ctx: TagContext): Tag[] {
         ? THEME.down
         : THEME.text;
 
-  // ── TREND variants ────────────────────────────────────────────────────
   if (ctx.price.classification === "trending") {
     tags.push(
       skewActive
@@ -331,10 +329,6 @@ export function computeTags(ctx: TagContext): Tag[] {
     );
   }
 
-  // ── REVERSAL variants ─────────────────────────────────────────────────
-  // Skew still moving while price reverts → options haven't accepted the
-  // reversal yet, possibly a new trend forming in the opposite direction.
-  // Skew calm while price reverts → options confirm the move is done.
   if (ctx.price.classification === "reversal") {
     tags.push(
       skewActive
@@ -343,7 +337,6 @@ export function computeTags(ctx: TagContext): Tag[] {
     );
   }
 
-  // ── FLAT DAY (pin risk) ───────────────────────────────────────────────
   if (
     ctx.price.classification === "flat" &&
     ctx.price.magnitude < 0.3 &&
@@ -352,7 +345,6 @@ export function computeTags(ctx: TagContext): Tag[] {
     tags.push({ code: "FLAT-DAY", color: THEME.indigo, priority: 3 });
   }
 
-  // ── Skew acceleration ─────────────────────────────────────────────────
   if (ctx.skew.strength === "strongly_moving") {
     if (ctx.skew.direction === "rising") {
       tags.push({ code: "SKEW-RISING", color: THEME.amber, priority: 4 });
@@ -361,7 +353,6 @@ export function computeTags(ctx: TagContext): Tag[] {
     }
   }
 
-  // ── RV < IV (realized tracking well below implied, late session) ──────
   if (
     ctx.minutesSinceOpen >= 120 &&
     ctx.price.classification === "flat" &&

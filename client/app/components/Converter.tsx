@@ -49,7 +49,7 @@ export default function Converter({ initialBasis }: Props) {
     <div className="flex items-center gap-2 text-[10px]">
       {basis != null && (
         <>
-          <span className="font-mono text-text-4">B {basis.toFixed(2)}</span>
+          <span className="font-mono text-text-4">B-{basis.toFixed(2)}</span>
           <div className="w-px h-3 bg-border-2" />
         </>
       )}

@@ -2,7 +2,9 @@
 
 import StraddleSpxChart from "./StraddleSpxChart";
 import SkewHistoryChart from "./SkewHistoryChart";
-import { StraddleSnapshot, SkewSnapshot, DealerStrikeSnapshot } from "../types";
+import { StraddleSnapshot, SkewSnapshot } from "../types";
+
+type Wall = { strike: number; value: number };
 
 type Props = {
   straddleData: StraddleSnapshot[];
@@ -10,7 +12,8 @@ type Props = {
   openingSkew: SkewSnapshot | null;
   skewHistory: SkewSnapshot[];
   avgSkew: number | null;
-  dealerGex: DealerStrikeSnapshot | null;
+  balanceWalls: Wall[];
+  testWalls: Wall[];
 };
 
 export default function IntradayCharts({
@@ -19,7 +22,8 @@ export default function IntradayCharts({
   openingSkew,
   skewHistory,
   avgSkew,
-  dealerGex,
+  balanceWalls,
+  testWalls,
 }: Props) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 border border-border-2">
@@ -28,7 +32,8 @@ export default function IntradayCharts({
           data={straddleData}
           currentSpxPrice={currentSpx}
           openingSkew={openingSkew}
-          dealerGex={dealerGex}
+          balanceWalls={balanceWalls}
+          testWalls={testWalls}
         />
       </div>
       <div className="bg-page p-2 md:border-l md:border-border-2">

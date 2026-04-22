@@ -26,9 +26,12 @@ type Props = {
   initialSmlSession: RtmSession | null;
 };
 
+type StrikeWall = { strike: number; value: number };
+
 const CORE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL, "VIX", "VIX1D"];
-const CHARM_FLIP_MIN_MINUTES = 210; // 13:00 ET — before this charm flip is noise
-const CHARM_FLIP_RANGE_PT = 50; // only look ±50pt from spot
+const WALL_RANGE_PT = 50;
+const METRICS_WALL_COUNT = 3;
+const CHART_WALL_COUNT = 5;
 
 function isSpxOpenFor(d: Date): boolean {
   const day = d.toLocaleDateString("en-US", {
@@ -78,38 +81,30 @@ function minutesSinceOpenFor(d: Date): number {
   return Math.max(0, mins - openMins);
 }
 
-// Walk CEX strikes near spot, find first adjacent sign change = charm flip level
-function computeCharmFlip(
+// Extract top-N positive and negative walls within a range around spot
+function extractTopWalls(
   strikes: DealerStrikeRow[] | null,
   spot: number | null,
-): number | null {
-  if (!strikes || !spot || strikes.length === 0) return null;
+  rangePt: number = WALL_RANGE_PT,
+  count: number = METRICS_WALL_COUNT,
+): { positive: StrikeWall[]; negative: StrikeWall[] } {
+  if (!strikes || !spot) return { positive: [], negative: [] };
 
-  const near = strikes
-    .filter((r) => Math.abs(r[0] - spot) <= CHARM_FLIP_RANGE_PT && r[1] !== 0)
-    .sort((a, b) => a[0] - b[0]);
+  const near = strikes.filter((r) => Math.abs(r[0] - spot) <= rangePt);
 
-  if (near.length < 2) return null;
+  const positive = near
+    .filter((r) => r[1] > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, count)
+    .map((r) => ({ strike: r[0], value: r[1] }));
 
-  let closest: number | null = null;
-  let closestDist = Infinity;
+  const negative = near
+    .filter((r) => r[1] < 0)
+    .sort((a, b) => a[1] - b[1])
+    .slice(0, count)
+    .map((r) => ({ strike: r[0], value: r[1] }));
 
-  for (let i = 0; i < near.length - 1; i++) {
-    const curr = near[i];
-    const next = near[i + 1];
-    if (Math.sign(curr[1]) !== Math.sign(next[1])) {
-      // Pick whichever of the two strikes is closer to spot
-      const candidate =
-        Math.abs(curr[0] - spot) < Math.abs(next[0] - spot) ? curr[0] : next[0];
-      const dist = Math.abs(candidate - spot);
-      if (dist < closestDist) {
-        closestDist = dist;
-        closest = candidate;
-      }
-    }
-  }
-
-  return closest;
+  return { positive, negative };
 }
 
 export default function LiveTab({
@@ -124,8 +119,6 @@ export default function LiveTab({
 
   const [clockTick, setClockTick] = useState<Date | null>(null);
   useEffect(() => {
-    // Defer initial set to the next microtask — avoids React 19's
-    // "setState synchronously in effect" cascading-render warning.
     queueMicrotask(() => setClockTick(new Date()));
     const t = setInterval(() => setClockTick(new Date()), 10_000);
     return () => clearInterval(t);
@@ -244,10 +237,33 @@ export default function LiveTab({
 
   const atmIv = latestSkew?.atm_iv ?? null;
 
-  // Charm flip — computed from latest CEX snapshot strikes
-  const charmFlipStrike = useMemo(
+  /* const charmFlipStrike = useMemo(
     () => computeCharmFlip(latestCex?.strikes ?? null, liveSpx),
     [latestCex, liveSpx],
+  );*/
+
+  // Top 3 walls — shown in MetricsGrid
+  const topWalls = useMemo(
+    () =>
+      extractTopWalls(
+        latestGex?.strikes ?? null,
+        liveSpx,
+        WALL_RANGE_PT,
+        METRICS_WALL_COUNT,
+      ),
+    [latestGex, liveSpx],
+  );
+
+  // Top 5 walls — shown as markLines on StraddleSpxChart
+  const chartWalls = useMemo(
+    () =>
+      extractTopWalls(
+        latestGex?.strikes ?? null,
+        liveSpx,
+        WALL_RANGE_PT,
+        CHART_WALL_COUNT,
+      ),
+    [latestGex, liveSpx],
   );
 
   const instruments = useMemo(
@@ -303,7 +319,6 @@ export default function LiveTab({
         openingStraddle={opening?.straddle_mid ?? null}
         minutesSinceOpen={minutesSinceOpen}
         timestamp={lastSnapshotTs}
-        charmFlipStrike={charmFlipStrike}
       />
 
       <InstrumentCards instruments={instruments} />
@@ -321,10 +336,8 @@ export default function LiveTab({
         dealerLocal={latestGex?.local_total ?? null}
         dealerCexTotal={latestCex?.total ?? null}
         dealerCexLocal={latestCex?.local_total ?? null}
-        dealerTopPosStrike={latestGex?.top_pos_strike ?? null}
-        dealerTopPosValue={latestGex?.top_pos_value ?? null}
-        dealerTopNegStrike={latestGex?.top_neg_strike ?? null}
-        dealerTopNegValue={latestGex?.top_neg_value ?? null}
+        balanceWalls={topWalls.positive}
+        testWalls={topWalls.negative}
       />
 
       <IntradayCharts
@@ -333,7 +346,8 @@ export default function LiveTab({
         openingSkew={openingSkew}
         skewHistory={skewHistory}
         avgSkew={avgSkew}
-        dealerGex={latestGex}
+        balanceWalls={chartWalls.positive}
+        testWalls={chartWalls.negative}
       />
 
       <PositionsSideBySide

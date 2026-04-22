@@ -3,16 +3,24 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect, useRef } from "react";
 import * as echarts from "echarts";
-import { StraddleSnapshot, SkewSnapshot, DealerStrikeSnapshot } from "../types";
+import { StraddleSnapshot, SkewSnapshot } from "../types";
 import { resolveChartPalette } from "../lib/chartPalette";
 import { cssVar } from "../lib/theme";
+
+type Wall = { strike: number; value: number };
 
 type Props = {
   data: StraddleSnapshot[];
   currentSpxPrice: number | null;
   openingSkew: SkewSnapshot | null;
-  dealerGex?: DealerStrikeSnapshot | null;
+  balanceWalls?: Wall[];
+  testWalls?: Wall[];
 };
+
+// Opacity ramp for wall lines, ranked 0..4. Applied as hex suffix to color.
+const WALL_LINE_OPACITY_HEX = ["99", "77", "55", "44", "33"];
+// Opacity ramp for wall labels (ECharts label.opacity is 0..1, not hex).
+const WALL_LABEL_OPACITY = [1, 0.75, 0.55, 0.45, 0.35];
 
 function fmtGexShort(v: number): string {
   const abs = Math.abs(v);
@@ -90,7 +98,8 @@ export default function StraddleSpxChart({
   data,
   currentSpxPrice,
   openingSkew,
-  dealerGex,
+  balanceWalls = [],
+  testWalls = [],
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
@@ -313,34 +322,51 @@ export default function StraddleSpxChart({
       });
     }
 
-    if (dealerGex?.top_pos_strike != null && dealerGex?.top_pos_value != null) {
+    // Balance walls — top positive GEX. Up to 5. Opacity fades with rank.
+    balanceWalls.forEach((w, i) => {
+      const opHex = WALL_LINE_OPACITY_HEX[i] ?? "33";
+      const labelOpacity = WALL_LABEL_OPACITY[i] ?? 0.35;
       markLines.push({
-        yAxis: dealerGex.top_pos_strike,
-        lineStyle: { color: `${P.up}99`, type: "solid", width: 1 },
+        yAxis: w.strike,
+        lineStyle: {
+          color: `${P.wallBalance}${opHex}`,
+          type: "solid",
+          width: 1,
+        },
         label: {
           show: true,
-          position: "insideStartTop",
-          formatter: `${dealerGex.top_pos_strike}  ${fmtGexShort(dealerGex.top_pos_value)}`,
-          color: P.up,
+          position: "insideStart",
+          formatter: `${w.strike}  ${fmtGexShort(w.value)}`,
+          color: P.wallBalance,
           fontSize: 9,
           fontFamily: "monospace",
+          opacity: labelOpacity,
         },
       });
-    }
-    if (dealerGex?.top_neg_strike != null && dealerGex?.top_neg_value != null) {
+    });
+
+    // Test walls — top negative GEX. Up to 5.
+    testWalls.forEach((w, i) => {
+      const opHex = WALL_LINE_OPACITY_HEX[i] ?? "33";
+      const labelOpacity = WALL_LABEL_OPACITY[i] ?? 0.35;
       markLines.push({
-        yAxis: dealerGex.top_neg_strike,
-        lineStyle: { color: `${P.down}99`, type: "solid", width: 1 },
+        yAxis: w.strike,
+        lineStyle: {
+          color: `${P.wallTest}${opHex}`,
+          type: "solid",
+          width: 1,
+        },
         label: {
           show: true,
-          position: "insideStartBottom",
-          formatter: `${dealerGex.top_neg_strike}  ${fmtGexShort(dealerGex.top_neg_value)}`,
-          color: P.down,
+          position: "insideStart",
+          formatter: `${w.strike}  ${fmtGexShort(w.value)}`,
+          color: P.wallTest,
           fontSize: 9,
           fontFamily: "monospace",
+          opacity: labelOpacity,
         },
       });
-    }
+    });
 
     chartRef.current.setOption(
       {
@@ -355,7 +381,7 @@ export default function StraddleSpxChart({
       },
       false,
     );
-  }, [data, currentSpxPrice, openingSkew, dealerGex]);
+  }, [data, currentSpxPrice, openingSkew, balanceWalls, testWalls]);
 
   return (
     <div>

@@ -2,6 +2,8 @@
 
 import { THEME } from "../lib/theme";
 
+type Wall = { strike: number; value: number };
+
 type Props = {
   straddleMid: number | null;
   openingStraddle: number | null;
@@ -15,10 +17,8 @@ type Props = {
   dealerLocal: number | null;
   dealerCexTotal: number | null;
   dealerCexLocal: number | null;
-  dealerTopPosStrike: number | null;
-  dealerTopPosValue: number | null;
-  dealerTopNegStrike: number | null;
-  dealerTopNegValue: number | null;
+  balanceWalls: Wall[];
+  testWalls: Wall[];
 };
 
 function fmtDollar(v: number | null, decimals = 2): string {
@@ -42,20 +42,111 @@ function fmtGex(v: number | null): string {
   return `${sign}${abs.toFixed(0)}`;
 }
 
+// GEX color — green positive, red negative
 function gexColor(v: number | null): string {
   if (v === null) return THEME.text;
-  return v >= 0 ? THEME.up : THEME.down;
+  return v >= 0 ? "var(--color-gex-pos)" : "var(--color-gex-neg)";
+}
+
+// CEX color — blue positive, mustard negative (VS3D-style)
+function cexColor(v: number | null): string {
+  if (v === null) return THEME.text;
+  return v >= 0 ? "var(--color-cex-pos)" : "var(--color-cex-neg)";
+}
+
+// Matching 15%-alpha backgrounds for the pill tags
+function gexBgColor(v: number | null): string {
+  if (v === null) return "transparent";
+  return v >= 0 ? "var(--color-gex-pos-15)" : "var(--color-gex-neg-15)";
+}
+function cexBgColor(v: number | null): string {
+  if (v === null) return "transparent";
+  return v >= 0 ? "var(--color-cex-pos-15)" : "var(--color-cex-neg-15)";
 }
 
 type CellSpec = {
   label: string;
-  value: string;
+  value?: string;
   valueColor?: string;
   value2?: string;
   value2Color?: string;
   context?: string;
   contextColor?: string;
+  walls?: Wall[];
+  wallsColor?: string;
+  wallsEmpty?: string;
+  dual?: {
+    gex: number | null;
+    cex: number | null;
+    bottomContext?: string;
+    bottomContextColor?: string;
+  };
 };
+
+function DualDealerBody({
+  gex,
+  cex,
+  bottomContext,
+  bottomContextColor,
+}: {
+  gex: number | null;
+  cex: number | null;
+  bottomContext?: string;
+  bottomContextColor?: string;
+}) {
+  return (
+    <>
+      <div className="mt-0.5 space-y-0.5">
+        <DualRow
+          tag="GEX"
+          value={fmtGex(gex)}
+          color={gexColor(gex)}
+          bgColor={gexBgColor(gex)}
+        />
+        <DualRow
+          tag="CEX"
+          value={fmtGex(cex)}
+          color={cexColor(cex)}
+          bgColor={cexBgColor(cex)}
+        />
+      </div>
+      {bottomContext && (
+        <div
+          className="font-sans text-[9px] uppercase tracking-wide mt-0.5"
+          style={{ color: bottomContextColor ?? THEME.text4 }}
+        >
+          {bottomContext}
+        </div>
+      )}
+    </>
+  );
+}
+
+function DualRow({
+  tag,
+  value,
+  color,
+  bgColor,
+}: {
+  tag: string;
+  value: string;
+  color: string;
+  bgColor: string;
+}) {
+  return (
+    <div className="flex items-center gap-1.5 leading-tight">
+      <span
+        className="font-sans text-[9px] px-1 py-px rounded-sm tracking-wide"
+        style={{ backgroundColor: bgColor, color }}
+      >
+        {tag}
+      </span>
+      <span className="font-mono text-sm font-medium" style={{ color }}>
+        {value}
+      </span>
+    </div>
+  );
+}
 
 function Cell({
   label,
@@ -65,6 +156,10 @@ function Cell({
   value2Color,
   context,
   contextColor,
+  walls,
+  wallsColor,
+  wallsEmpty,
+  dual,
   col,
   row,
 }: CellSpec & { col: number; row: number }) {
@@ -80,27 +175,77 @@ function Cell({
       <div className="font-sans text-xs uppercase tracking-[0.05em] text-text-4">
         {label}
       </div>
-      <div
-        className="font-mono text-base font-medium leading-tight mt-0.5"
-        style={{ color: valueColor ?? THEME.text }}
-      >
-        {value}
-      </div>
-      {value2 !== undefined && (
-        <div
-          className="font-mono text-sm font-medium leading-tight"
-          style={{ color: value2Color ?? THEME.text3 }}
-        >
-          {value2}
-        </div>
-      )}
-      {context && (
-        <div
-          className="font-sans text-[9px] uppercase tracking-wide mt-0.5"
-          style={{ color: contextColor ?? THEME.text4 }}
-        >
-          {context}
-        </div>
+
+      {dual ? (
+        <DualDealerBody
+          gex={dual.gex}
+          cex={dual.cex}
+          bottomContext={dual.bottomContext}
+          bottomContextColor={dual.bottomContextColor}
+        />
+      ) : walls ? (
+        walls.length === 0 ? (
+          <div
+            className="font-mono text-base font-medium leading-tight mt-0.5"
+            style={{ color: THEME.text4 }}
+          >
+            {wallsEmpty ?? "—"}
+          </div>
+        ) : (
+          <div className="mt-0.5 space-y-0.5">
+            {walls.map((w, i) => (
+              <div
+                key={w.strike}
+                className="flex items-baseline gap-2 leading-tight"
+              >
+                <span
+                  className="font-mono font-medium"
+                  style={{
+                    color: wallsColor ?? THEME.text,
+                    fontSize: i === 0 ? "15px" : "12px",
+                  }}
+                >
+                  {w.strike}
+                </span>
+                <span
+                  className="font-mono"
+                  style={{
+                    color: wallsColor ?? THEME.text3,
+                    fontSize: i === 0 ? "11px" : "10px",
+                    opacity: i === 0 ? 1 : 0.75,
+                  }}
+                >
+                  {fmtGex(w.value)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (
+        <>
+          <div
+            className="font-mono text-base font-medium leading-tight mt-0.5"
+            style={{ color: valueColor ?? THEME.text }}
+          >
+            {value}
+          </div>
+          {value2 !== undefined && (
+            <div
+              className="font-mono text-sm font-medium leading-tight"
+              style={{ color: value2Color ?? THEME.text3 }}
+            >
+              {value2}
+            </div>
+          )}
+          {context && (
+            <div
+              className="font-sans text-[9px] uppercase tracking-wide mt-0.5"
+              style={{ color: contextColor ?? THEME.text4 }}
+            >
+              {context}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -119,10 +264,8 @@ export default function MetricsGrid({
   dealerLocal,
   dealerCexTotal,
   dealerCexLocal,
-  dealerTopPosStrike,
-  dealerTopPosValue,
-  dealerTopNegStrike,
-  dealerTopNegValue,
+  balanceWalls,
+  testWalls,
 }: Props) {
   const realizedColor =
     realizedPct === null
@@ -140,10 +283,11 @@ export default function MetricsGrid({
         ? THEME.amber
         : THEME.text;
 
-  const localDiverges =
-    dealerTotal !== null &&
-    dealerLocal !== null &&
-    Math.sign(dealerTotal) !== Math.sign(dealerLocal);
+  // Charm direction — derived from local CEX sign.
+  // Negative CEX = dealers buying to hedge = BULLISH pressure (amber — matches VS3D)
+  // Positive CEX = dealers selling to hedge = BEARISH pressure (blue)
+  const isCharmBullish = dealerCexLocal !== null && dealerCexLocal < 0;
+  const isCharmBearish = dealerCexLocal !== null && dealerCexLocal > 0;
 
   const cells: CellSpec[] = [
     // ── Row 1 ──
@@ -166,30 +310,28 @@ export default function MetricsGrid({
       contextColor: realizedColor,
     },
     {
-      label: "OVERALL GEX/CEX",
-      value: fmtGex(dealerTotal),
-      valueColor: gexColor(dealerTotal),
-      value2: fmtGex(dealerCexTotal),
-      value2Color: gexColor(dealerCexTotal),
-      context:
-        dealerTotal === null
-          ? undefined
-          : dealerTotal >= 0
-            ? "POS · OVERALL"
-            : "NEG · OVERALL",
+      label: "OVERALL",
+      dual: {
+        gex: dealerTotal,
+        cex: dealerCexTotal,
+      },
     },
     {
-      label: "SPOT GEX/CEX",
-      value: fmtGex(dealerLocal),
-      valueColor: gexColor(dealerLocal),
-      value2: fmtGex(dealerCexLocal),
-      value2Color: gexColor(dealerCexLocal),
-      context: localDiverges
-        ? "DIVERGES"
-        : dealerLocal === null
-          ? undefined
-          : "±15PT",
-      contextColor: localDiverges ? THEME.amber : THEME.text4,
+      label: "SPOT · ±15PT",
+      dual: {
+        gex: dealerLocal,
+        cex: dealerCexLocal,
+        bottomContext: isCharmBullish
+          ? "BULLISH CHARM"
+          : isCharmBearish
+            ? "BEARISH CHARM"
+            : undefined,
+        bottomContextColor: isCharmBullish
+          ? "var(--color-cex-neg)"
+          : isCharmBearish
+            ? "var(--color-cex-pos)"
+            : undefined,
+      },
     },
     // ── Row 2 ──
     {
@@ -212,19 +354,13 @@ export default function MetricsGrid({
     },
     {
       label: "BALANCE STRIKES",
-      value: dealerTopPosStrike !== null ? String(dealerTopPosStrike) : "—",
-      valueColor: dealerTopPosStrike !== null ? THEME.up : THEME.text4,
-      context:
-        dealerTopPosValue !== null ? fmtGex(dealerTopPosValue) : undefined,
-      contextColor: THEME.up,
+      walls: balanceWalls,
+      wallsColor: "var(--color-wall-balance)",
     },
     {
       label: "TEST STRIKES",
-      value: dealerTopNegStrike !== null ? String(dealerTopNegStrike) : "—",
-      valueColor: dealerTopNegStrike !== null ? THEME.down : THEME.text4,
-      context:
-        dealerTopNegValue !== null ? fmtGex(dealerTopNegValue) : undefined,
-      contextColor: THEME.down,
+      walls: testWalls,
+      wallsColor: "var(--color-wall-test)",
     },
   ];
 

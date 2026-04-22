@@ -8,12 +8,12 @@ export type TickData = {
   mid: number;
   prevClose: number | null;
   last: number | null;
-  // Greeks — only populated for option symbols
   delta: number | null;
   gamma: number | null;
   theta: number | null;
   vega: number | null;
   iv: number | null;
+  lastUpdateMs: number; // wall-clock ms when last event for this symbol landed
 };
 
 export const ES_STREAMER_SYMBOL = "/ESM26:XCME";
@@ -88,6 +88,7 @@ export function useLiveTick(symbols: string[]) {
           if (msg.type === "FEED_DATA" && msg.channel === channelId.current) {
             const events = msg.data;
             if (!Array.isArray(events)) return;
+            const nowMs = Date.now();
 
             setTicks((prev) => {
               const next = { ...prev };
@@ -104,6 +105,7 @@ export function useLiveTick(symbols: string[]) {
                   theta: null,
                   vega: null,
                   iv: null,
+                  lastUpdateMs: 0,
                 };
 
                 if (event.eventType === "Quote") {
@@ -113,6 +115,7 @@ export function useLiveTick(symbols: string[]) {
                       bid: event.bidPrice,
                       ask: event.askPrice,
                       mid: (event.bidPrice + event.askPrice) / 2,
+                      lastUpdateMs: nowMs,
                     };
                   }
                 }
@@ -122,6 +125,7 @@ export function useLiveTick(symbols: string[]) {
                     next[event.eventSymbol] = {
                       ...existing,
                       last: event.price,
+                      lastUpdateMs: nowMs,
                     };
                   }
                 }
@@ -131,6 +135,7 @@ export function useLiveTick(symbols: string[]) {
                     next[event.eventSymbol] = {
                       ...existing,
                       prevClose: event.prevDayClosePrice,
+                      lastUpdateMs: nowMs,
                     };
                   }
                 }
@@ -143,6 +148,7 @@ export function useLiveTick(symbols: string[]) {
                     theta: event.theta ?? null,
                     vega: event.vega ?? null,
                     iv: event.volatility ?? null,
+                    lastUpdateMs: nowMs,
                   };
                 }
               }

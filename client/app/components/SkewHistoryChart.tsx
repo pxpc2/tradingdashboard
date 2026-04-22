@@ -286,7 +286,7 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
         </span>
         {avgSkew !== null && (
           <span className="font-mono text-xs text-text-5">
-            média {avgSkew.toFixed(3)}
+            avg {avgSkew.toFixed(3)}
           </span>
         )}
       </div>

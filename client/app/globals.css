@@ -51,6 +51,23 @@
   --color-width-20: #f5a524;
   --color-width-25: #5bb4a0;
   --color-width-30: #d0695e;
+
+  /* ---- DEALER PROFILE COLORS ----- */
+  --color-wall-balance: #4a9eff; /* VS3D-style blue */
+  --color-wall-test: #e5a04a; /* VS3D-style mustard/amber */
+
+  /* Gamma exposure — same as up/down */
+  --color-gex-pos: var(--color-up);
+  --color-gex-neg: var(--color-down);
+
+  /* Charm exposure — VS3D-style blue/mustard */
+  --color-cex-pos: #4a9eff; /* blue: positive charm */
+  --color-cex-neg: #e5a04a; /* mustard: negative charm */
+
+  --color-gex-pos-15: color-mix(in srgb, var(--color-gex-pos) 15%, transparent);
+  --color-gex-neg-15: color-mix(in srgb, var(--color-gex-neg) 15%, transparent);
+  --color-cex-pos-15: color-mix(in srgb, var(--color-cex-pos) 15%, transparent);
+  --color-cex-neg-15: color-mix(in srgb, var(--color-cex-neg) 15%, transparent);
 }
 
 body {

@@ -18,6 +18,8 @@ export type ChartPalette = {
   up: string;
   down: string;
   skewMoving: string;
+  wallBalance: string;
+  wallTest: string;
   regime: {
     trend: string;
     partial: string;
@@ -41,6 +43,8 @@ export function resolveChartPalette(): ChartPalette {
     up: cssVar("--color-up", "#7FC096"),
     down: cssVar("--color-down", "#D0695E"),
     skewMoving: cssVar("--color-skew-moving", "#9B7BB3"),
+    wallBalance: cssVar("--color-wall-balance", "#4A9EFF"),
+    wallTest: cssVar("--color-wall-test", "#E5A04A"),
     regime: {
       trend: cssVar("--color-regime-trend", "#E55A3F"),
       partial: cssVar("--color-regime-partial", "#E6B84F"),

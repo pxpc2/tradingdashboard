@@ -16,22 +16,18 @@ type Props = {
   openingStraddle: number | null;
   minutesSinceOpen: number;
   timestamp: string | null;
-  charmFlipStrike: number | null; // observation only — gated to afternoon
 };
 
 function priceNarrative(p: PriceCharacter): string {
   if (p.classification === "insufficient") return "AWAITING DATA";
-  if (p.classification === "flat") {
-    return p.magnitude < 0.3 ? "PRICE PINNED" : "PRICE CHOPPY";
-  }
+  if (p.classification === "flat") return "PRICE PINNED";
   if (p.classification === "trending") {
     const arrow =
       p.direction === "up" ? " ↑" : p.direction === "down" ? " ↓" : "";
-    return `PRICE TRENDING${arrow}`;
+    return `TREND DAY${arrow}`;
   }
-  if (p.classification === "partial_reversal")
-    return "PRICE PARTIALLY REVERSING";
-  if (p.classification === "reversal") return "PRICE REVERSED";
+  if (p.classification === "partial_reversal") return "PARTIAL REVERSAL DAY";
+  if (p.classification === "reversal") return "CHOPPY DAY";
   return "PRICE —";
 }
 
@@ -44,14 +40,42 @@ function skewNarrative(s: SkewCharacter): string {
 
 function synthesis(p: PriceCharacter, s: SkewCharacter): string {
   if (p.classification === "insufficient") return "";
-  const skewActive =
-    s.strength === "moving" || s.strength === "strongly_moving";
+
+  // Flat skew = no confirmation signal either way
+  if (s.direction === "flat" || s.strength === "flat") return "";
+
+  const priceUp = p.direction === "up";
+  const priceDown = p.direction === "down";
+  const skewRising = s.direction === "rising";
+  const skewFalling = s.direction === "falling";
+
   if (p.classification === "trending") {
-    return skewActive ? "SKEW CONFIRMING" : "SKEW DIVERGING";
+    // Up trend + falling skew = bullish flow confirming
+    // Down trend + rising skew = fear rising with drop, confirming
+    if ((priceUp && skewFalling) || (priceDown && skewRising)) {
+      return "SKEW CONFIRMING";
+    }
+    if ((priceUp && skewRising) || (priceDown && skewFalling)) {
+      return "SKEW DIVERGING";
+    }
+    return "";
   }
+
   if (p.classification === "reversal") {
-    return skewActive ? "SKEW DIVERGING" : "SKEW CONFIRMING";
+    // Reverted down + skew rising = fear catching up, confirming the reversal
+    // Reverted up + skew falling = calls catching bid, confirming
+    if ((priceDown && skewRising) || (priceUp && skewFalling)) {
+      return "SKEW CONFIRMING";
+    }
+    if ((priceDown && skewFalling) || (priceUp && skewRising)) {
+      return "SKEW DIVERGING";
+    }
+    return "";
   }
+
+  // partial_reversal and flat don't emit a synthesis tag —
+  // they're inherently mixed reads and don't map cleanly to
+  // confirming/diverging semantics.
   return "";
 }
 
@@ -195,13 +219,10 @@ export default function LiveReadPanel({
   openingStraddle,
   minutesSinceOpen,
   timestamp,
-  charmFlipStrike,
 }: Props) {
   const tags = computeTags({ price, skew, minutesSinceOpen });
   const narrative = buildNarrative(price, skew);
   const timeStr = formatTimestamp(timestamp);
-
-  const showCharmFlip = charmFlipStrike !== null;
 
   return (
     <div className="relative bg-page border border-border-2 border-l-2 border-l-amber px-3 py-2.5">
@@ -235,15 +256,6 @@ export default function LiveReadPanel({
         realizedPct={realizedPct}
         openingStraddle={openingStraddle}
       />
-
-      {showCharmFlip && (
-        <div className="font-mono text-[10px] text-text-5 mt-1.5">
-          <span className="text-text-6 uppercase tracking-wide">
-            charm flip obs{" "}
-          </span>
-          {charmFlipStrike}
-        </div>
-      )}
     </div>
   );
 }
