@@ -11,7 +11,7 @@ type Props = {
   data: StraddleSnapshot[];
   currentSpxPrice: number | null;
   openingSkew: SkewSnapshot | null;
-  dealerGex: DealerStrikeSnapshot | null;
+  dealerGex?: DealerStrikeSnapshot | null;
 };
 
 function fmtGexShort(v: number): string {
