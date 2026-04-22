@@ -99,7 +99,7 @@ export default function StraddleSpxChart({
       lineWidth: 1,
       priceLineVisible: false,
       lastValueVisible: true,
-      title: "STRAD",
+      title: "Straddle",
       priceScaleId: "right",
     });
 

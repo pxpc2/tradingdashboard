@@ -201,8 +201,7 @@ export default function LiveReadPanel({
   const narrative = buildNarrative(price, skew);
   const timeStr = formatTimestamp(timestamp);
 
-  // Charm flip shown only after 13:00 ET (210min since open) — noise before then
-  const showCharmFlip = charmFlipStrike !== null && minutesSinceOpen >= 210;
+  const showCharmFlip = charmFlipStrike !== null;
 
   return (
     <div className="relative bg-page border border-border-2 border-l-2 border-l-amber px-3 py-2.5">

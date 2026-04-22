@@ -124,7 +124,7 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
         borderColor: border,
         timeVisible: true,
         secondsVisible: false,
-        rightOffset: 80,
+        rightOffset: 120,
         tickMarkFormatter: (time: number) => {
           const d = new Date(time * 1000);
           return d.toLocaleDateString("en-US", {
