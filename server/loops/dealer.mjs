@@ -13,6 +13,11 @@ const BASE_URL = "https://www.quantedoptions.com/api/v1";
 const LOCAL_BAND_PT = 15; // ±15pt around spot for local GEX
 const NEAR_RANGE_PT = 50; // ±50pt around spot for top walls
 
+function isOpenCycle() {
+  const time = getETTime();
+  return time >= "09:30:00" && time < "09:31:00";
+}
+
 // ─── API ──────────────────────────────────────────────────────────────────────
 
 async function fetchStrikes(metric) {
@@ -265,6 +270,15 @@ export async function runDealerLoop() {
     if (shouldCapture()) {
       const currentMinute = getETTime().slice(0, 5);
       lastCaptureFiredMinute = currentMinute;
+
+      // Open cycle: straddle loop fires at the same time and needs ~25s to write.
+      // Wait 75s so spot ref is guaranteed to exist before we query it.
+      if (isOpenCycle()) {
+        console.log(
+          `[${nowCT()}] Dealer: open cycle — waiting 75s for straddle snapshot...`,
+        );
+        await new Promise((r) => setTimeout(r, 75_000));
+      }
 
       const spot = await getLatestSpot();
       if (!spot) {
