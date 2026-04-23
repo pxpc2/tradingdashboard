@@ -10,8 +10,8 @@ import {
   SESSION_TYPE_ORDER,
   SessionType,
   resolveSessionTypeColors,
-} from "../../lib/sessionCharacter";
-import { resolveChartPalette } from "../../lib/chartPalette";
+} from "../../../lib/sessionCharacter";
+import { resolveChartPalette } from "../../../lib/chartPalette";
 
 type Props = { sessions: SessionData[] };
 
@@ -146,7 +146,10 @@ export default function MaxVsEod({ sessions }: Props) {
       series: [
         {
           type: "line",
-          data: [[0, 0], [maxVal, maxVal]],
+          data: [
+            [0, 0],
+            [maxVal, maxVal],
+          ],
           lineStyle: { color: P.border2, width: 1, type: "dashed" },
           symbol: "none",
           silent: true,

@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { SessionData } from "../AnalysisDashboard";
-import { THEME } from "../../lib/theme";
+import { THEME } from "../../../lib/theme";
 
 type WeeklyStraddleRow = {
   created_at: string;
@@ -133,7 +133,10 @@ export default function WeeklyStraddle({
               </div>
               <div className="flex items-center gap-4">
                 {weekRV !== null && (
-                  <span className="font-mono text-xs" style={{ color: rvColor }}>
+                  <span
+                    className="font-mono text-xs"
+                    style={{ color: rvColor }}
+                  >
                     {weekRV.toFixed(1)}% RV/IV
                   </span>
                 )}

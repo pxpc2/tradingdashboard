@@ -4,7 +4,7 @@
 import { useEffect, useRef, useMemo } from "react";
 import * as echarts from "echarts";
 import { SessionData } from "../AnalysisDashboard";
-import { resolveChartPalette } from "../../lib/chartPalette";
+import { resolveChartPalette } from "../../../lib/chartPalette";
 
 type StraddleSnapshot = {
   created_at: string;

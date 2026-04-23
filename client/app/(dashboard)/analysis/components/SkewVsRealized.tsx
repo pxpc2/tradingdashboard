@@ -9,8 +9,8 @@ import {
   SESSION_TYPE_ORDER,
   SessionType,
   resolveSessionTypeColors,
-} from "../../lib/sessionCharacter";
-import { resolveChartPalette } from "../../lib/chartPalette";
+} from "../../../lib/sessionCharacter";
+import { resolveChartPalette } from "../../../lib/chartPalette";
 
 type Props = { sessions: SessionData[] };
 type SkewDir = "Rose" | "Flat" | "Fell";
@@ -144,8 +144,17 @@ export default function SkewVsRealized({ sessions }: Props) {
         textStyle: { color: P.text2, fontSize: 11 },
         formatter: (p: any) => {
           if (!Array.isArray(p.data)) return "";
-          const [, retention, date, day, type, skewDir, change, openSkew, closeSkew] =
-            p.data;
+          const [
+            ,
+            retention,
+            date,
+            day,
+            type,
+            skewDir,
+            change,
+            openSkew,
+            closeSkew,
+          ] = p.data;
           return `<span style="color:${P.text4};font-size:10px">${date} ${day}</span><br/>
                   Skew <span style="color:${P.text2}">${openSkew}</span> → <span style="color:${P.text2}">${closeSkew}</span>
                   <span style="color:${P.text4}"> (${change > 0 ? "+" : ""}${change})</span><br/>

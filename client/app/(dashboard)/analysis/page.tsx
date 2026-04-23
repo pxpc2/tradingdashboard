@@ -1,14 +1,8 @@
-import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "../lib/supabase-server";
+import { createSupabaseServerClient } from "../../lib/supabase-server";
 import AnalysisDashboard from "./AnalysisDashboard";
 
 export default async function AnalysisPage() {
   const supabase = await createSupabaseServerClient();
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
   const { data: straddleSnapshots } = await supabase
     .from("straddle_snapshots")
@@ -37,7 +31,6 @@ export default async function AnalysisPage() {
     .order("created_at", { ascending: false })
     .limit(1);
 
-  // Session summary — for VIX, macro flag, directional outcome
   const { data: sessionSummaries } = await supabase
     .from("session_summary")
     .select(
@@ -48,24 +41,22 @@ export default async function AnalysisPage() {
   const currentSpx = latestStraddle?.[0]?.spx_ref ?? null;
 
   return (
-    <main className="min-h-screen bg-[#0a0a0a] text-white">
-      <AnalysisDashboard
-        straddleSnapshots={straddleSnapshots ?? []}
-        skewSnapshots={skewSnapshots ?? []}
-        esSnapshots={esSnapshots ?? []}
-        weeklyStraddles={weeklyStraddles ?? []}
-        currentSpx={currentSpx}
-        sessionSummaries={
-          (sessionSummaries ?? []) as {
-            date: string;
-            opening_vix: number | null;
-            opening_vix1d: number | null;
-            opening_vix1d_vix_ratio: number | null;
-            has_high_impact_macro: boolean | null;
-            spx_closed_above_open: boolean | null;
-          }[]
-        }
-      />
-    </main>
+    <AnalysisDashboard
+      straddleSnapshots={straddleSnapshots ?? []}
+      skewSnapshots={skewSnapshots ?? []}
+      esSnapshots={esSnapshots ?? []}
+      weeklyStraddles={weeklyStraddles ?? []}
+      currentSpx={currentSpx}
+      sessionSummaries={
+        (sessionSummaries ?? []) as {
+          date: string;
+          opening_vix: number | null;
+          opening_vix1d: number | null;
+          opening_vix1d_vix_ratio: number | null;
+          has_high_impact_macro: boolean | null;
+          spx_closed_above_open: boolean | null;
+        }[]
+      }
+    />
   );
 }

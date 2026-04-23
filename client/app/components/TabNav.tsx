@@ -10,6 +10,7 @@ const TABS: Tab[] = [
   { label: "POSITIONS", href: "/positions" },
   { label: "CHART", href: "/chart" },
   { label: "MACRO", href: "/macro" },
+  { label: "ANALYSIS", href: "/analysis" },
 ];
 
 export default function TabNav() {
@@ -17,15 +18,10 @@ export default function TabNav() {
 
   return (
     <div className="bg-panel border-b border-border">
-      {/*
-        pb-1 gives breathing room between the active tab's amber underline
-        (at the bottom of each Link) and the outer container's full-width
-        rule. Otherwise the amber line visually merges with the watchlist
-        strip that follows.
-      */}
       <div className="max-w-7xl mx-auto px-4 flex pb-1">
         {TABS.map((t) => {
-          const active = pathname === t.href || pathname.startsWith(`${t.href}/`);
+          const active =
+            pathname === t.href || pathname.startsWith(`${t.href}/`);
           return (
             <Link
               key={t.href}

@@ -9,8 +9,8 @@ import {
   SESSION_TYPE_ORDER,
   SessionType,
   resolveSessionTypeColors,
-} from "../../lib/sessionCharacter";
-import { resolveChartPalette } from "../../lib/chartPalette";
+} from "../../../lib/sessionCharacter";
+import { resolveChartPalette } from "../../../lib/chartPalette";
 
 type Props = { sessions: SessionData[] };
 
