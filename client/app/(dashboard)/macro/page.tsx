@@ -1,9 +1,9 @@
+import MacroTab from "@/app/components/MacroTab";
+
 export default function MacroPage() {
-  return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="text-center text-text-5 text-xs uppercase tracking-[0.1em] py-16">
-        MACRO tab — coming soon
-      </div>
-    </div>
-  );
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/New_York",
+  });
+
+  return <MacroTab selectedDate={today} />;
 }

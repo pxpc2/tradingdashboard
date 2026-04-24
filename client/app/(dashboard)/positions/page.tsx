@@ -1,9 +1,26 @@
-export default function PositionsPage() {
+import PositionsTab from "@/app/components/PositionsTab";
+import { createSupabaseServerClient } from "../../lib/supabase-server";
+import { RtmSession } from "../../types";
+
+export default async function PositionsPage() {
+  const supabase = await createSupabaseServerClient();
+
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "America/New_York",
+  });
+
+  const { data: smlSession } = await supabase
+    .from("rtm_sessions")
+    .select("*")
+    .gte("created_at", `${today}T00:00:00`)
+    .lt("created_at", `${today}T23:59:59`)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <div className="text-center text-text-5 text-xs uppercase tracking-[0.1em] py-16">
-        POSITIONS tab — coming soon
-      </div>
-    </div>
+    <PositionsTab
+      initialSmlSession={(smlSession ?? null) as RtmSession | null}
+    />
   );
 }

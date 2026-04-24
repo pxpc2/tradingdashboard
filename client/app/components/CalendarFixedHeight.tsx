@@ -9,7 +9,7 @@ type Props = {
   selectedDate: string;
 };
 
-const PANEL_HEIGHT = 260;
+const PANEL_HEIGHT = 720;
 
 function isAuction(event: string): boolean {
   return event.toLowerCase().includes("auction");
@@ -113,9 +113,7 @@ export default function CalendarFixedHeight({ selectedDate }: Props) {
                   key={i}
                   className="flex items-center gap-2 px-3 py-1 text-[11px]"
                   style={{
-                    background: isNext
-                      ? "rgba(245, 165, 36, 0.08)"
-                      : undefined,
+                    background: isNext ? "rgba(245, 165, 36, 0.08)" : undefined,
                   }}
                 >
                   <span

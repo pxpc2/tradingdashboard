@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import { createSupabaseServerClient } from "../../lib/supabase-server";
 import LiveTab from "../../components/LiveTab";
-import { StraddleSnapshot, RtmSession } from "../../types";
+import { StraddleSnapshot } from "../../types";
 
 type PageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -22,21 +22,13 @@ export default async function LivePage({ searchParams }: PageProps) {
       timeZone: "America/New_York",
     });
 
-  const [straddleResult, smlResult, openingGexResult] = await Promise.all([
+  const [straddleResult, openingGexResult] = await Promise.all([
     supabase
       .from("straddle_snapshots")
       .select("*")
       .gte("created_at", `${today}T00:00:00`)
       .lt("created_at", `${today}T23:59:59`)
       .order("created_at", { ascending: true }),
-    supabase
-      .from("rtm_sessions")
-      .select("*")
-      .gte("created_at", `${today}T00:00:00`)
-      .lt("created_at", `${today}T23:59:59`)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
     supabase
       .from("dealer_strike_snapshots")
       .select("total")
@@ -48,7 +40,6 @@ export default async function LivePage({ searchParams }: PageProps) {
   ]);
 
   const initialStraddleData: StraddleSnapshot[] = straddleResult.data ?? [];
-  const initialSmlSession: RtmSession | null = smlResult.data ?? null;
   const openingGexTotal: number | null = openingGexResult.data?.total ?? null;
 
   return (
@@ -61,7 +52,6 @@ export default async function LivePage({ searchParams }: PageProps) {
     >
       <LiveTab
         initialStraddleData={initialStraddleData}
-        initialSmlSession={initialSmlSession}
         initialOpeningGexTotal={openingGexTotal}
       />
     </Suspense>

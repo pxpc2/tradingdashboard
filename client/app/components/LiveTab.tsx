@@ -7,16 +7,12 @@ import LiveReadPanel from "./LiveReadPanel";
 import InstrumentCards from "./InstrumentCards";
 import MetricsGrid from "./MetricsGrid";
 import IntradayCharts from "./IntradayCharts";
-import PositionsSideBySide from "./PositionsSideBySide";
-import CalendarFixedHeight from "./CalendarFixedHeight";
 import { useStraddleData } from "../hooks/useStraddleData";
 import { useSkewHistory } from "../hooks/useSkewHistory";
-import { useFlyData } from "../hooks/useFlyData";
 import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
 import { useWatchlist } from "../hooks/useWatchlist";
-import { useRealPositions } from "../hooks/useRealPositions";
 import { useDealerSnapshot } from "../hooks/useDealerSnapshot";
-import { StraddleSnapshot, RtmSession, DealerStrikeRow } from "../types";
+import { StraddleSnapshot, DealerStrikeRow } from "../types";
 import {
   computeSkewCharacter,
   computePriceCharacter,
@@ -24,7 +20,6 @@ import {
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
-  initialSmlSession: RtmSession | null;
   initialOpeningGexTotal: number | null;
 };
 
@@ -104,7 +99,6 @@ function extractTopWalls(
   return { positive, negative };
 }
 
-// Cumulative sum with zero-crossing detection. Returns the crossing nearest to spot.
 function computeFlipLevel(
   strikes: DealerStrikeRow[] | null,
   spot: number | null,
@@ -138,7 +132,6 @@ function computeFlipLevel(
 
 export default function LiveTab({
   initialStraddleData,
-  initialSmlSession,
   initialOpeningGexTotal,
 }: Props) {
   const searchParams = useSearchParams();
@@ -154,8 +147,6 @@ export default function LiveTab({
     return () => clearInterval(t);
   }, []);
 
-  // Opening GEX total — for "OPEN +/-GAMMA" badge. Backfilled live when first
-  // bar lands if SSR missed it (page loaded pre-09:35).
   const [openingGexTotal, setOpeningGexTotal] = useState<number | null>(
     initialOpeningGexTotal,
   );
@@ -187,23 +178,14 @@ export default function LiveTab({
 
   const { straddleData } = useStraddleData(today, initialStraddleData, 1);
   const { skewHistory, latestSkew, avgSkew } = useSkewHistory();
-  const { smlSession, flySnapshots } = useFlyData(today, initialSmlSession);
   const { entries: watchlistEntries } = useWatchlist();
   const { gex: latestGex, cex: latestCex } = useDealerSnapshot(today);
-
-  const {
-    legs: realLegs,
-    streamerSymbols: realSymbols,
-    isLoading: realIsLoading,
-    error: realError,
-  } = useRealPositions();
 
   const allSymbols = useMemo(() => {
     const set = new Set(CORE_SYMBOLS);
     for (const e of watchlistEntries) set.add(e.streamerSymbol);
-    for (const s of realSymbols) set.add(s);
     return Array.from(set);
-  }, [watchlistEntries, realSymbols]);
+  }, [watchlistEntries]);
 
   const ticks = useLiveTick(allSymbols);
 
@@ -298,7 +280,6 @@ export default function LiveTab({
 
   const atmIv = latestSkew?.atm_iv ?? null;
 
-  // Dynamic range for flip computation: 2.5× current straddle, rounded to 5pt
   const flipRangePt = useMemo(() => {
     const straddle = latest?.straddle_mid ?? null;
     return straddle
@@ -316,20 +297,8 @@ export default function LiveTab({
     [latestCex, liveSpx, flipRangePt],
   );
 
-  // Opening regime — derived from first bar of the day
   const openRegime: "pos" | "neg" | null =
     openingGexTotal === null ? null : openingGexTotal >= 0 ? "pos" : "neg";
-
-  const topWalls = useMemo(
-    () =>
-      extractTopWalls(
-        latestGex?.strikes ?? null,
-        liveSpx,
-        WALL_RANGE_PT,
-        METRICS_WALL_COUNT,
-      ),
-    [latestGex, liveSpx],
-  );
 
   const chartWalls = useMemo(
     () =>
@@ -429,17 +398,6 @@ export default function LiveTab({
         balanceWalls={chartWalls.positive}
         testWalls={chartWalls.negative}
       />
-
-      <PositionsSideBySide
-        smlSession={smlSession}
-        flySnapshots={flySnapshots}
-        realLegs={realLegs}
-        realTicks={ticks}
-        realIsLoading={realIsLoading}
-        realError={realError}
-      />
-
-      <CalendarFixedHeight selectedDate={today} />
     </div>
   );
 }
