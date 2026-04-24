@@ -24,6 +24,7 @@ type Props = {
   initialSpotRef: number | null;
   timelineDates: TimelineDate[];
   today: string;
+  liveSpx: number | null;
 };
 
 function fmtGex(v: number): string {
@@ -93,6 +94,7 @@ export default function DealerTriptych({
   initialSpotRef,
   timelineDates,
   today,
+  liveSpx,
 }: Props) {
   const [gexSnapshot, setGexSnapshot] = useState<DealerStrikeSnapshot | null>(
     initialGex,
@@ -107,7 +109,11 @@ export default function DealerTriptych({
     TimelineBar[] | null
   >(null);
 
-  const spot = gexSnapshot?.spot_ref ?? initialSpotRef ?? null;
+  // Snapshot-pinned spot — drives curve computation, only changes every 5 min
+  const snapshotSpot = gexSnapshot?.spot_ref ?? initialSpotRef ?? null;
+
+  // Display spot — follows live ticks, drives the visual spot marker
+  const displaySpot = liveSpx ?? snapshotSpot;
 
   const rangePt = useMemo(
     () => (straddle ? Math.max(Math.round((2.5 * straddle) / 5) * 5, 50) : 100),
@@ -115,13 +121,15 @@ export default function DealerTriptych({
   );
 
   const { points: gexCumPoints, flipLevel: gammaFlip } = useMemo(
-    () => computeCumulative(gexSnapshot?.strikes ?? null, spot, rangePt),
-    [gexSnapshot, spot, rangePt],
+    () =>
+      computeCumulative(gexSnapshot?.strikes ?? null, snapshotSpot, rangePt),
+    [gexSnapshot, snapshotSpot, rangePt],
   );
 
   const { points: cexCumPoints, flipLevel: charmFlip } = useMemo(
-    () => computeCumulative(cexSnapshot?.strikes ?? null, spot, rangePt),
-    [cexSnapshot, spot, rangePt],
+    () =>
+      computeCumulative(cexSnapshot?.strikes ?? null, snapshotSpot, rangePt),
+    [cexSnapshot, snapshotSpot, rangePt],
   );
 
   // Realtime: dealer snapshots
@@ -425,12 +433,13 @@ export default function DealerTriptych({
 
   // Update: cumulative GEX
   useEffect(() => {
-    if (!cumGexChartRef.current || gexCumPoints.length === 0 || !spot) return;
+    if (!cumGexChartRef.current || gexCumPoints.length === 0 || !displaySpot)
+      return;
     const P = resolveChartPalette();
 
     const labels = gexCumPoints.map((p) => String(p.strike));
     const values = gexCumPoints.map((p) => p.cum);
-    const spotLabel = nearestStrikeLabel(gexCumPoints, spot);
+    const spotLabel = nearestStrikeLabel(gexCumPoints, displaySpot);
 
     const markLineData: any[] = [
       {
@@ -476,16 +485,17 @@ export default function DealerTriptych({
       },
       false,
     );
-  }, [gexCumPoints, gammaFlip, spot]);
+  }, [gexCumPoints, gammaFlip, displaySpot]);
 
   // Update: cumulative CEX
   useEffect(() => {
-    if (!cumCexChartRef.current || cexCumPoints.length === 0 || !spot) return;
+    if (!cumCexChartRef.current || cexCumPoints.length === 0 || !displaySpot)
+      return;
     const P = resolveChartPalette();
 
     const labels = cexCumPoints.map((p) => String(p.strike));
     const values = cexCumPoints.map((p) => p.cum);
-    const spotLabel = nearestStrikeLabel(cexCumPoints, spot);
+    const spotLabel = nearestStrikeLabel(cexCumPoints, displaySpot);
 
     const markLineData: any[] = [
       {
@@ -531,7 +541,7 @@ export default function DealerTriptych({
       },
       false,
     );
-  }, [cexCumPoints, charmFlip, spot]);
+  }, [cexCumPoints, charmFlip, displaySpot]);
 
   const noData = !gexSnapshot && !initialGex;
 

@@ -426,6 +426,7 @@ export default function LiveTab({
         initialSpotRef={opening?.spx_ref ?? null}
         timelineDates={initialTimelineDates}
         today={today}
+        liveSpx={liveSpx ?? null}
       />
 
       {/* Market breadth — 3 columns for now, positions summary slot TBD */}
