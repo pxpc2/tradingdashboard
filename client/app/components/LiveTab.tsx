@@ -17,6 +17,9 @@ import {
   computeSkewCharacter,
   computePriceCharacter,
 } from "../lib/sessionCharacter";
+import Sectors from "./Sectors";
+import TopMovers from "./TopMovers";
+import NewsWire from "./NewsWire";
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
@@ -352,7 +355,6 @@ export default function LiveTab({
   );
 
   const lastSnapshotTs = latest?.created_at ?? null;
-
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 space-y-3">
       <LiveReadPanel
@@ -398,6 +400,15 @@ export default function LiveTab({
         balanceWalls={chartWalls.positive}
         testWalls={chartWalls.negative}
       />
+
+      {/* Market breadth — 3 columns for now, positions summary slot TBD */}
+      <div className="grid grid-cols-3 gap-3">
+        <Sectors />
+        <TopMovers kind="gainers" />
+        <TopMovers kind="losers" />
+      </div>
+
+      <NewsWire />
     </div>
   );
 }
