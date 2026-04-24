@@ -2,6 +2,7 @@
 
 import { useMemo, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { supabase } from "../lib/supabase";
 import LiveReadPanel from "./LiveReadPanel";
 import InstrumentCards from "./InstrumentCards";
 import MetricsGrid from "./MetricsGrid";
@@ -24,6 +25,7 @@ import {
 type Props = {
   initialStraddleData: StraddleSnapshot[];
   initialSmlSession: RtmSession | null;
+  initialOpeningGexTotal: number | null;
 };
 
 type StrikeWall = { strike: number; value: number };
@@ -81,7 +83,6 @@ function minutesSinceOpenFor(d: Date): number {
   return Math.max(0, mins - openMins);
 }
 
-// Extract top-N positive and negative walls within a range around spot
 function extractTopWalls(
   strikes: DealerStrikeRow[] | null,
   spot: number | null,
@@ -89,27 +90,56 @@ function extractTopWalls(
   count: number = METRICS_WALL_COUNT,
 ): { positive: StrikeWall[]; negative: StrikeWall[] } {
   if (!strikes || !spot) return { positive: [], negative: [] };
-
   const near = strikes.filter((r) => Math.abs(r[0] - spot) <= rangePt);
-
   const positive = near
     .filter((r) => r[1] > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, count)
     .map((r) => ({ strike: r[0], value: r[1] }));
-
   const negative = near
     .filter((r) => r[1] < 0)
     .sort((a, b) => a[1] - b[1])
     .slice(0, count)
     .map((r) => ({ strike: r[0], value: r[1] }));
-
   return { positive, negative };
+}
+
+// Cumulative sum with zero-crossing detection. Returns the crossing nearest to spot.
+function computeFlipLevel(
+  strikes: DealerStrikeRow[] | null,
+  spot: number | null,
+  rangePt: number,
+): number | null {
+  if (!strikes || !spot || strikes.length === 0) return null;
+
+  const filtered = strikes
+    .filter((r) => Math.abs(r[0] - spot) <= rangePt)
+    .sort((a, b) => a[0] - b[0]);
+
+  let cum = 0;
+  const crossings: number[] = [];
+
+  for (let i = 0; i < filtered.length; i++) {
+    const prev = cum;
+    cum += filtered[i][1];
+    if (i > 0 && prev !== 0 && Math.sign(prev) !== Math.sign(cum)) {
+      const t = Math.abs(prev) / (Math.abs(prev) + Math.abs(cum));
+      const raw =
+        filtered[i - 1][0] + (filtered[i][0] - filtered[i - 1][0]) * t;
+      crossings.push(Math.round(raw / 5) * 5);
+    }
+  }
+
+  if (crossings.length === 0) return null;
+  return crossings.reduce((best, c) =>
+    Math.abs(c - spot) < Math.abs(best - spot) ? c : best,
+  );
 }
 
 export default function LiveTab({
   initialStraddleData,
   initialSmlSession,
+  initialOpeningGexTotal,
 }: Props) {
   const searchParams = useSearchParams();
   const dateParam = searchParams.get("date");
@@ -123,6 +153,37 @@ export default function LiveTab({
     const t = setInterval(() => setClockTick(new Date()), 10_000);
     return () => clearInterval(t);
   }, []);
+
+  // Opening GEX total — for "OPEN +/-GAMMA" badge. Backfilled live when first
+  // bar lands if SSR missed it (page loaded pre-09:35).
+  const [openingGexTotal, setOpeningGexTotal] = useState<number | null>(
+    initialOpeningGexTotal,
+  );
+
+  useEffect(() => {
+    if (openingGexTotal !== null) return;
+    const channel = supabase
+      .channel("livetab_opening_gex")
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "dealer_strike_snapshots",
+          filter: `date=eq.${today}`,
+        },
+        (payload) => {
+          const row = payload.new as { metric: string; total: number };
+          if (row.metric === "gex" && openingGexTotal === null) {
+            setOpeningGexTotal(row.total);
+          }
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [today, openingGexTotal]);
 
   const { straddleData } = useStraddleData(today, initialStraddleData, 1);
   const { skewHistory, latestSkew, avgSkew } = useSkewHistory();
@@ -237,12 +298,28 @@ export default function LiveTab({
 
   const atmIv = latestSkew?.atm_iv ?? null;
 
-  /* const charmFlipStrike = useMemo(
-    () => computeCharmFlip(latestCex?.strikes ?? null, liveSpx),
-    [latestCex, liveSpx],
-  );*/
+  // Dynamic range for flip computation: 2.5× current straddle, rounded to 5pt
+  const flipRangePt = useMemo(() => {
+    const straddle = latest?.straddle_mid ?? null;
+    return straddle
+      ? Math.max(Math.round((2.5 * straddle) / 5) * 5, 50)
+      : WALL_RANGE_PT;
+  }, [latest]);
 
-  // Top 3 walls — shown in MetricsGrid
+  const gammaFlip = useMemo(
+    () => computeFlipLevel(latestGex?.strikes ?? null, liveSpx, flipRangePt),
+    [latestGex, liveSpx, flipRangePt],
+  );
+
+  const charmFlip = useMemo(
+    () => computeFlipLevel(latestCex?.strikes ?? null, liveSpx, flipRangePt),
+    [latestCex, liveSpx, flipRangePt],
+  );
+
+  // Opening regime — derived from first bar of the day
+  const openRegime: "pos" | "neg" | null =
+    openingGexTotal === null ? null : openingGexTotal >= 0 ? "pos" : "neg";
+
   const topWalls = useMemo(
     () =>
       extractTopWalls(
@@ -254,7 +331,6 @@ export default function LiveTab({
     [latestGex, liveSpx],
   );
 
-  // Top 5 walls — shown as markLines on StraddleSpxChart
   const chartWalls = useMemo(
     () =>
       extractTopWalls(
@@ -319,6 +395,10 @@ export default function LiveTab({
         openingStraddle={opening?.straddle_mid ?? null}
         minutesSinceOpen={minutesSinceOpen}
         timestamp={lastSnapshotTs}
+        openRegime={openRegime}
+        gammaFlip={gammaFlip}
+        charmFlip={charmFlip}
+        liveSpx={liveSpx}
       />
 
       <InstrumentCards instruments={instruments} />
@@ -326,6 +406,10 @@ export default function LiveTab({
       <MetricsGrid
         straddleMid={latest?.straddle_mid ?? null}
         openingStraddle={opening?.straddle_mid ?? null}
+        openingSpx={opening?.spx_ref ?? null}
+        openingPutIv={openingSkew?.put_iv ?? null}
+        openingCallIv={openingSkew?.call_iv ?? null}
+        openingAtmIv={openingSkew?.atm_iv ?? null}
         realizedPts={currentMovePts}
         realizedPct={realizedPct}
         atmIv={atmIv}
@@ -333,11 +417,7 @@ export default function LiveTab({
         skewPctile={skewPctile}
         vix1dVixRatio={vix1dVixRatio}
         dealerTotal={latestGex?.total ?? null}
-        dealerLocal={latestGex?.local_total ?? null}
-        dealerCexTotal={latestCex?.total ?? null}
         dealerCexLocal={latestCex?.local_total ?? null}
-        balanceWalls={topWalls.positive}
-        testWalls={topWalls.negative}
       />
 
       <IntradayCharts

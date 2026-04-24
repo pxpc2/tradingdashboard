@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
 @theme {
-  /* ─── Foundation ──────────────────────────────────────────────────────── */
-  --color-page: #0a0a0a;
-  --color-panel: #121214;
-  --color-panel-2: #17171a;
-  --color-border: #1f1f21;
-  --color-border-2: #2a2a2d;
+  /* ─── Foundation (bumped for more separation + slight warmth) ────────── */
+  --color-page: #0d0e11;
+  --color-panel: #13151a;
+  --color-panel-2: #1a1d23;
+  --color-border: #22252c;
+  --color-border-2: #2d3038;
 
-  /* ─── Text (6-step warm gray scale, replaces #9ca3af / #666 / #555 / #444 / #333) */
+  /* ─── Text (6-step warm gray scale) ───────────────────────────────────── */
   --color-text: #e8e6e0;
   --color-text-2: #9a9890;
   --color-text-3: #6e6c67;
@@ -16,21 +16,21 @@
   --color-text-5: #44433f;
   --color-text-6: #2f2e2c;
 
-  /* ─── Accents (signature + info) ──────────────────────────────────────── */
+  /* ─── Accents ─────────────────────────────────────────────────────────── */
   --color-amber: #f5a524;
   --color-indigo: #7ea8c4;
 
-  /* ─── Semantic directional (up/down, pos/neg, long/short) ─────────────── */
+  /* ─── Semantic directional ────────────────────────────────────────────── */
   --color-up: #7fc096;
   --color-down: #d0695e;
 
-  /* ─── Regime (analysis side — punchy, categorically distinct) ─────────── */
+  /* ─── Regime (analysis side) ──────────────────────────────────────────── */
   --color-regime-trend: #e55a3f;
   --color-regime-partial: #e6b84f;
   --color-regime-reversal: #5bb4a0;
   --color-regime-flat: #707070;
 
-  /* ─── Skew character (live dashboard badge) ──────────────────────────── */
+  /* ─── Skew character ──────────────────────────────────────────────────── */
   --color-skew-flat: #9a9890;
   --color-skew-moving: #9b7bb3;
   --color-skew-strong: #f5a524;
@@ -41,33 +41,36 @@
   --color-tone-attention: #f5a524;
   --color-tone-alert: #d0695e;
 
-  /* ─── Market status (open/closed indicator dots) ──────────────────────── */
+  /* ─── Market status ───────────────────────────────────────────────────── */
   --color-status-open: #7fc096;
-  --color-status-closed: #2a2a2d;
+  --color-status-closed: #2d3038;
 
-  /* ─── SML fly widths (harmonized with palette) ────────────────────────── */
+  /* ─── SML fly widths ──────────────────────────────────────────────────── */
   --color-width-10: #9b7bb3;
   --color-width-15: #7ea8c4;
   --color-width-20: #f5a524;
   --color-width-25: #5bb4a0;
   --color-width-30: #d0695e;
 
-  /* ---- DEALER PROFILE COLORS ----- */
-  --color-wall-balance: #4a9eff; /* VS3D-style blue */
-  --color-wall-test: #e5a04a; /* VS3D-style mustard/amber */
+  /* ─── Dealer profile ──────────────────────────────────────────────────── */
+  --color-wall-balance: #4a9eff;
+  --color-wall-test: #e5a04a;
 
-  /* Gamma exposure — same as up/down */
   --color-gex-pos: var(--color-up);
   --color-gex-neg: var(--color-down);
 
-  /* Charm exposure — VS3D-style blue/mustard */
-  --color-cex-pos: #4a9eff; /* blue: positive charm */
-  --color-cex-neg: #e5a04a; /* mustard: negative charm */
+  --color-cex-pos: #4a9eff;
+  --color-cex-neg: #e5a04a;
 
   --color-gex-pos-15: color-mix(in srgb, var(--color-gex-pos) 15%, transparent);
   --color-gex-neg-15: color-mix(in srgb, var(--color-gex-neg) 15%, transparent);
   --color-cex-pos-15: color-mix(in srgb, var(--color-cex-pos) 15%, transparent);
   --color-cex-neg-15: color-mix(in srgb, var(--color-cex-neg) 15%, transparent);
+
+  /* ─── News impact ─────────────────────────────────────────────────────── */
+  --color-news-high: #f5a524;
+  --color-news-med: #7ea8c4;
+  --color-news-low: #6e6c67;
 }
 
 body {
@@ -78,7 +81,6 @@ body {
 .font-mono {
   font-family: var(--font-mono);
 }
-
 .font-sans {
   font-family: var(--font-sans);
 }
@@ -87,16 +89,13 @@ body {
   width: 2px;
   height: 4px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
   background: var(--color-border-2);
   border-radius: 2px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-5);
 }

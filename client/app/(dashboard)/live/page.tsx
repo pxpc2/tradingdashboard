@@ -22,7 +22,7 @@ export default async function LivePage({ searchParams }: PageProps) {
       timeZone: "America/New_York",
     });
 
-  const [straddleResult, smlResult] = await Promise.all([
+  const [straddleResult, smlResult, openingGexResult] = await Promise.all([
     supabase
       .from("straddle_snapshots")
       .select("*")
@@ -37,10 +37,19 @@ export default async function LivePage({ searchParams }: PageProps) {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("dealer_strike_snapshots")
+      .select("total")
+      .eq("date", today)
+      .eq("metric", "gex")
+      .order("bar_time", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const initialStraddleData: StraddleSnapshot[] = straddleResult.data ?? [];
   const initialSmlSession: RtmSession | null = smlResult.data ?? null;
+  const openingGexTotal: number | null = openingGexResult.data?.total ?? null;
 
   return (
     <Suspense
@@ -53,6 +62,7 @@ export default async function LivePage({ searchParams }: PageProps) {
       <LiveTab
         initialStraddleData={initialStraddleData}
         initialSmlSession={initialSmlSession}
+        initialOpeningGexTotal={openingGexTotal}
       />
     </Suspense>
   );

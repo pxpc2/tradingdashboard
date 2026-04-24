@@ -16,6 +16,10 @@ type Props = {
   openingStraddle: number | null;
   minutesSinceOpen: number;
   timestamp: string | null;
+  openRegime: "pos" | "neg" | null;
+  gammaFlip: number | null;
+  charmFlip: number | null;
+  liveSpx: number | null;
 };
 
 function priceNarrative(p: PriceCharacter): string {
@@ -40,42 +44,17 @@ function skewNarrative(s: SkewCharacter): string {
 
 function synthesis(p: PriceCharacter, s: SkewCharacter): string {
   if (p.classification === "insufficient") return "";
-
-  // Flat skew = no confirmation signal either way
   if (s.direction === "flat" || s.strength === "flat") return "";
-
   const priceUp = p.direction === "up";
   const priceDown = p.direction === "down";
   const skewRising = s.direction === "rising";
   const skewFalling = s.direction === "falling";
-
   if (p.classification === "trending") {
-    // Up trend + falling skew = bullish flow confirming
-    // Down trend + rising skew = fear rising with drop, confirming
-    if ((priceUp && skewFalling) || (priceDown && skewRising)) {
+    if ((priceUp && skewFalling) || (priceDown && skewRising))
       return "SKEW CONFIRMING";
-    }
-    if ((priceUp && skewRising) || (priceDown && skewFalling)) {
+    if ((priceUp && skewRising) || (priceDown && skewFalling))
       return "SKEW DIVERGING";
-    }
-    return "";
   }
-
-  if (p.classification === "reversal") {
-    // Reverted down + skew rising = fear catching up, confirming the reversal
-    // Reverted up + skew falling = calls catching bid, confirming
-    if ((priceDown && skewRising) || (priceUp && skewFalling)) {
-      return "SKEW CONFIRMING";
-    }
-    if ((priceDown && skewFalling) || (priceUp && skewRising)) {
-      return "SKEW DIVERGING";
-    }
-    return "";
-  }
-
-  // partial_reversal and flat don't emit a synthesis tag —
-  // they're inherently mixed reads and don't map cleanly to
-  // confirming/diverging semantics.
   return "";
 }
 
@@ -210,6 +189,73 @@ function formatTimestamp(ts: string | null): string | null {
   }
 }
 
+function DealerContext({
+  openRegime,
+  gammaFlip,
+  charmFlip,
+  liveSpx,
+}: {
+  openRegime: "pos" | "neg" | null;
+  gammaFlip: number | null;
+  charmFlip: number | null;
+  liveSpx: number | null;
+}) {
+  const hasAnything =
+    openRegime !== null || gammaFlip !== null || charmFlip !== null;
+  if (!hasAnything) return null;
+
+  const openColor =
+    openRegime === "pos"
+      ? "var(--color-gex-pos)"
+      : openRegime === "neg"
+        ? "var(--color-gex-neg)"
+        : THEME.text4;
+
+  const gammaDist =
+    gammaFlip !== null && liveSpx !== null ? gammaFlip - liveSpx : null;
+  const charmDist =
+    charmFlip !== null && liveSpx !== null ? charmFlip - liveSpx : null;
+
+  const fmtDist = (d: number) => {
+    const sign = d >= 0 ? "+" : "";
+    return `${sign}${d.toFixed(0)}`;
+  };
+
+  return (
+    <div className="flex items-center gap-3 font-mono text-[10px]">
+      {openRegime !== null && (
+        <>
+          <span className="text-text-5">·</span>
+          <span>
+            <span className="text-text-4">OPEN </span>
+            <span style={{ color: openColor }}>
+              {openRegime === "pos" ? "+GAMMA" : "-GAMMA"}
+            </span>
+          </span>
+        </>
+      )}
+      {gammaFlip !== null && (
+        <>
+          <span className="text-text-5">·</span>
+          <span>
+            <span className="text-text-4">γ FLIP </span>
+            <span style={{ color: "var(--color-gex-pos)" }}>{gammaFlip}</span>
+          </span>
+        </>
+      )}
+      {charmFlip !== null && (
+        <>
+          <span className="text-text-5">·</span>
+          <span>
+            <span className="text-text-4">⌀ FLIP </span>
+            <span style={{ color: "var(--color-cex-neg)" }}>{charmFlip}</span>
+          </span>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function LiveReadPanel({
   price,
   skew,
@@ -219,6 +265,10 @@ export default function LiveReadPanel({
   openingStraddle,
   minutesSinceOpen,
   timestamp,
+  openRegime,
+  gammaFlip,
+  charmFlip,
+  liveSpx,
 }: Props) {
   const tags = computeTags({ price, skew, minutesSinceOpen });
   const narrative = buildNarrative(price, skew);
@@ -227,13 +277,19 @@ export default function LiveReadPanel({
   return (
     <div className="relative bg-page border border-border-2 border-l-2 border-l-amber px-3 py-2.5">
       <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
           <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-4">
             LIVE READ
           </span>
           {timeStr && (
             <span className="font-mono text-[11px] text-text-5">{timeStr}</span>
           )}
+          <DealerContext
+            openRegime={openRegime}
+            gammaFlip={gammaFlip}
+            charmFlip={charmFlip}
+            liveSpx={liveSpx}
+          />
         </div>
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 justify-end">
