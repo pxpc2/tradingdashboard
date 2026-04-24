@@ -20,17 +20,49 @@ export interface NewsItem {
   symbol: string | null;
 }
 
-function formatCt(iso: string): string {
-  try {
-    return new Date(iso.replace(" ", "T") + "Z").toLocaleTimeString("en-US", {
-      timeZone: "America/Chicago",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  } catch {
-    return "—";
-  }
+/**
+ * FMP's `publishedDate` is a naive "YYYY-MM-DD HH:mm:ss" string in
+ * America/New_York time. We parse it by figuring out the ET offset for
+ * that specific instant (handling DST correctly) and produce a real UTC
+ * timestamp.
+ */
+function parseFmpEtToUtcMs(s: string): number {
+  const [datePart, timePart] = s.split(" ");
+  if (!datePart || !timePart) return NaN;
+  const [y, mo, d] = datePart.split("-").map(Number);
+  const [h, mi, se] = timePart.split(":").map(Number);
+  if ([y, mo, d, h, mi, se].some((n) => Number.isNaN(n))) return NaN;
+
+  // Pretend the wall time is UTC, then see what Intl reports it as in ET.
+  // The difference is the ET-to-UTC offset for that instant.
+  const utcGuess = Date.UTC(y, mo - 1, d, h, mi, se);
+  const etShown = new Date(utcGuess).toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  const m = etShown.match(/(\d+)\/(\d+)\/(\d+),?\s+(\d+):(\d+):(\d+)/);
+  if (!m) return NaN;
+  const [, emo, ed, ey, eh, emi, ese] = m.map(Number);
+  const etAsUtc = Date.UTC(ey, emo - 1, ed, eh, emi, ese);
+  const offsetMs = utcGuess - etAsUtc;
+
+  return utcGuess + offsetMs;
+}
+
+function formatCt(ts: number): string {
+  if (!Number.isFinite(ts)) return "—";
+  return new Date(ts).toLocaleTimeString("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 function shortSource(site: string): string {
@@ -74,30 +106,36 @@ export async function GET() {
 
     const macroItems: InternalItem[] = (
       Array.isArray(general) ? general : []
-    ).map((r) => ({
-      time: formatCt(r.publishedDate),
-      source: shortSource(r.site),
-      title: r.title,
-      url: r.url,
-      category: "macro" as NewsCategory,
-      symbol: null,
-      _ts: new Date(r.publishedDate.replace(" ", "T") + "Z").getTime(),
-    }));
-
-    const stockItems: InternalItem[] = (Array.isArray(stock) ? stock : []).map(
-      (r) => ({
-        time: formatCt(r.publishedDate),
+    ).map((r) => {
+      const ts = parseFmpEtToUtcMs(r.publishedDate);
+      return {
+        time: formatCt(ts),
         source: shortSource(r.site),
         title: r.title,
         url: r.url,
-        category: "stock" as NewsCategory,
-        symbol: r.symbol ?? null,
-        _ts: new Date(r.publishedDate.replace(" ", "T") + "Z").getTime(),
-      }),
+        category: "macro" as NewsCategory,
+        symbol: null,
+        _ts: ts,
+      };
+    });
+
+    const stockItems: InternalItem[] = (Array.isArray(stock) ? stock : []).map(
+      (r) => {
+        const ts = parseFmpEtToUtcMs(r.publishedDate);
+        return {
+          time: formatCt(ts),
+          source: shortSource(r.site),
+          title: r.title,
+          url: r.url,
+          category: "stock" as NewsCategory,
+          symbol: r.symbol ?? null,
+          _ts: ts,
+        };
+      },
     );
 
     const merged: NewsItem[] = [...macroItems, ...stockItems]
-      .filter((i) => i._ts >= cutoff)
+      .filter((i) => Number.isFinite(i._ts) && i._ts >= cutoff)
       .sort((a, b) => b._ts - a._ts)
       .slice(0, 25)
       .map(({ _ts: _, ...rest }) => rest);

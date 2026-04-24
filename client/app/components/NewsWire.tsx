@@ -4,69 +4,82 @@ import { useMarketNews } from "../hooks/useMarketNews";
 import { THEME } from "../lib/theme";
 import type { NewsItem } from "../api/market-news/route";
 
+type Props = {
+  height?: number;
+};
+
 function categoryColor(category: NewsItem["category"]): string {
   if (category === "macro") return THEME.amber;
   return THEME.indigo;
 }
 
-export default function NewsWire() {
+export default function NewsWire({ height = 400 }: Props) {
   const { items, loading } = useMarketNews();
 
   return (
-    <div className="bg-page border border-border-2 flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border-2">
+    <div
+      className="bg-page border border-border-2 flex flex-col"
+      style={{ height }}
+    >
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-2 shrink-0">
         <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-4">
-          News · market wire
+          Newsfeed
         </span>
-        <span className="font-mono text-[9px] text-text-5">24H · FMP</span>
       </div>
 
-      <div className="flex-1 px-3 py-1 max-h-[320px] overflow-y-auto news-scroll">
+      <div className="flex-1 overflow-y-auto news-scroll">
         {loading && items.length === 0 ? (
-          <div className="flex items-center justify-center h-24 font-sans text-[10px] uppercase tracking-wide text-text-5">
-            Loading…
+          <div className="py-8 text-center">
+            <span className="font-sans text-[10px] uppercase tracking-wide text-text-5">
+              Loading…
+            </span>
           </div>
         ) : items.length === 0 ? (
-          <div className="flex items-center justify-center h-24 font-sans text-[10px] uppercase tracking-wide text-text-5">
-            No news
+          <div className="py-8 text-center">
+            <span className="font-sans text-[10px] uppercase tracking-wide text-text-5">
+              No news
+            </span>
           </div>
         ) : (
-          <div>
+          <div className="py-1">
             {items.map((n, i) => (
               <a
                 key={`${n.time}-${n.title}-${i}`}
                 href={n.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={`flex items-start gap-2 py-1.5 group ${
+                className={`flex items-center gap-2 px-3 py-1 text-[11px] group ${
                   i < items.length - 1 ? "border-b border-border-2/50" : ""
                 }`}
               >
                 <span
-                  className="font-mono text-[9px] w-10 shrink-0 mt-px"
-                  style={{ color: THEME.text5 }}
+                  className="font-mono text-[10px] w-10 shrink-0"
+                  style={{ color: THEME.text4 }}
                 >
                   {n.time}
                 </span>
                 <span
-                  className="font-mono text-[9px] w-10 shrink-0 mt-px"
+                  className="font-mono text-[10px] w-10 shrink-0"
                   style={{ color: THEME.indigo }}
                 >
                   {n.source}
                 </span>
                 <span
-                  className="w-1 h-1 rounded-full mt-1.5 shrink-0"
-                  style={{ background: categoryColor(n.category) }}
-                />
+                  className="shrink-0 text-[8px]"
+                  style={{ color: categoryColor(n.category) }}
+                  aria-label={n.category}
+                >
+                  ■
+                </span>
                 <span
-                  className="flex-1 text-[10px] leading-snug group-hover:text-text"
+                  className="flex-1 font-sans truncate group-hover:text-text"
                   style={{ color: THEME.text2 }}
                   title={n.title}
                 >
                   {n.title}
                   {n.symbol && (
                     <span
-                      className="ml-1 font-mono text-[9px]"
+                      className="ml-1 font-mono text-[10px]"
                       style={{ color: THEME.text4 }}
                     >
                       · {n.symbol}
@@ -85,6 +98,10 @@ export default function NewsWire() {
         .news-scroll::-webkit-scrollbar-thumb {
           background: var(--color-border-2);
           border-radius: 0;
+        }
+        .news-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: var(--color-border-2) transparent;
         }
       `}</style>
     </div>

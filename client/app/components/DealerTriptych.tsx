@@ -35,6 +35,26 @@ function fmtGex(v: number): string {
   return `${sign}${abs.toFixed(0)}`;
 }
 
+// ET → CT: always exactly -1 hour (both shift DST on same day)
+function etToCt(etHm: string): string {
+  const m = etHm.match(/^(\d{2}):(\d{2})/);
+  if (!m) return etHm;
+  const h = parseInt(m[1], 10);
+  const mins = m[2];
+  const ctH = (h - 1 + 24) % 24;
+  return `${String(ctH).padStart(2, "0")}:${mins}`;
+}
+
+function fmtCtNow(d: Date): string {
+  return d.toLocaleTimeString("en-GB", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
 function computeCumulative(
   strikes: DealerStrikeRow[] | null,
   spot: number | null,
@@ -108,6 +128,15 @@ export default function DealerTriptych({
   const [timelineDataForDate, setTimelineDataForDate] = useState<
     TimelineBar[] | null
   >(null);
+  const [gexUpdatedAt, setGexUpdatedAt] = useState<Date | null>(null);
+  const [cexUpdatedAt, setCexUpdatedAt] = useState<Date | null>(null);
+
+  // Seed timestamps on client mount if we arrived with initial data (avoids SSR mismatch)
+  useEffect(() => {
+    if (initialGex) setGexUpdatedAt(new Date());
+    if (initialCex) setCexUpdatedAt(new Date());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Snapshot-pinned spot — drives curve computation, only changes every 5 min
   const snapshotSpot = gexSnapshot?.spot_ref ?? initialSpotRef ?? null;
@@ -148,6 +177,7 @@ export default function DealerTriptych({
           if (row.date !== today) return;
           if (row.metric === "gex") {
             setGexSnapshot(row as DealerStrikeSnapshot);
+            setGexUpdatedAt(new Date());
             setGexSeries((prev) => [
               ...prev,
               {
@@ -159,6 +189,7 @@ export default function DealerTriptych({
           }
           if (row.metric === "cex") {
             setCexSnapshot(row as DealerStrikeSnapshot);
+            setCexUpdatedAt(new Date());
           }
         },
       )
@@ -214,7 +245,7 @@ export default function DealerTriptych({
   const cumCexContainerRef = useRef<HTMLDivElement>(null);
   const cumCexChartRef = useRef<any>(null);
 
-  // Init charts
+  // Init charts — refs are always attached since chart divs always render
   useEffect(() => {
     if (
       !timelineContainerRef.current ||
@@ -245,7 +276,7 @@ export default function DealerTriptych({
         formatter: (params: any[]) => {
           if (!params?.length) return "";
           const v = params[0].value as number;
-          return `<span style="color:${P.text4};font-size:10px">${params[0].name} ET</span><br/>GEX <span style="color:${v >= 0 ? P.up : P.down}">${fmtGex(v)}</span>`;
+          return `<span style="color:${P.text4};font-size:10px">${params[0].name} CT</span><br/>GEX <span style="color:${v >= 0 ? P.up : P.down}">${fmtGex(v)}</span>`;
         },
       },
       xAxis: {
@@ -405,13 +436,13 @@ export default function DealerTriptych({
     let values: number[] = [];
 
     if (selectedDate === today) {
-      labels = gexSeries.map((b) => b.bar_time);
+      labels = gexSeries.map((b) => etToCt(b.bar_time));
       values = gexSeries.map((b) => b.total);
     } else if (timelineDataForDate) {
       const rthBars = timelineDataForDate.filter(
         (b: TimelineBar) => b.ts >= "09:30" && b.ts <= "16:15",
       );
-      labels = rthBars.map((b: TimelineBar) => b.ts);
+      labels = rthBars.map((b: TimelineBar) => etToCt(b.ts));
       values = rthBars.map((b: TimelineBar) => b.gex);
     }
 
@@ -440,6 +471,11 @@ export default function DealerTriptych({
     const labels = gexCumPoints.map((p) => String(p.strike));
     const values = gexCumPoints.map((p) => p.cum);
     const spotLabel = nearestStrikeLabel(gexCumPoints, displaySpot);
+    const spotIndex = labels.indexOf(spotLabel);
+
+    // Render ~6-8 ticks total: every Nth label, always include spot
+    const targetTickCount = 7;
+    const step = Math.max(1, Math.round(labels.length / targetTickCount));
 
     const markLineData: any[] = [
       {
@@ -461,8 +497,12 @@ export default function DealerTriptych({
           axisLabel: {
             color: P.text5,
             fontSize: 9,
-            formatter: (value: string) => {
-              return value === spotLabel ? `{hl|${value}}` : value;
+            interval: 0,
+            formatter: (value: string, index: number) => {
+              if (index === spotIndex) return `{hl|${value}}`;
+              if (index % step === 0 && Math.abs(index - spotIndex) > 1)
+                return value;
+              return "";
             },
             rich: {
               hl: {
@@ -496,6 +536,10 @@ export default function DealerTriptych({
     const labels = cexCumPoints.map((p) => String(p.strike));
     const values = cexCumPoints.map((p) => p.cum);
     const spotLabel = nearestStrikeLabel(cexCumPoints, displaySpot);
+    const spotIndex = labels.indexOf(spotLabel);
+
+    const targetTickCount = 7;
+    const step = Math.max(1, Math.round(labels.length / targetTickCount));
 
     const markLineData: any[] = [
       {
@@ -517,8 +561,12 @@ export default function DealerTriptych({
           axisLabel: {
             color: P.text5,
             fontSize: 9,
-            formatter: (value: string) => {
-              return value === spotLabel ? `{hl|${value}}` : value;
+            interval: 0,
+            formatter: (value: string, index: number) => {
+              if (index === spotIndex) return `{hl|${value}}`;
+              if (index % step === 0 && Math.abs(index - spotIndex) > 1)
+                return value;
+              return "";
             },
             rich: {
               hl: {
@@ -543,18 +591,10 @@ export default function DealerTriptych({
     );
   }, [cexCumPoints, charmFlip, displaySpot]);
 
-  const noData = !gexSnapshot && !initialGex;
-
-  if (noData) {
-    return (
-      <div className="border border-border-2 bg-page flex items-center justify-center h-32 text-xs text-text-5 uppercase tracking-[0.1em]">
-        No dealer data yet — waiting for first 09:35 ET cycle
-      </div>
-    );
-  }
+  const noData = !gexSnapshot;
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="relative grid grid-cols-3 gap-3">
       {/* GEX Intraday */}
       <div className="border border-border-2 bg-page flex flex-col">
         <div
@@ -562,23 +602,25 @@ export default function DealerTriptych({
           style={{ minHeight: 32 }}
         >
           <span className="font-sans text-xs text-text-4 uppercase tracking-[0.05em]">
-            GEX intraday · 0DTE MM
+            GEX intraday
           </span>
-          <select
-            value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="bg-panel border border-border text-text-3 font-mono text-[9px] px-1 py-0.5 rounded focus:outline-none"
-          >
-            <option value={today}>{today} · live</option>
-            {timelineDates
-              .filter((d) => d.date !== today)
-              .map((d) => (
-                <option key={d.date} value={d.date}>
-                  {d.date}
-                  {d.regime_open ? ` · ${d.regime_open}` : ""}
-                </option>
-              ))}
-          </select>
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="bg-panel border border-border text-text-3 font-mono text-[9px] px-1 py-0.5 rounded focus:outline-none"
+            >
+              <option value={today}>{today} · live</option>
+              {timelineDates
+                .filter((d) => d.date !== today)
+                .map((d) => (
+                  <option key={d.date} value={d.date}>
+                    {d.date}
+                    {d.regime_open ? ` · ${d.regime_open}` : ""}
+                  </option>
+                ))}
+            </select>
+          </div>
         </div>
         <div
           ref={timelineContainerRef}
@@ -594,8 +636,13 @@ export default function DealerTriptych({
           style={{ minHeight: 32 }}
         >
           <span className="font-sans text-xs text-text-4 uppercase tracking-[0.05em]">
-            Cumulative gex curve
+            gex curve
           </span>
+          {gexUpdatedAt && (
+            <span className="font-mono text-[9px] text-text-5">
+              last updated: {fmtCtNow(gexUpdatedAt)} CT
+            </span>
+          )}
         </div>
         <div
           ref={cumGexContainerRef}
@@ -611,8 +658,13 @@ export default function DealerTriptych({
           style={{ minHeight: 32 }}
         >
           <span className="font-sans text-xs text-text-4 uppercase tracking-[0.05em]">
-            Cumulative CEX curve
+            CEX curve
           </span>
+          {cexUpdatedAt && (
+            <span className="font-mono text-[9px] text-text-5">
+              last updated: {fmtCtNow(cexUpdatedAt)} CT
+            </span>
+          )}
         </div>
         <div
           ref={cumCexContainerRef}
@@ -620,6 +672,13 @@ export default function DealerTriptych({
           style={{ height: 180 }}
         />
       </div>
+
+      {/* No-data overlay — rendered on top while chart divs stay mounted behind */}
+      {noData && (
+        <div className="absolute inset-0 flex items-center justify-center bg-page/90 border border-border-2 text-xs text-text-5 uppercase tracking-[0.1em] pointer-events-none">
+          No dealer data yet — waiting for opening cycle
+        </div>
+      )}
     </div>
   );
 }

@@ -7,9 +7,8 @@ import { THEME } from "../lib/theme";
 
 type Props = {
   selectedDate: string;
+  height?: number;
 };
-
-const PANEL_HEIGHT = 720;
 
 function isAuction(event: string): boolean {
   return event.toLowerCase().includes("auction");
@@ -47,7 +46,10 @@ function eventMinutes(timeCt: string): number | null {
   return parseInt(m[1]) * 60 + parseInt(m[2]);
 }
 
-export default function CalendarFixedHeight({ selectedDate }: Props) {
+export default function CalendarFixedHeight({
+  selectedDate,
+  height = 740,
+}: Props) {
   const { events, loading } = useMacroEvents(selectedDate);
 
   const nextIndex = useMemo(() => {
@@ -68,24 +70,22 @@ export default function CalendarFixedHeight({ selectedDate }: Props) {
   return (
     <div
       className="bg-page border border-border-2 flex flex-col"
-      style={{ height: PANEL_HEIGHT }}
+      style={{ height }}
     >
-      {/* Sticky header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border-2 shrink-0">
         <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-4">
-          Calendar
+          Economic Calendar
         </span>
         {nextLabel && (
           <span
             className="font-mono text-xs uppercase tracking-wide"
             style={{ color: THEME.amber }}
           >
-            Next {nextLabel}
+            Next {nextLabel} CT
           </span>
         )}
       </div>
 
-      {/* Scrollable list */}
       <div className="flex-1 overflow-y-auto calendar-scroll">
         {loading && events.length === 0 ? (
           <div className="py-8 text-center">

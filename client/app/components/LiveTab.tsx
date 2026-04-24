@@ -22,6 +22,7 @@ import TopMovers from "./TopMovers";
 import NewsWire from "./NewsWire";
 import DealerTriptych from "./DealerTriptych";
 import { DealerStrikeSnapshot } from "../types";
+import CalendarFixedHeight from "./CalendarFixedHeight";
 
 type GexSeriesBar = { bar_time: string; total: number; spot_ref: number };
 type TimelineDate = {
@@ -436,7 +437,12 @@ export default function LiveTab({
         <TopMovers kind="losers" />
       </div>
 
-      <NewsWire />
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2">
+          <NewsWire />
+        </div>
+        <CalendarFixedHeight selectedDate={today} height={400} />
+      </div>
     </div>
   );
 }

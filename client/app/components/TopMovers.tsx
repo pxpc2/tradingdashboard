@@ -19,7 +19,9 @@ export default function TopMovers({ kind }: Props) {
         <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-4">
           {title}
         </span>
-        <span className="font-mono text-[11px] text-text-5">S&P500</span>
+        <span className="font-mono text-[11px] text-text-5">
+          TOP100 MKTCAP SP500
+        </span>
       </div>
 
       <div className="flex-1 px-3 py-1">

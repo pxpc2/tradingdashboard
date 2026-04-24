@@ -23,7 +23,7 @@ export async function GET() {
   try {
     const res = await fetch(
       `https://financialmodelingprep.com/stable/sector-performance-snapshot?date=${today}&exchange=NASDAQ&apikey=${apiKey}`,
-      { next: { revalidate: 300 } },
+      { next: { revalidate: 60 } },
     );
     const raw: FmpSectorSnapshot[] = await res.json();
 

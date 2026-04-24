@@ -3,8 +3,18 @@
 import { useSectors } from "../hooks/useSectors";
 import { THEME } from "../lib/theme";
 
+function fmtCt(d: Date): string {
+  return d.toLocaleTimeString("en-GB", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+}
+
 export default function Sectors() {
-  const { sectors, loading } = useSectors();
+  const { sectors, loading, lastUpdated } = useSectors();
 
   const maxAbs = Math.max(0.5, ...sectors.map((s) => Math.abs(s.changePct)));
 
@@ -14,7 +24,13 @@ export default function Sectors() {
         <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-4">
           Sectors
         </span>
-        <span className="font-mono text-[11px] text-text-5">SPDR</span>
+        <div className="flex items-center gap-2">
+          {lastUpdated && (
+            <span className="font-mono text-[9px] text-text-5">
+              last updated: {fmtCt(lastUpdated)} CT
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 px-3 py-2">
