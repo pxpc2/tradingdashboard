@@ -20,12 +20,25 @@ import {
 import Sectors from "./Sectors";
 import TopMovers from "./TopMovers";
 import NewsWire from "./NewsWire";
+import DealerTriptych from "./DealerTriptych";
+import { DealerStrikeSnapshot } from "../types";
+
+type GexSeriesBar = { bar_time: string; total: number; spot_ref: number };
+type TimelineDate = {
+  date: string;
+  regime_open: string | null;
+  open_gex: number | null;
+  close_gex: number | null;
+};
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
   initialOpeningGexTotal: number | null;
+  initialLatestGex: DealerStrikeSnapshot | null;
+  initialLatestCex: DealerStrikeSnapshot | null;
+  initialGexSeries: GexSeriesBar[];
+  initialTimelineDates: TimelineDate[];
 };
-
 type StrikeWall = { strike: number; value: number };
 
 const CORE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL, "VIX", "VIX1D"];
@@ -136,6 +149,10 @@ function computeFlipLevel(
 export default function LiveTab({
   initialStraddleData,
   initialOpeningGexTotal,
+  initialLatestGex,
+  initialLatestCex,
+  initialGexSeries,
+  initialTimelineDates,
 }: Props) {
   const searchParams = useSearchParams();
   const dateParam = searchParams.get("date");
@@ -399,6 +416,16 @@ export default function LiveTab({
         avgSkew={avgSkew}
         balanceWalls={chartWalls.positive}
         testWalls={chartWalls.negative}
+      />
+
+      <DealerTriptych
+        initialGex={initialLatestGex}
+        initialCex={initialLatestCex}
+        initialGexSeries={initialGexSeries}
+        initialStraddle={opening?.straddle_mid ?? null}
+        initialSpotRef={opening?.spx_ref ?? null}
+        timelineDates={initialTimelineDates}
+        today={today}
       />
 
       {/* Market breadth — 3 columns for now, positions summary slot TBD */}

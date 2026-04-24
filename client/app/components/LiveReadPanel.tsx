@@ -227,9 +227,9 @@ function DealerContext({
         <>
           <span className="text-text-5">·</span>
           <span>
-            <span className="text-text-4">OPEN </span>
+            <span className="text-text-4">OPENING REGIME </span>
             <span style={{ color: openColor }}>
-              {openRegime === "pos" ? "+GAMMA" : "-GAMMA"}
+              {openRegime === "pos" ? "+γ" : "-γ"}
             </span>
           </span>
         </>

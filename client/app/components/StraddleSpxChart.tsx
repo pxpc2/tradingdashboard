@@ -400,7 +400,7 @@ export default function StraddleSpxChart({
           </span>
         </div>
       </div>
-      <div ref={containerRef} className="w-full" style={{ height: 150 }} />
+      <div ref={containerRef} className="w-full" style={{ height: 200 }} />
     </div>
   );
 }
