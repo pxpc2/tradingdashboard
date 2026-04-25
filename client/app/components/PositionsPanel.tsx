@@ -355,18 +355,19 @@ export default function PositionsPanel({
             <div className="flex gap-3 text-xs mb-2">
               <span className="text-text-4">{effectiveWidth}W</span>
               <span>
-                <span className="text-text-4">ENT</span>{" "}
+                <span className="text-text-4">ENTRY</span>{" "}
                 <span className="font-mono text-text-2">
                   {entry?.mid.toFixed(2) ?? "—"}
                 </span>
               </span>
               <span>
-                <span className="text-text-4">MID</span>{" "}
+                <span className="text-text-4">MID NOW</span>{" "}
                 <span className="font-mono text-text-2">
                   {latest?.mid.toFixed(2) ?? "—"}
                 </span>
               </span>
               <span className="font-mono" style={{ color: pnlColor(pnl) }}>
+                PNL{" "}
                 {pnl !== null ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}` : "—"}
               </span>
             </div>
