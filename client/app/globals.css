@@ -107,3 +107,18 @@ body {
 .scrollbar-none::-webkit-scrollbar {
   display: none;
 }
+@keyframes news-flash {
+  0% {
+    background-color: rgba(245, 165, 36, 0.18);
+    border-left-color: var(--color-amber);
+  }
+  100% {
+    background-color: transparent;
+    border-left-color: transparent;
+  }
+}
+
+.news-row-new {
+  border-left: 2px solid var(--color-amber);
+  animation: news-flash 2s ease-out forwards;
+}
