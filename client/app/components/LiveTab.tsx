@@ -19,12 +19,14 @@ import Sectors from "./Sectors";
 import TopMovers from "./TopMovers";
 import NewsWire from "./NewsWire";
 import CalendarFixedHeight from "./CalendarFixedHeight";
+import type { WeeklyStraddleRow } from "../(dashboard)/live/page";
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
+  initialWeeklyStraddle: WeeklyStraddleRow | null;
 };
 
-const CORE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL, "VIX", "VIX1D"];
+const CORE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL, "VIX", "VIX1D", "VIX3M"];
 
 function isSpxOpenFor(d: Date): boolean {
   const day = d.toLocaleDateString("en-US", {
@@ -74,7 +76,10 @@ function minutesSinceOpenFor(d: Date): number {
   return Math.max(0, mins - openMins);
 }
 
-export default function LiveTab({ initialStraddleData }: Props) {
+export default function LiveTab({
+  initialStraddleData,
+  initialWeeklyStraddle,
+}: Props) {
   const searchParams = useSearchParams();
   const dateParam = searchParams.get("date");
   const today =
@@ -104,6 +109,7 @@ export default function LiveTab({ initialStraddleData }: Props) {
   const esTick = ticks[ES_STREAMER_SYMBOL] ?? null;
   const vixTick = ticks["VIX"] ?? null;
   const vix1dTick = ticks["VIX1D"] ?? null;
+  const vix3mTick = ticks["VIX3M"] ?? null;
 
   const spxOpen = clockTick ? isSpxOpenFor(clockTick) : false;
   const esOpen = clockTick ? isEsOpenFor(clockTick) : false;
@@ -167,15 +173,6 @@ export default function LiveTab({ initialStraddleData }: Props) {
     return { maxSpx: Math.max(...prices), minSpx: Math.min(...prices) };
   }, [todayRows, liveSpx]);
 
-  const dayRange = maxSpx !== null && minSpx !== null ? maxSpx - minSpx : null;
-
-  const dayPosPct =
-    liveSpx !== null && maxSpx !== null && minSpx !== null && dayRange !== null
-      ? dayRange > 0
-        ? ((liveSpx - minSpx) / dayRange) * 100
-        : 50
-      : null;
-
   const skewChar = useMemo(
     () => computeSkewCharacter(todaySkewRows),
     [todaySkewRows],
@@ -195,10 +192,29 @@ export default function LiveTab({ initialStraddleData }: Props) {
 
   const vixLast = vixTick?.last ?? null;
   const vix1dLast = vix1dTick?.last ?? null;
+  const vix3mLast = vix3mTick?.last ?? null;
+
   const vix1dVixRatio =
     vix1dLast && vixLast && vixLast > 0 ? vix1dLast / vixLast : null;
 
+  // VIX/VIX3M: > 1 = backwardation (stress), < 1 = contango (normal)
+  const volRegimeRatio =
+    vixLast && vix3mLast && vix3mLast > 0 ? vixLast / vix3mLast : null;
+
   const atmIv = latestSkew?.atm_iv ?? null;
+
+  // Weekly straddle: implied bounds = atm_strike ± straddle_mid
+  const weeklyAtm = initialWeeklyStraddle?.atm_strike ?? null;
+  const weeklyStraddleMid = initialWeeklyStraddle?.straddle_mid ?? null;
+  const weeklyExpiry = initialWeeklyStraddle?.expiry_date ?? null;
+  const weeklyImpliedHigh =
+    weeklyAtm !== null && weeklyStraddleMid !== null
+      ? weeklyAtm + weeklyStraddleMid
+      : null;
+  const weeklyImpliedLow =
+    weeklyAtm !== null && weeklyStraddleMid !== null
+      ? weeklyAtm - weeklyStraddleMid
+      : null;
 
   const instruments = useMemo(
     () => [
@@ -270,10 +286,11 @@ export default function LiveTab({ initialStraddleData }: Props) {
         skew={latestSkew?.skew ?? null}
         skewPctile={skewPctile}
         vix1dVixRatio={vix1dVixRatio}
-        dayRange={dayRange}
-        dayHigh={maxSpx}
-        dayLow={minSpx}
-        dayPosPct={dayPosPct}
+        volRegimeRatio={volRegimeRatio}
+        weeklyImpliedHigh={weeklyImpliedHigh}
+        weeklyImpliedLow={weeklyImpliedLow}
+        weeklyAtm={weeklyAtm}
+        weeklyExpiry={weeklyExpiry}
       />
 
       <IntradayCharts

@@ -15,10 +15,11 @@ type Props = {
   skew: number | null;
   skewPctile: number | null;
   vix1dVixRatio: number | null;
-  dayRange: number | null;
-  dayHigh: number | null;
-  dayLow: number | null;
-  dayPosPct: number | null;
+  volRegimeRatio: number | null;
+  weeklyImpliedHigh: number | null;
+  weeklyImpliedLow: number | null;
+  weeklyAtm: number | null;
+  weeklyExpiry: string | null;
 };
 
 function fmtDollar(v: number | null, d = 2) {
@@ -126,10 +127,11 @@ export default function MetricsGrid({
   skew,
   skewPctile,
   vix1dVixRatio,
-  dayRange,
-  dayHigh,
-  dayLow,
-  dayPosPct,
+  volRegimeRatio,
+  weeklyImpliedHigh,
+  weeklyImpliedLow,
+  weeklyAtm,
+  weeklyExpiry,
 }: Props) {
   const realizedColor =
     realizedPct === null
@@ -147,11 +149,11 @@ export default function MetricsGrid({
         ? THEME.amber
         : THEME.text;
 
-  // Day position: tint amber when near top/bottom of range (potential exhaustion)
-  const dayPosColor =
-    dayPosPct === null
+  // VIX/VIX3M: > 1 = backwardation (stress)
+  const volRegimeColor =
+    volRegimeRatio === null
       ? THEME.text
-      : dayPosPct >= 85 || dayPosPct <= 15
+      : volRegimeRatio >= 1.0
         ? THEME.amber
         : THEME.text;
 
@@ -187,13 +189,9 @@ export default function MetricsGrid({
       value: realizedPts !== null ? `${realizedPts.toFixed(1)}pt` : "—",
       valueColor: realizedColor,
       context:
-        realizedPct !== null ? `${realizedPct.toFixed(0)}% OF IV` : undefined,
-      contextColor: realizedColor,
-    },
-    {
-      label: "IV30 · ATM",
-      value: fmtPct(atmIv),
-      context: "Δ 0",
+        realizedPct !== null
+          ? `${realizedPct.toFixed(0)}% OF implied`
+          : undefined,
     },
     {
       label: "SKEW",
@@ -203,33 +201,42 @@ export default function MetricsGrid({
         skewPctile !== null && skewPctile >= 75 ? THEME.amber : THEME.text5,
     },
     {
+      label: "IV30 · ATM",
+      value: fmtPct(atmIv),
+      context: "Δ 0",
+    },
+    {
       label: "VOL RATIO",
       value: fmtNum(vix1dVixRatio),
       valueColor: volRatioColor,
-      context: "1D / 30D",
+      context: "VIX1D / VIX",
     },
     {
-      label: "IMPLIED RANGE",
+      label: "VOL REGIME",
+      value: fmtNum(volRegimeRatio),
+      valueColor: volRegimeColor,
+      context: "VIX / VIX3M",
+    },
+    {
+      label: "DAILY RANGE",
       value:
         (implUp !== null ? implUp.toFixed(0) : "—") +
         "|" +
         (implDn !== null ? implDn.toFixed(0) : "—"),
       valueColor: THEME.text,
-      context: "SPX HIGH/LOW",
+      context: "Skewed by ATM IV",
     },
     {
-      label: "DAY RANGE",
-      value: dayRange !== null ? `${dayRange.toFixed(0)}pt` : "—",
+      label: "WEEKLY RANGE",
+      value:
+        weeklyImpliedHigh !== null && weeklyImpliedLow !== null
+          ? `${weeklyImpliedHigh.toFixed(0)}|${weeklyImpliedLow.toFixed(0)}`
+          : "—",
+      valueColor: THEME.text,
       context:
-        dayHigh !== null && dayLow !== null
-          ? `${dayHigh.toFixed(0)} / ${dayLow.toFixed(0)}`
-          : undefined,
-    },
-    {
-      label: "DAY POS",
-      value: dayPosPct !== null ? `${dayPosPct.toFixed(0)}%` : "—",
-      valueColor: dayPosColor,
-      context: "OF DAY RANGE",
+        weeklyAtm !== null && weeklyExpiry
+          ? `${weeklyExpiry} expiry`
+          : "WEEKLY · ±STRADDLE",
     },
   ];
 
