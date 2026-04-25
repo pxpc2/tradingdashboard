@@ -1,6 +1,5 @@
 import { client } from "./lib/clients.mjs";
 import { nowCT } from "./lib/market-hours.mjs";
-import { runDealerLoop } from "./loops/dealer.mjs";
 import { runAndScheduleNext } from "./loops/main.mjs";
 import { runOhlcLoop } from "./loops/ohlc.mjs";
 
@@ -56,7 +55,6 @@ setInterval(async () => {
 // ─── Start loops ──────────────────────────────────────────────────────────────
 runAndScheduleNext();
 runOhlcLoop();
-runDealerLoop();
 
 process.on("SIGINT", async () => {
   console.log(`\n[${nowCT()}] Desligando..`);

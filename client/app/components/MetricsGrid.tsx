@@ -15,8 +15,10 @@ type Props = {
   skew: number | null;
   skewPctile: number | null;
   vix1dVixRatio: number | null;
-  dealerTotal: number | null;
-  dealerCexLocal: number | null;
+  dayRange: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  dayPosPct: number | null;
 };
 
 function fmtDollar(v: number | null, d = 2) {
@@ -27,14 +29,6 @@ function fmtPct(v: number | null, d = 1) {
 }
 function fmtNum(v: number | null, d = 2) {
   return v === null ? "—" : v.toFixed(d);
-}
-function fmtGex(v: number | null) {
-  if (v === null) return "—";
-  const abs = Math.abs(v);
-  const sign = v >= 0 ? "+" : "-";
-  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(0)}M`;
-  return `${sign}${abs.toFixed(0)}`;
 }
 
 type CellSpec = {
@@ -132,8 +126,10 @@ export default function MetricsGrid({
   skew,
   skewPctile,
   vix1dVixRatio,
-  dealerTotal,
-  dealerCexLocal,
+  dayRange,
+  dayHigh,
+  dayLow,
+  dayPosPct,
 }: Props) {
   const realizedColor =
     realizedPct === null
@@ -151,33 +147,13 @@ export default function MetricsGrid({
         ? THEME.amber
         : THEME.text;
 
-  const gexColor =
-    dealerTotal === null
+  // Day position: tint amber when near top/bottom of range (potential exhaustion)
+  const dayPosColor =
+    dayPosPct === null
       ? THEME.text
-      : dealerTotal >= 0
-        ? "var(--color-gex-pos)"
-        : "var(--color-gex-neg)";
-
-  const cexColor =
-    dealerCexLocal === null
-      ? THEME.text
-      : dealerCexLocal >= 0
-        ? "var(--color-cex-pos)"
-        : "var(--color-cex-neg)";
-
-  const charmLabel =
-    dealerCexLocal === null
-      ? undefined
-      : dealerCexLocal < 0
-        ? "BULLISH CHARM"
-        : "BEARISH CHARM";
-
-  const gexLabel =
-    dealerTotal === null
-      ? undefined
-      : dealerTotal >= 0
-        ? "POSITIVE GAMMA"
-        : "NEGATIVE GAMMA";
+      : dayPosPct >= 85 || dayPosPct <= 15
+        ? THEME.amber
+        : THEME.text;
 
   const implUp =
     openingSpx !== null &&
@@ -237,23 +213,23 @@ export default function MetricsGrid({
       value:
         (implUp !== null ? implUp.toFixed(0) : "—") +
         "|" +
-        (implDn !== null ? implDn.toFixed(0) : undefined),
+        (implDn !== null ? implDn.toFixed(0) : "—"),
       valueColor: THEME.text,
-      context: "SPX High/low",
+      context: "SPX HIGH/LOW",
     },
     {
-      label: "TOTAL GEX",
-      value: fmtGex(dealerTotal),
-      valueColor: gexColor,
-      context: gexLabel,
-      contextColor: gexColor,
+      label: "DAY RANGE",
+      value: dayRange !== null ? `${dayRange.toFixed(0)}pt` : "—",
+      context:
+        dayHigh !== null && dayLow !== null
+          ? `${dayHigh.toFixed(0)} / ${dayLow.toFixed(0)}`
+          : undefined,
     },
     {
-      label: "LOCAL CEX",
-      value: fmtGex(dealerCexLocal),
-      valueColor: cexColor,
-      context: charmLabel,
-      contextColor: cexColor,
+      label: "DAY POS",
+      value: dayPosPct !== null ? `${dayPosPct.toFixed(0)}%` : "—",
+      valueColor: dayPosColor,
+      context: "OF DAY RANGE",
     },
   ];
 

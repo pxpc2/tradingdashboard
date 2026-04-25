@@ -16,10 +16,6 @@ type Props = {
   openingStraddle: number | null;
   minutesSinceOpen: number;
   timestamp: string | null;
-  openRegime: "pos" | "neg" | null;
-  gammaFlip: number | null;
-  charmFlip: number | null;
-  liveSpx: number | null;
 };
 
 function priceNarrative(p: PriceCharacter): string {
@@ -189,73 +185,6 @@ function formatTimestamp(ts: string | null): string | null {
   }
 }
 
-function DealerContext({
-  openRegime,
-  gammaFlip,
-  charmFlip,
-  liveSpx,
-}: {
-  openRegime: "pos" | "neg" | null;
-  gammaFlip: number | null;
-  charmFlip: number | null;
-  liveSpx: number | null;
-}) {
-  const hasAnything =
-    openRegime !== null || gammaFlip !== null || charmFlip !== null;
-  if (!hasAnything) return null;
-
-  const openColor =
-    openRegime === "pos"
-      ? "var(--color-gex-pos)"
-      : openRegime === "neg"
-        ? "var(--color-gex-neg)"
-        : THEME.text4;
-
-  const gammaDist =
-    gammaFlip !== null && liveSpx !== null ? gammaFlip - liveSpx : null;
-  const charmDist =
-    charmFlip !== null && liveSpx !== null ? charmFlip - liveSpx : null;
-
-  const fmtDist = (d: number) => {
-    const sign = d >= 0 ? "+" : "";
-    return `${sign}${d.toFixed(0)}`;
-  };
-
-  return (
-    <div className="flex items-center gap-3 font-mono text-[10px]">
-      {openRegime !== null && (
-        <>
-          <span className="text-text-5">·</span>
-          <span>
-            <span className="text-text-4">OPENING REGIME </span>
-            <span style={{ color: openColor }}>
-              {openRegime === "pos" ? "+γ" : "-γ"}
-            </span>
-          </span>
-        </>
-      )}
-      {gammaFlip !== null && (
-        <>
-          <span className="text-text-5">·</span>
-          <span>
-            <span className="text-text-4">γ FLIP </span>
-            <span style={{ color: "var(--color-gex-pos)" }}>{gammaFlip}</span>
-          </span>
-        </>
-      )}
-      {charmFlip !== null && (
-        <>
-          <span className="text-text-5">·</span>
-          <span>
-            <span className="text-text-4">⌀ FLIP </span>
-            <span style={{ color: "var(--color-cex-neg)" }}>{charmFlip}</span>
-          </span>
-        </>
-      )}
-    </div>
-  );
-}
-
 export default function LiveReadPanel({
   price,
   skew,
@@ -265,10 +194,6 @@ export default function LiveReadPanel({
   openingStraddle,
   minutesSinceOpen,
   timestamp,
-  openRegime,
-  gammaFlip,
-  charmFlip,
-  liveSpx,
 }: Props) {
   const tags = computeTags({ price, skew, minutesSinceOpen });
   const narrative = buildNarrative(price, skew);
@@ -284,12 +209,6 @@ export default function LiveReadPanel({
           {timeStr && (
             <span className="font-mono text-[11px] text-text-5">{timeStr}</span>
           )}
-          <DealerContext
-            openRegime={openRegime}
-            gammaFlip={gammaFlip}
-            charmFlip={charmFlip}
-            liveSpx={liveSpx}
-          />
         </div>
         {tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 justify-end">

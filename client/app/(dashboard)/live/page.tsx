@@ -1,18 +1,10 @@
 import { Suspense } from "react";
 import { createSupabaseServerClient } from "../../lib/supabase-server";
 import LiveTab from "../../components/LiveTab";
-import { StraddleSnapshot, DealerStrikeSnapshot } from "../../types";
+import { StraddleSnapshot } from "../../types";
 
 type PageProps = {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
-};
-
-type GexSeriesBar = { bar_time: string; total: number; spot_ref: number };
-type TimelineDate = {
-  date: string;
-  regime_open: string | null;
-  open_gex: number | null;
-  close_gex: number | null;
 };
 
 export default async function LivePage({ searchParams }: PageProps) {
@@ -30,62 +22,14 @@ export default async function LivePage({ searchParams }: PageProps) {
       timeZone: "America/New_York",
     });
 
-  const [
-    straddleResult,
-    openingGexResult,
-    latestGexResult,
-    latestCexResult,
-    gexSeriesResult,
-    timelineDatesResult,
-  ] = await Promise.all([
-    supabase
-      .from("straddle_snapshots")
-      .select("*")
-      .gte("created_at", `${today}T00:00:00`)
-      .lt("created_at", `${today}T23:59:59`)
-      .order("created_at", { ascending: true }),
-    supabase
-      .from("dealer_strike_snapshots")
-      .select("total")
-      .eq("date", today)
-      .eq("metric", "gex")
-      .order("bar_time", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("dealer_strike_snapshots")
-      .select("*")
-      .eq("date", today)
-      .eq("metric", "gex")
-      .order("bar_time", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("dealer_strike_snapshots")
-      .select("*")
-      .eq("date", today)
-      .eq("metric", "cex")
-      .order("bar_time", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("dealer_strike_snapshots")
-      .select("bar_time, total, spot_ref")
-      .eq("date", today)
-      .eq("metric", "gex")
-      .order("bar_time", { ascending: true }),
-    supabase
-      .from("dealer_timeline_snapshots")
-      .select("date, regime_open, open_gex, close_gex")
-      .order("date", { ascending: false }),
-  ]);
+  const { data: straddleData } = await supabase
+    .from("straddle_snapshots")
+    .select("*")
+    .gte("created_at", `${today}T00:00:00`)
+    .lt("created_at", `${today}T23:59:59`)
+    .order("created_at", { ascending: true });
 
-  const initialStraddleData: StraddleSnapshot[] = straddleResult.data ?? [];
-  const openingGexTotal: number | null = openingGexResult.data?.total ?? null;
-  const latestGex: DealerStrikeSnapshot | null = latestGexResult.data ?? null;
-  const latestCex: DealerStrikeSnapshot | null = latestCexResult.data ?? null;
-  const initialGexSeries: GexSeriesBar[] = gexSeriesResult.data ?? [];
-  const timelineDates: TimelineDate[] = timelineDatesResult.data ?? [];
+  const initialStraddleData: StraddleSnapshot[] = straddleData ?? [];
 
   return (
     <Suspense
@@ -95,14 +39,7 @@ export default async function LivePage({ searchParams }: PageProps) {
         </div>
       }
     >
-      <LiveTab
-        initialStraddleData={initialStraddleData}
-        initialOpeningGexTotal={openingGexTotal}
-        initialLatestGex={latestGex}
-        initialLatestCex={latestCex}
-        initialGexSeries={initialGexSeries}
-        initialTimelineDates={timelineDates}
-      />
+      <LiveTab initialStraddleData={initialStraddleData} />
     </Suspense>
   );
 }

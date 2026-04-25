@@ -7,28 +7,11 @@ import { StraddleSnapshot, SkewSnapshot } from "../types";
 import { resolveChartPalette } from "../lib/chartPalette";
 import { cssVar } from "../lib/theme";
 
-type Wall = { strike: number; value: number };
-
 type Props = {
   data: StraddleSnapshot[];
   currentSpxPrice: number | null;
   openingSkew: SkewSnapshot | null;
-  balanceWalls?: Wall[];
-  testWalls?: Wall[];
 };
-
-// Opacity ramp for wall lines, ranked 0..4. Applied as hex suffix to color.
-const WALL_LINE_OPACITY_HEX = ["99", "77", "55", "44", "33"];
-// Opacity ramp for wall labels (ECharts label.opacity is 0..1, not hex).
-const WALL_LABEL_OPACITY = [1, 0.75, 0.55, 0.45, 0.35];
-
-function fmtGexShort(v: number): string {
-  const abs = Math.abs(v);
-  const sign = v >= 0 ? "+" : "-";
-  if (abs >= 1e9) return `${sign}${(abs / 1e9).toFixed(1)}B`;
-  if (abs >= 1e6) return `${sign}${(abs / 1e6).toFixed(0)}M`;
-  return `${sign}${abs.toFixed(0)}`;
-}
 
 function toChartMs(utcMs: number): number {
   const parts = new Intl.DateTimeFormat("en-US", {
@@ -98,8 +81,6 @@ export default function StraddleSpxChart({
   data,
   currentSpxPrice,
   openingSkew,
-  balanceWalls = [],
-  testWalls = [],
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<any>(null);
@@ -322,52 +303,6 @@ export default function StraddleSpxChart({
       });
     }
 
-    // Balance walls — top positive GEX. Up to 5. Opacity fades with rank.
-    balanceWalls.forEach((w, i) => {
-      const opHex = WALL_LINE_OPACITY_HEX[i] ?? "33";
-      const labelOpacity = WALL_LABEL_OPACITY[i] ?? 0.35;
-      markLines.push({
-        yAxis: w.strike,
-        lineStyle: {
-          color: `${P.wallBalance}${opHex}`,
-          type: "solid",
-          width: 1,
-        },
-        label: {
-          show: true,
-          position: "insideStart",
-          formatter: `${w.strike}  ${fmtGexShort(w.value)}`,
-          color: P.wallBalance,
-          fontSize: 9,
-          fontFamily: "monospace",
-          opacity: labelOpacity,
-        },
-      });
-    });
-
-    // Test walls — top negative GEX. Up to 5.
-    testWalls.forEach((w, i) => {
-      const opHex = WALL_LINE_OPACITY_HEX[i] ?? "33";
-      const labelOpacity = WALL_LABEL_OPACITY[i] ?? 0.35;
-      markLines.push({
-        yAxis: w.strike,
-        lineStyle: {
-          color: `${P.wallTest}${opHex}`,
-          type: "solid",
-          width: 1,
-        },
-        label: {
-          show: true,
-          position: "insideStart",
-          formatter: `${w.strike}  ${fmtGexShort(w.value)}`,
-          color: P.wallTest,
-          fontSize: 9,
-          fontFamily: "monospace",
-          opacity: labelOpacity,
-        },
-      });
-    });
-
     chartRef.current.setOption(
       {
         series: [
@@ -381,7 +316,7 @@ export default function StraddleSpxChart({
       },
       false,
     );
-  }, [data, currentSpxPrice, openingSkew, balanceWalls, testWalls]);
+  }, [data, currentSpxPrice, openingSkew]);
 
   return (
     <div>

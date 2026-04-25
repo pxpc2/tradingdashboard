@@ -2,7 +2,6 @@
 
 import { useMemo, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { supabase } from "../lib/supabase";
 import LiveReadPanel from "./LiveReadPanel";
 import InstrumentCards from "./InstrumentCards";
 import MetricsGrid from "./MetricsGrid";
@@ -11,8 +10,7 @@ import { useStraddleData } from "../hooks/useStraddleData";
 import { useSkewHistory } from "../hooks/useSkewHistory";
 import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
 import { useWatchlist } from "../hooks/useWatchlist";
-import { useDealerSnapshot } from "../hooks/useDealerSnapshot";
-import { StraddleSnapshot, DealerStrikeRow } from "../types";
+import { StraddleSnapshot } from "../types";
 import {
   computeSkewCharacter,
   computePriceCharacter,
@@ -20,32 +18,13 @@ import {
 import Sectors from "./Sectors";
 import TopMovers from "./TopMovers";
 import NewsWire from "./NewsWire";
-import DealerTriptych from "./DealerTriptych";
-import { DealerStrikeSnapshot } from "../types";
 import CalendarFixedHeight from "./CalendarFixedHeight";
-
-type GexSeriesBar = { bar_time: string; total: number; spot_ref: number };
-type TimelineDate = {
-  date: string;
-  regime_open: string | null;
-  open_gex: number | null;
-  close_gex: number | null;
-};
 
 type Props = {
   initialStraddleData: StraddleSnapshot[];
-  initialOpeningGexTotal: number | null;
-  initialLatestGex: DealerStrikeSnapshot | null;
-  initialLatestCex: DealerStrikeSnapshot | null;
-  initialGexSeries: GexSeriesBar[];
-  initialTimelineDates: TimelineDate[];
 };
-type StrikeWall = { strike: number; value: number };
 
 const CORE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL, "VIX", "VIX1D"];
-const WALL_RANGE_PT = 50;
-const METRICS_WALL_COUNT = 3;
-const CHART_WALL_COUNT = 5;
 
 function isSpxOpenFor(d: Date): boolean {
   const day = d.toLocaleDateString("en-US", {
@@ -95,66 +74,7 @@ function minutesSinceOpenFor(d: Date): number {
   return Math.max(0, mins - openMins);
 }
 
-function extractTopWalls(
-  strikes: DealerStrikeRow[] | null,
-  spot: number | null,
-  rangePt: number = WALL_RANGE_PT,
-  count: number = METRICS_WALL_COUNT,
-): { positive: StrikeWall[]; negative: StrikeWall[] } {
-  if (!strikes || !spot) return { positive: [], negative: [] };
-  const near = strikes.filter((r) => Math.abs(r[0] - spot) <= rangePt);
-  const positive = near
-    .filter((r) => r[1] > 0)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, count)
-    .map((r) => ({ strike: r[0], value: r[1] }));
-  const negative = near
-    .filter((r) => r[1] < 0)
-    .sort((a, b) => a[1] - b[1])
-    .slice(0, count)
-    .map((r) => ({ strike: r[0], value: r[1] }));
-  return { positive, negative };
-}
-
-function computeFlipLevel(
-  strikes: DealerStrikeRow[] | null,
-  spot: number | null,
-  rangePt: number,
-): number | null {
-  if (!strikes || !spot || strikes.length === 0) return null;
-
-  const filtered = strikes
-    .filter((r) => Math.abs(r[0] - spot) <= rangePt)
-    .sort((a, b) => a[0] - b[0]);
-
-  let cum = 0;
-  const crossings: number[] = [];
-
-  for (let i = 0; i < filtered.length; i++) {
-    const prev = cum;
-    cum += filtered[i][1];
-    if (i > 0 && prev !== 0 && Math.sign(prev) !== Math.sign(cum)) {
-      const t = Math.abs(prev) / (Math.abs(prev) + Math.abs(cum));
-      const raw =
-        filtered[i - 1][0] + (filtered[i][0] - filtered[i - 1][0]) * t;
-      crossings.push(Math.round(raw / 5) * 5);
-    }
-  }
-
-  if (crossings.length === 0) return null;
-  return crossings.reduce((best, c) =>
-    Math.abs(c - spot) < Math.abs(best - spot) ? c : best,
-  );
-}
-
-export default function LiveTab({
-  initialStraddleData,
-  initialOpeningGexTotal,
-  initialLatestGex,
-  initialLatestCex,
-  initialGexSeries,
-  initialTimelineDates,
-}: Props) {
+export default function LiveTab({ initialStraddleData }: Props) {
   const searchParams = useSearchParams();
   const dateParam = searchParams.get("date");
   const today =
@@ -168,39 +88,9 @@ export default function LiveTab({
     return () => clearInterval(t);
   }, []);
 
-  const [openingGexTotal, setOpeningGexTotal] = useState<number | null>(
-    initialOpeningGexTotal,
-  );
-
-  useEffect(() => {
-    if (openingGexTotal !== null) return;
-    const channel = supabase
-      .channel("livetab_opening_gex")
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "dealer_strike_snapshots",
-          filter: `date=eq.${today}`,
-        },
-        (payload) => {
-          const row = payload.new as { metric: string; total: number };
-          if (row.metric === "gex" && openingGexTotal === null) {
-            setOpeningGexTotal(row.total);
-          }
-        },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [today, openingGexTotal]);
-
   const { straddleData } = useStraddleData(today, initialStraddleData, 1);
   const { skewHistory, latestSkew, avgSkew } = useSkewHistory();
   const { entries: watchlistEntries } = useWatchlist();
-  const { gex: latestGex, cex: latestCex } = useDealerSnapshot(today);
 
   const allSymbols = useMemo(() => {
     const set = new Set(CORE_SYMBOLS);
@@ -277,6 +167,15 @@ export default function LiveTab({
     return { maxSpx: Math.max(...prices), minSpx: Math.min(...prices) };
   }, [todayRows, liveSpx]);
 
+  const dayRange = maxSpx !== null && minSpx !== null ? maxSpx - minSpx : null;
+
+  const dayPosPct =
+    liveSpx !== null && maxSpx !== null && minSpx !== null && dayRange !== null
+      ? dayRange > 0
+        ? ((liveSpx - minSpx) / dayRange) * 100
+        : 50
+      : null;
+
   const skewChar = useMemo(
     () => computeSkewCharacter(todaySkewRows),
     [todaySkewRows],
@@ -300,37 +199,6 @@ export default function LiveTab({
     vix1dLast && vixLast && vixLast > 0 ? vix1dLast / vixLast : null;
 
   const atmIv = latestSkew?.atm_iv ?? null;
-
-  const flipRangePt = useMemo(() => {
-    const straddle = latest?.straddle_mid ?? null;
-    return straddle
-      ? Math.max(Math.round((2.5 * straddle) / 5) * 5, 50)
-      : WALL_RANGE_PT;
-  }, [latest]);
-
-  const gammaFlip = useMemo(
-    () => computeFlipLevel(latestGex?.strikes ?? null, liveSpx, flipRangePt),
-    [latestGex, liveSpx, flipRangePt],
-  );
-
-  const charmFlip = useMemo(
-    () => computeFlipLevel(latestCex?.strikes ?? null, liveSpx, flipRangePt),
-    [latestCex, liveSpx, flipRangePt],
-  );
-
-  const openRegime: "pos" | "neg" | null =
-    openingGexTotal === null ? null : openingGexTotal >= 0 ? "pos" : "neg";
-
-  const chartWalls = useMemo(
-    () =>
-      extractTopWalls(
-        latestGex?.strikes ?? null,
-        liveSpx,
-        WALL_RANGE_PT,
-        CHART_WALL_COUNT,
-      ),
-    [latestGex, liveSpx],
-  );
 
   const instruments = useMemo(
     () => [
@@ -373,6 +241,7 @@ export default function LiveTab({
   );
 
   const lastSnapshotTs = latest?.created_at ?? null;
+
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 space-y-3">
       <LiveReadPanel
@@ -384,10 +253,6 @@ export default function LiveTab({
         openingStraddle={opening?.straddle_mid ?? null}
         minutesSinceOpen={minutesSinceOpen}
         timestamp={lastSnapshotTs}
-        openRegime={openRegime}
-        gammaFlip={gammaFlip}
-        charmFlip={charmFlip}
-        liveSpx={liveSpx}
       />
 
       <InstrumentCards instruments={instruments} />
@@ -405,8 +270,10 @@ export default function LiveTab({
         skew={latestSkew?.skew ?? null}
         skewPctile={skewPctile}
         vix1dVixRatio={vix1dVixRatio}
-        dealerTotal={latestGex?.total ?? null}
-        dealerCexLocal={latestCex?.local_total ?? null}
+        dayRange={dayRange}
+        dayHigh={maxSpx}
+        dayLow={minSpx}
+        dayPosPct={dayPosPct}
       />
 
       <IntradayCharts
@@ -415,22 +282,8 @@ export default function LiveTab({
         openingSkew={openingSkew}
         skewHistory={skewHistory}
         avgSkew={avgSkew}
-        balanceWalls={chartWalls.positive}
-        testWalls={chartWalls.negative}
       />
 
-      <DealerTriptych
-        initialGex={initialLatestGex}
-        initialCex={initialLatestCex}
-        initialGexSeries={initialGexSeries}
-        initialStraddle={opening?.straddle_mid ?? null}
-        initialSpotRef={opening?.spx_ref ?? null}
-        timelineDates={initialTimelineDates}
-        today={today}
-        liveSpx={liveSpx ?? null}
-      />
-
-      {/* Market breadth — 3 columns for now, positions summary slot TBD */}
       <div className="grid grid-cols-3 gap-3">
         <Sectors />
         <TopMovers kind="gainers" />
