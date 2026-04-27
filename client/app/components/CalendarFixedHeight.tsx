@@ -72,8 +72,8 @@ export default function CalendarFixedHeight({
       className="bg-page border border-border-2 flex flex-col"
       style={{ height }}
     >
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border-2 shrink-0">
-        <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-4">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-2 shrink-0 bg-panel">
+        <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-3">
           Economic Calendar
         </span>
         {nextLabel && (

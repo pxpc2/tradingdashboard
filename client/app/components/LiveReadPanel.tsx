@@ -207,7 +207,9 @@ export default function LiveReadPanel({
             LIVE READ
           </span>
           {timeStr && (
-            <span className="font-mono text-[11px] text-text-5">{timeStr}</span>
+            <span className="font-mono text-[11px] text-text-5">
+              last updated: {timeStr}
+            </span>
           )}
         </div>
         {tags.length > 0 && (

@@ -42,7 +42,6 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
   const chartRef = useRef<any>(null);
   const indexMapRef = useRef<(number | null)[]>([]);
 
-  // ── Init ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!containerRef.current) return;
     const P = resolveChartPalette();
@@ -55,7 +54,7 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
     chartRef.current = chart;
 
     chart.setOption({
-      backgroundColor: P.bg,
+      backgroundColor: cssVar("--color-page", "#0d0e11"),
       animation: false,
       grid: { top: 8, right: 56, bottom: 40, left: 8 },
       tooltip: {
@@ -186,7 +185,6 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
     };
   }, []);
 
-  // ── Data ────────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!chartRef.current || !data.length) return;
     const P = resolveChartPalette();
@@ -254,7 +252,6 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
       });
     }
 
-    // Day separators — more visible now
     sessionStartIndices.slice(1).forEach((startIdx) => {
       markLineData.push({
         xAxis: startIdx,
@@ -279,18 +276,20 @@ export default function SkewHistoryChart({ data, avgSkew }: Props) {
   }, [data, avgSkew]);
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-1.5">
-        <span className="font-sans text-xs text-text-4 uppercase tracking-wide">
-          25Δ Skew Historical
+    <div className="bg-page border border-border-2 flex flex-col">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-2 bg-panel">
+        <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-3">
+          25Δ Skew historical
         </span>
         {avgSkew !== null && (
-          <span className="font-mono text-xs text-text-5">
+          <span className="font-mono text-[10px] text-text-5">
             avg {avgSkew.toFixed(3)}
           </span>
         )}
       </div>
-      <div ref={containerRef} className="w-full" style={{ height: 260 }} />
+      <div className="py-2">
+        <div ref={containerRef} className="w-full" style={{ height: 260 }} />
+      </div>
     </div>
   );
 }

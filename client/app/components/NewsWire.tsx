@@ -17,7 +17,6 @@ function categoryColor(category: NewsItem["category"]): string {
 export default function NewsWire({ height = 400 }: Props) {
   const { items, loading } = useMarketNews();
 
-  // Track URLs seen across renders. First load seeds the set without flashing.
   const seenUrlsRef = useRef<Set<string>>(new Set());
   const isFirstLoadRef = useRef(true);
   const [newUrls, setNewUrls] = useState<Set<string>>(new Set());
@@ -65,11 +64,10 @@ export default function NewsWire({ height = 400 }: Props) {
       className="bg-page border border-border-2 flex flex-col"
       style={{ height }}
     >
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border-2 shrink-0">
-        <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-4">
-          News · market wire
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-2 shrink-0 bg-panel">
+        <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-3">
+          General News
         </span>
-        <span className="font-mono text-[9px] text-text-5">24H · CT · FMP</span>
       </div>
 
       <div className="flex-1 overflow-y-auto news-scroll">

@@ -97,7 +97,7 @@ export default function StraddleSpxChart({
     chartRef.current = chart;
 
     chart.setOption({
-      backgroundColor: P.bg,
+      backgroundColor: cssVar("--color-page", "#0d0e11"),
       animation: false,
       useUTC: true,
       grid: { top: 8, right: 64, bottom: 24, left: 64 },
@@ -247,7 +247,6 @@ export default function StraddleSpxChart({
 
     const markLines: any[] = [];
 
-    // Current SPX value — pill on left axis
     const latestSpxPoint = spxPoints[spxPoints.length - 1];
     if (latestSpxPoint && latestSpxPoint[1] !== null) {
       const currentSpx = latestSpxPoint[1] as number;
@@ -272,11 +271,18 @@ export default function StraddleSpxChart({
     }
 
     const opening = deduped[0] ?? null;
-    if (opening && openingSkew) {
-      const T = 1 / 252;
+    if (
+      opening &&
+      openingSkew &&
+      openingSkew.atm_iv > 0 &&
+      opening.straddle_mid > 0
+    ) {
       const ref = opening.spx_ref;
-      const downsidePts = ref * openingSkew.put_iv * Math.sqrt(T);
-      const upsidePts = ref * openingSkew.call_iv * Math.sqrt(T);
+      const upsidePts =
+        opening.straddle_mid * (openingSkew.call_iv / openingSkew.atm_iv);
+      const downsidePts =
+        opening.straddle_mid * (openingSkew.put_iv / openingSkew.atm_iv);
+
       markLines.push({
         yAxis: ref - downsidePts,
         lineStyle: { color: `${P.down}66`, type: "dashed", width: 1 },
@@ -319,23 +325,25 @@ export default function StraddleSpxChart({
   }, [data, currentSpxPrice, openingSkew]);
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-1.5">
-        <span className="font-sans text-xs text-text-4 uppercase tracking-wide">
-          Implied vs Realized Intraday
+    <div className="bg-page border border-border-2 flex flex-col">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-2 bg-panel">
+        <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-3">
+          Implied vs Realized intraday
         </span>
         <div className="flex gap-3 text-xs">
           <span className="flex items-center gap-1">
             <span className="inline-block w-2.5 h-0.5 bg-skew-moving" />
-            <span className="text-text-3">Straddle</span>
+            <span className="text-text-3 font-mono text-[10px]">Straddle</span>
           </span>
           <span className="flex items-center gap-1">
             <span className="inline-block w-2.5 h-0.5 bg-text-3" />
-            <span className="text-text-3">SPX</span>
+            <span className="text-text-3 font-mono text-[10px]">SPX</span>
           </span>
         </div>
       </div>
-      <div ref={containerRef} className="w-full" style={{ height: 260 }} />
+      <div className="py-2">
+        <div ref={containerRef} className="w-full" style={{ height: 260 }} />
+      </div>
     </div>
   );
 }

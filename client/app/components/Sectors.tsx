@@ -20,8 +20,8 @@ export default function Sectors() {
 
   return (
     <div className="bg-page border border-border-2 flex flex-col">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-border-2">
-        <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-4">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-border-2 bg-panel">
+        <span className="font-sans text-xs uppercase tracking-[0.05em] text-text-3">
           Sectors
         </span>
         <div className="flex items-center gap-2">
