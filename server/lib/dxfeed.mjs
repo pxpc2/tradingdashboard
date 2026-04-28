@@ -12,105 +12,111 @@ export function withTimeout(promise, ms, label) {
 
 export async function getQuotes(symbols) {
   const quotes = {};
-  await withTimeout(
-    new Promise((resolve) => {
-      const listener = (events) => {
-        events.forEach((e) => {
-          if (symbols.includes(e.eventSymbol) && e.eventType === "Quote") {
-            quotes[e.eventSymbol] = e;
-          }
-        });
-        if (Object.keys(quotes).length === symbols.length) {
-          client.quoteStreamer.removeEventListener(listener);
-          client.quoteStreamer.unsubscribe(symbols);
-          resolve();
-        }
-      };
-      client.quoteStreamer.addEventListener(listener);
-      client.quoteStreamer.subscribe(symbols);
-    }),
-    15000,
-    `quotes for ${symbols.join(",")}`,
-  );
+  let resolveFn;
+  const promise = new Promise((resolve) => {
+    resolveFn = resolve;
+  });
+  const listener = (events) => {
+    events.forEach((e) => {
+      if (symbols.includes(e.eventSymbol) && e.eventType === "Quote") {
+        quotes[e.eventSymbol] = e;
+      }
+    });
+    if (Object.keys(quotes).length === symbols.length) {
+      resolveFn();
+    }
+  };
+  client.quoteStreamer.addEventListener(listener);
+  client.quoteStreamer.subscribe(symbols);
+  try {
+    await withTimeout(promise, 15000, `quotes for ${symbols.join(",")}`);
+  } finally {
+    client.quoteStreamer.removeEventListener(listener);
+    client.quoteStreamer.unsubscribe(symbols);
+  }
   return quotes;
 }
 
 export async function getSpxOpenPrice() {
-  return await withTimeout(
-    new Promise((resolve) => {
-      let openPrice = null;
-      let quoteMid = null;
-      const listener = (events) => {
-        events.forEach((e) => {
-          if (e.eventSymbol !== "SPX") return;
-          if (e.eventType === "Summary" && e.openPrice && e.openPrice > 0) {
-            openPrice = e.openPrice;
-          }
-          if (e.eventType === "Quote" && e.bidPrice && e.askPrice) {
-            quoteMid = (e.bidPrice + e.askPrice) / 2;
-          }
-        });
-        if (openPrice !== null || quoteMid !== null) {
-          client.quoteStreamer.removeEventListener(listener);
-          client.quoteStreamer.unsubscribe(["SPX"]);
-          resolve({
-            openPrice: openPrice ?? quoteMid,
-            quoteMid: quoteMid ?? openPrice,
-          });
-        }
-      };
-      client.quoteStreamer.addEventListener(listener);
-      client.quoteStreamer.subscribe(["SPX", "=SPX"]);
-    }),
-    15000,
-    "SPX open price",
-  );
+  let openPrice = null;
+  let quoteMid = null;
+  let resolveFn;
+  const promise = new Promise((resolve) => {
+    resolveFn = resolve;
+  });
+  const listener = (events) => {
+    events.forEach((e) => {
+      if (e.eventSymbol !== "SPX") return;
+      if (e.eventType === "Summary" && e.openPrice && e.openPrice > 0) {
+        openPrice = e.openPrice;
+      }
+      if (e.eventType === "Quote" && e.bidPrice && e.askPrice) {
+        quoteMid = (e.bidPrice + e.askPrice) / 2;
+      }
+    });
+    if (openPrice !== null || quoteMid !== null) {
+      resolveFn({
+        openPrice: openPrice ?? quoteMid,
+        quoteMid: quoteMid ?? openPrice,
+      });
+    }
+  };
+  client.quoteStreamer.addEventListener(listener);
+  client.quoteStreamer.subscribe(["SPX", "=SPX"]);
+  try {
+    return await withTimeout(promise, 15000, "SPX open price");
+  } finally {
+    client.quoteStreamer.removeEventListener(listener);
+    client.quoteStreamer.unsubscribe(["SPX"]);
+  }
 }
 
 export async function getSpxQuoteMid() {
-  return await withTimeout(
-    new Promise((resolve) => {
-      const listener = (events) => {
-        const spxQuote = events.find(
-          (e) => e.eventSymbol === "SPX" && e.eventType === "Quote",
-        );
-        if (spxQuote) {
-          client.quoteStreamer.removeEventListener(listener);
-          client.quoteStreamer.unsubscribe(["SPX"]);
-          resolve((spxQuote.bidPrice + spxQuote.askPrice) / 2);
-        }
-      };
-      client.quoteStreamer.addEventListener(listener);
-      client.quoteStreamer.subscribe(["SPX"]);
-    }),
-    15000,
-    "SPX quote",
-  );
+  let resolveFn;
+  const promise = new Promise((resolve) => {
+    resolveFn = resolve;
+  });
+  const listener = (events) => {
+    const spxQuote = events.find(
+      (e) => e.eventSymbol === "SPX" && e.eventType === "Quote",
+    );
+    if (spxQuote) {
+      resolveFn((spxQuote.bidPrice + spxQuote.askPrice) / 2);
+    }
+  };
+  client.quoteStreamer.addEventListener(listener);
+  client.quoteStreamer.subscribe(["SPX"]);
+  try {
+    return await withTimeout(promise, 15000, "SPX quote");
+  } finally {
+    client.quoteStreamer.removeEventListener(listener);
+    client.quoteStreamer.unsubscribe(["SPX"]);
+  }
 }
 
 export async function getEsMid(esSymbol) {
-  try {
-    return await withTimeout(
-      new Promise((resolve) => {
-        const listener = (events) => {
-          const esQuote = events.find(
-            (e) => e.eventSymbol === esSymbol && e.eventType === "Quote",
-          );
-          if (esQuote && esQuote.bidPrice > 0 && esQuote.askPrice > 0) {
-            client.quoteStreamer.removeEventListener(listener);
-            client.quoteStreamer.unsubscribe([esSymbol]);
-            resolve((esQuote.bidPrice + esQuote.askPrice) / 2);
-          }
-        };
-        client.quoteStreamer.addEventListener(listener);
-        client.quoteStreamer.subscribe([esSymbol]);
-      }),
-      10000,
-      "ES quote",
+  let resolveFn;
+  const promise = new Promise((resolve) => {
+    resolveFn = resolve;
+  });
+  const listener = (events) => {
+    const esQuote = events.find(
+      (e) => e.eventSymbol === esSymbol && e.eventType === "Quote",
     );
+    if (esQuote && esQuote.bidPrice > 0 && esQuote.askPrice > 0) {
+      resolveFn((esQuote.bidPrice + esQuote.askPrice) / 2);
+    }
+  };
+  client.quoteStreamer.addEventListener(listener);
+  client.quoteStreamer.subscribe([esSymbol]);
+  try {
+    return await withTimeout(promise, 10000, "ES quote");
   } catch {
     console.log(`[${nowCT()}] ES quote timeout/error — skipping.`);
     return null;
+  } finally {
+    client.quoteStreamer.removeEventListener(listener);
+    client.quoteStreamer.unsubscribe([esSymbol]);
   }
 }
 
@@ -168,42 +174,40 @@ export async function collectOhlc(quoteSymbols, tradeSymbols, durationMs) {
 // Fetch last trade price for an index symbol (VIX, VIX1D etc)
 // Uses Trade event — bid/ask are 0 for indices
 export async function getIndexLast(symbol) {
-  try {
-    return await withTimeout(
-      new Promise((resolve) => {
-        let summaryPrice = null;
-        const listener = (events) => {
-          events.forEach((e) => {
-            if (e.eventSymbol !== symbol) return;
-            // Primary: Trade event
-            if (e.eventType === "Trade" && e.price > 0) {
-              client.quoteStreamer.removeEventListener(listener);
-              client.quoteStreamer.unsubscribe([symbol]);
-              resolve(e.price);
-            }
-            // Fallback: Summary prevDayClosePrice
-            if (e.eventType === "Summary" && e.prevDayClosePrice > 0) {
-              summaryPrice = e.prevDayClosePrice;
-            }
-          });
-        };
-        client.quoteStreamer.addEventListener(listener);
-        client.quoteStreamer.subscribe([symbol]);
+  let summaryPrice = null;
+  let resolveFn;
+  const promise = new Promise((resolve) => {
+    resolveFn = resolve;
+  });
+  const listener = (events) => {
+    events.forEach((e) => {
+      if (e.eventSymbol !== symbol) return;
+      // Primary: Trade event
+      if (e.eventType === "Trade" && e.price > 0) {
+        resolveFn(e.price);
+      }
+      // Fallback: Summary prevDayClosePrice
+      if (e.eventType === "Summary" && e.prevDayClosePrice > 0) {
+        summaryPrice = e.prevDayClosePrice;
+      }
+    });
+  };
+  client.quoteStreamer.addEventListener(listener);
+  client.quoteStreamer.subscribe([symbol]);
 
-        // After 8s, if no Trade, use Summary fallback
-        setTimeout(() => {
-          if (summaryPrice !== null) {
-            client.quoteStreamer.removeEventListener(listener);
-            client.quoteStreamer.unsubscribe([symbol]);
-            resolve(summaryPrice);
-          }
-        }, 8000);
-      }),
-      20000,
-      `${symbol} last`,
-    );
+  // After 8s, if no Trade, use Summary fallback
+  const fallbackTimer = setTimeout(() => {
+    if (summaryPrice !== null) resolveFn(summaryPrice);
+  }, 8000);
+
+  try {
+    return await withTimeout(promise, 20000, `${symbol} last`);
   } catch {
     console.log(`[${nowCT()}] ${symbol} Trade timeout/error — skipping.`);
     return null;
+  } finally {
+    clearTimeout(fallbackTimer);
+    client.quoteStreamer.removeEventListener(listener);
+    client.quoteStreamer.unsubscribe([symbol]);
   }
 }
