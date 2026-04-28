@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabase";
+import { fetchAll } from "../lib/supabase-paginate";
 import { SkewSnapshot } from "../types";
 
 // Skew calculations were fixed on April 1, 2026 — only use data from April 2 onwards
@@ -11,18 +12,21 @@ export function useSkewHistory() {
   const [skewHistory, setSkewHistory] = useState<SkewSnapshot[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch all historical skew data
+  // Fetch all historical skew data (paginated to bypass 15k row cap)
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setIsLoading(true);
-      const { data } = await supabase
-        .from("skew_snapshots")
-        .select("*")
-        .gte("created_at", `${SKEW_START_DATE}T00:00:00`)
-        .order("created_at", { ascending: true });
+      const data = await fetchAll<SkewSnapshot>((from, to) =>
+        supabase
+          .from("skew_snapshots")
+          .select("*")
+          .gte("created_at", `${SKEW_START_DATE}T00:00:00`)
+          .order("created_at", { ascending: true })
+          .range(from, to),
+      );
       if (!cancelled) {
-        setSkewHistory(data ?? []);
+        setSkewHistory(data);
         setIsLoading(false);
       }
     }
