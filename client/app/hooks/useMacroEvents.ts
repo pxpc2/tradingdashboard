@@ -22,8 +22,10 @@ export function useMacroEvents(selectedDate: string) {
       }
     }
     load();
+    const t = setInterval(load, 5 * 60 * 1000);
     return () => {
       cancelled = true;
+      clearInterval(t);
     };
   }, [selectedDate]);
 

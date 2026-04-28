@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useMacroEvents } from "../hooks/useMacroEvents";
 import { MacroEvent } from "../api/macro-events/route";
 import { THEME } from "../lib/theme";
@@ -52,15 +52,21 @@ export default function CalendarFixedHeight({
 }: Props) {
   const { events, loading } = useMacroEvents(selectedDate);
 
+  const [nowMin, setNowMin] = useState<number | null>(null);
+  useEffect(() => {
+    setNowMin(nowCtMinutes());
+    const t = setInterval(() => setNowMin(nowCtMinutes()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
   const nextIndex = useMemo(() => {
-    if (events.length === 0) return -1;
-    const now = nowCtMinutes();
+    if (events.length === 0 || nowMin === null) return -1;
     return events.findIndex((e) => {
       if (e.actual !== null) return false;
       const mins = eventMinutes(e.timeCt);
-      return mins !== null && mins >= now;
+      return mins !== null && mins >= nowMin;
     });
-  }, [events]);
+  }, [events, nowMin]);
 
   const nextLabel = useMemo(() => {
     if (nextIndex < 0) return null;
