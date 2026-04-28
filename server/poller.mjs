@@ -5,6 +5,7 @@ import { runOhlcLoop } from "./loops/ohlc.mjs";
 import {
   startTickPublisher,
   stopTickPublisher,
+  onDxFeedReconnected,
 } from "./lib/tickPublisher.mjs";
 
 console.log(`[${nowCT()}] Inicializando servidor...`);
@@ -56,6 +57,7 @@ async function reconnectDxFeed() {
   try {
     await client.quoteStreamer.connect();
     client.quoteStreamer.addEventListener(heartbeatListener);
+    onDxFeedReconnected();
     lastDxFeedEventAt = Date.now();
     console.log(`[${nowCT()}] ✅ DXFeed reconnected.`);
   } catch (err) {

@@ -339,3 +339,27 @@ export async function stopTickPublisher() {
 export function getTick(symbol) {
   return tickState.get(symbol) ?? null;
 }
+
+// Called by the poller's watchdog after a successful DXFeed reconnect.
+// A fresh dxLink session has none of our prior subscriptions, and the SDK
+// may or may not preserve event listeners across disconnect/connect — so we
+// re-attach defensively and re-issue subscribe() for the full set.
+export function onDxFeedReconnected() {
+  if (!started || !dxListener) return;
+  try {
+    client.quoteStreamer.removeEventListener(dxListener);
+  } catch {}
+  client.quoteStreamer.addEventListener(dxListener);
+  if (subscribedSymbols.size > 0) {
+    try {
+      client.quoteStreamer.subscribe([...subscribedSymbols]);
+      console.log(
+        `[${nowCT()}] [tickPub] re-subscribed ${subscribedSymbols.size} symbols after reconnect`,
+      );
+    } catch (err) {
+      console.error(
+        `[${nowCT()}] [tickPub] re-subscribe error after reconnect: ${err.message}`,
+      );
+    }
+  }
+}
