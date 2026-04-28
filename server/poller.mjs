@@ -15,8 +15,24 @@ export function touchDxFeedHeartbeat() {
   lastDxFeedEventAt = Date.now();
 }
 
-// Register a global listener to track heartbeat
-const heartbeatListener = () => touchDxFeedHeartbeat();
+// Register a global listener — tracks heartbeat + per-30s event flow stats
+let windowEventCount = 0;
+const windowEventTypes = new Set();
+const windowSymbols = new Set();
+let lastEventType = null;
+let lastEventSymbol = null;
+
+const heartbeatListener = (events) => {
+  if (!events || events.length === 0) return;
+  touchDxFeedHeartbeat();
+  windowEventCount += events.length;
+  for (const e of events) {
+    if (e.eventType) windowEventTypes.add(e.eventType);
+    if (e.eventSymbol) windowSymbols.add(e.eventSymbol);
+    lastEventType = e.eventType ?? lastEventType;
+    lastEventSymbol = e.eventSymbol ?? lastEventSymbol;
+  }
+};
 client.quoteStreamer.addEventListener(heartbeatListener);
 
 let isReconnecting = false;
@@ -44,9 +60,19 @@ async function reconnectDxFeed() {
   isReconnecting = false;
 }
 
-// Check every 30s — reconnect if no events for 2 minutes
+// Per-30s event-flow summary + reconnect if silent >2min
 setInterval(async () => {
   const silentMs = Date.now() - lastDxFeedEventAt;
+  const silentSec = Math.round(silentMs / 1000);
+  const types = [...windowEventTypes].join(",") || "—";
+  const symPreview = [...windowSymbols].slice(0, 6).join(",") || "—";
+  console.log(
+    `[${nowCT()}] [dxfeed] ${windowEventCount} events / 30s · types=${types} · symbols=${symPreview} · last=${lastEventType ?? "—"}/${lastEventSymbol ?? "—"} · silent=${silentSec}s`,
+  );
+  windowEventCount = 0;
+  windowEventTypes.clear();
+  windowSymbols.clear();
+
   if (silentMs > 2 * 60 * 1000) {
     await reconnectDxFeed();
   }
