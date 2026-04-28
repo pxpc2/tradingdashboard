@@ -3,9 +3,10 @@ import { nowCT } from "./market-hours.mjs";
 import { getFrontMonthEsSymbol } from "./futures.mjs";
 
 const CHANNEL_NAME = "live-ticks";
-const BROADCAST_INTERVAL_MS = 50;
+const BROADCAST_INTERVAL_MS = 200;
 const SNAPSHOT_INTERVAL_MS = 2000;
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const STATS_INTERVAL_MS = 30 * 1000;
 
 // Indices use Trade event for `last`; quote-based instruments use Quote bid/ask.
 const CORE_QUOTE_SYMBOLS = ["SPX"];
@@ -15,11 +16,16 @@ const tickState = new Map();
 const dirtySymbols = new Set();
 const subscribedSymbols = new Set();
 
+let windowTickBroadcasts = 0;
+let windowSnapshots = 0;
+const windowDirtySymbols = new Set();
+
 let channel = null;
 let dxListener = null;
 let broadcastTimer = null;
 let snapshotTimer = null;
 let refreshTimer = null;
+let statsTimer = null;
 let started = false;
 
 function emptyTick() {
@@ -87,11 +93,15 @@ async function flushBatch() {
   const payload = {};
   for (const sym of dirtySymbols) {
     const t = tickState.get(sym);
-    if (t) payload[sym] = t;
+    if (t) {
+      payload[sym] = t;
+      windowDirtySymbols.add(sym);
+    }
   }
   dirtySymbols.clear();
   try {
     await channel.send({ type: "broadcast", event: "tick", payload });
+    windowTickBroadcasts++;
   } catch (err) {
     console.error(`[${nowCT()}] [tickPub] tick broadcast error: ${err.message}`);
   }
@@ -102,11 +112,21 @@ async function flushSnapshot() {
   const payload = Object.fromEntries(tickState);
   try {
     await channel.send({ type: "broadcast", event: "snapshot", payload });
+    windowSnapshots++;
   } catch (err) {
     console.error(
       `[${nowCT()}] [tickPub] snapshot broadcast error: ${err.message}`,
     );
   }
+}
+
+function logStats() {
+  console.log(
+    `[${nowCT()}] [tickPub] ${windowTickBroadcasts} tick broadcasts / 30s · ${windowSnapshots} snapshots / 30s · ${windowDirtySymbols.size} unique dirty symbols`,
+  );
+  windowTickBroadcasts = 0;
+  windowSnapshots = 0;
+  windowDirtySymbols.clear();
 }
 
 async function fetchWatchlistSymbols() {
@@ -266,6 +286,7 @@ export async function startTickPublisher() {
   broadcastTimer = setInterval(flushBatch, BROADCAST_INTERVAL_MS);
   snapshotTimer = setInterval(flushSnapshot, SNAPSHOT_INTERVAL_MS);
   refreshTimer = setInterval(refreshSubscriptions, REFRESH_INTERVAL_MS);
+  statsTimer = setInterval(logStats, STATS_INTERVAL_MS);
 
   console.log(
     `[${nowCT()}] [tickPub] started with ${subscribedSymbols.size} symbols`,
@@ -287,6 +308,10 @@ export async function stopTickPublisher() {
   if (refreshTimer) {
     clearInterval(refreshTimer);
     refreshTimer = null;
+  }
+  if (statsTimer) {
+    clearInterval(statsTimer);
+    statsTimer = null;
   }
   if (dxListener) {
     try {
