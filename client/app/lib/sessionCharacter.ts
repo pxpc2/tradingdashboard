@@ -46,10 +46,25 @@ export function computeSkewCharacter(
   else if (maxExcursion < 0.015) strength = "moving";
   else strength = "strongly_moving";
 
-  let direction: "rising" | "falling" | "flat";
-  if (netChange > 0.003) direction = "rising";
-  else if (netChange < -0.003) direction = "falling";
-  else direction = "flat";
+  // Direction with Schmitt hysteresis. Enter rising/falling when |dx| > 0.003;
+  // only revert to flat once dx pulls back inside ±0.001. Prevents the LIVE
+  // READ from flipping every minute when skew oscillates around opening.
+  const ENTER = 0.003;
+  const EXIT = 0.001;
+  let direction: "rising" | "falling" | "flat" = "flat";
+  for (let i = 1; i < sorted.length; i++) {
+    const dx = sorted[i].skew - opening;
+    if (direction === "flat") {
+      if (dx > ENTER) direction = "rising";
+      else if (dx < -ENTER) direction = "falling";
+    } else if (direction === "rising") {
+      if (dx < -ENTER) direction = "falling";
+      else if (dx < EXIT) direction = "flat";
+    } else {
+      if (dx > ENTER) direction = "rising";
+      else if (dx > -EXIT) direction = "flat";
+    }
+  }
 
   return {
     direction,
