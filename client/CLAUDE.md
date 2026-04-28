@@ -27,6 +27,7 @@ server/
     dxfeed.mjs            # getQuotes, getSpxOpenPrice, getSpxQuoteMid, getEsMid, collectOhlc
     bsm.mjs               # BSM pricing, IV inversion, delta/strike helpers
     futures.mjs           # getFrontMonthEsSymbol() — Tastytrade-resolved, cached
+    tickPublisher.mjs     # Sole DXFeed → Supabase Broadcast bridge for browsers
   loops/
     main.mjs              # Straddle every minute, skew every 5, SML fly,
                           # session_summary, weekly straddle (Mondays)
@@ -53,7 +54,8 @@ client/app/
                           # classifySessionFinal, computeTags
   hooks/
     useStraddleData / useFlyData / useSkewHistory / useEsData
-    useLiveTick           # Single DXFeed WS — call once per route (LiveTab, PositionsTab)
+    useLiveTick           # Subscribes to Supabase Broadcast `live-ticks` channel
+                          # (poller is the only DXFeed consumer)
     useEsContract         # Resolves front-month ES symbol via /api/es-contract
     useWatchlist / useMacroEvents / useRealPositions
     useMarketNews / useMovers / useSectors
@@ -62,7 +64,7 @@ client/app/
     TabNav.tsx              # LIVE | POSITIONS | CHART | MACRO | ANALYSIS
     SecondaryTicker.tsx     # Watchlist strip — SPX + ES auto-injected
     MarketStatusFooter.tsx  # NYSE / CBOE / GLBX status dots
-    LiveTab.tsx             # /live orchestrator (owns the WebSocket)
+    LiveTab.tsx             # /live orchestrator (subscribes to live-ticks channel)
     LiveReadPanel.tsx       # Narrative + tag pills + evidence line
     InstrumentCards.tsx     # SPX / ES / VIX / VIX1D 4-up
     MetricsGrid.tsx         # 8-cell vol/skew/range grid (no dealer)
@@ -73,11 +75,11 @@ client/app/
     TopMovers.tsx           # SP100 gainers/losers
     NewsWire.tsx            # FMP market news, animated new-row flash
     CalendarFixedHeight.tsx # Macro calendar (FMP)
-    PositionsTab.tsx        # /positions orchestrator (owns its own WebSocket)
+    PositionsTab.tsx        # /positions orchestrator (subscribes to live-ticks channel)
     PositionsSideBySide.tsx | PositionsPanel.tsx | PositionsFixedHeight.tsx
     Converter.tsx           # ES↔SPX basis converter (compact, lives in TopHeader)
   api/
-    quotes / chain / pdhl / dxfeed-token / es-contract / watchlist
+    quotes / chain / pdhl / es-contract / watchlist
     real-positions / market-news / sectors / sp100-movers / macro-events
 ```
 
@@ -314,11 +316,33 @@ Returns `Trend day` | `Trend with partial reversal` | `Reversal day` | `Flat day
 
 ## Live Ticks — useLiveTick
 
-- One WebSocket per route, called at the top of `LiveTab` and `PositionsTab`.
-- `TickData = { bid, ask, mid, prevClose, last, delta, gamma, theta, vega, iv, lastUpdateMs }`.
+The browser does **not** talk to DXFeed directly. The poller
+(`server/lib/tickPublisher.mjs`) is the sole DXFeed consumer; it
+subscribes to core symbols + watchlist + position legs and publishes
+to a Supabase Realtime Broadcast channel `live-ticks`. Browsers
+subscribe to that channel.
+
+- `TickData = { bid, ask, mid, prevClose, last, delta, gamma, theta, vega, iv, lastUpdateMs }` (unchanged).
 - VIX / VIX1D / VIX3M: use `tick.last` (bid/ask are 0 for indices).
-- Reconnects every 5s on close.
-- Re-subscribes when symbol set changes (effect dep is `symbols.join(",")`).
+- Channel name: `live-ticks`. Two events:
+  - `tick`: 50ms-batched payload `{ [symbol]: TickData }` for symbols
+    that changed in the window.
+  - `snapshot`: full state `{ [symbol]: TickData }` every 2s — newly
+    mounted tabs populate within ≤2s.
+- Hook re-subscribes when its symbol set changes (effect dep is `symbols.join(",")`).
+- Multi-tab is automatic: every tab joins the same broadcast, no
+  per-tab DXFeed connection, no OAuth contention with the poller.
+
+### Why this architecture
+
+The OAuth identity for Tastytrade/DXLink only allows one concurrent
+session per refresh token. With per-tab dxLink WebSockets every tab
+fought the poller for the seat, producing
+`UNAUTHORIZED: Session not found` errors and gaps in
+`straddle_snapshots`. Server-relay eliminates the contention class.
+
+Latency cost is ~50–200ms (DXFeed → poller → Supabase → browser),
+invisible for visual monitoring.
 
 ---
 
