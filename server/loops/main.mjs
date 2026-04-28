@@ -21,7 +21,7 @@ import {
   findTargetExpiry,
   isValidQuote,
 } from "../lib/bsm.mjs";
-import { ES_SYMBOL } from "./ohlc.mjs";
+import { getFrontMonthEsSymbol } from "../lib/futures.mjs";
 
 let openCycleFiredDate = null;
 let closeCycleFiredDate = null;
@@ -673,7 +673,8 @@ async function runCycle(isOpenCycle = false) {
         `[${nowCT()}]    ATM strike (Quote mid)   : ${atmStrikePrice}`,
       );
 
-      const esMid = await getEsMid(ES_SYMBOL);
+      const esSymbol = await getFrontMonthEsSymbol();
+      const esMid = await getEsMid(esSymbol);
       if (esMid !== null && spxMid > 0) {
         esBasis = parseFloat((esMid - spxMid).toFixed(2));
         console.log(

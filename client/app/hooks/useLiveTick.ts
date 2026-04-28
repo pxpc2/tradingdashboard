@@ -16,8 +16,6 @@ export type TickData = {
   lastUpdateMs: number; // wall-clock ms when last event for this symbol landed
 };
 
-export const ES_STREAMER_SYMBOL = "/ESM26:XCME";
-
 export function useLiveTick(symbols: string[]) {
   const [ticks, setTicks] = useState<Record<string, TickData>>({});
   const wsRef = useRef<WebSocket | null>(null);

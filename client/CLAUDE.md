@@ -1,6 +1,6 @@
 # Vovonacci Dashboard
 
-Personal SPX options monitoring dashboard. Real-time data from Tastytrade/DXFeed, stored in Supabase, displayed in Next.js.
+Personal SPX options monitoring dashboard. Tastytrade/DXFeed → Supabase → Next.js.
 
 ---
 
@@ -8,10 +8,10 @@ Personal SPX options monitoring dashboard. Real-time data from Tastytrade/DXFeed
 
 - **Poller**: Node.js (`server/poller.mjs`) on Railway
 - **Database**: Supabase (PostgreSQL + Realtime)
-- **Frontend**: Next.js (`client/`) with Tailwind 4, ECharts (primary), Lightweight Charts v5 (FlyMiniChart only — pending migration), TypeScript
-- **Auth**: Supabase Auth (email/password, single user), session via `@supabase/ssr` cookies
-- **Data sources**: Tastytrade API (OAuth2), DXFeed/DXLink WebSocket streaming, QuantedOptions REST API
-- **Fonts**: IBM Plex Sans (labels/UI) + IBM Plex Mono (numbers/values) via `next/font/google`
+- **Frontend**: Next.js 16 with Tailwind 4, ECharts (primary), Lightweight Charts v5 (FlyMiniChart inside PositionsPanel only — pending migration), TypeScript
+- **Auth**: Supabase Auth (email/password, single user); session via `@supabase/ssr` cookies; gated by `client/proxy.ts` (Next 16 uses `proxy.ts`, not `middleware.ts`)
+- **Data sources**: Tastytrade API (OAuth2), DXFeed/DXLink WebSocket, FMP (macro calendar + market news), financialmodelingprep (sectors/movers)
+- **Fonts**: IBM Plex Sans (UI) + IBM Plex Mono (numbers) via `next/font/google`
 - **Brand**: "vovonacci·TERMINAL", Bloomberg-inspired muted palette, dense terminal aesthetic
 
 ---
@@ -20,290 +20,313 @@ Personal SPX options monitoring dashboard. Real-time data from Tastytrade/DXFeed
 
 ```
 server/
-  poller.mjs              # Entry point — startup, signal handlers
+  poller.mjs              # Entry — startup, signal handlers, DXLink reconnect watchdog
   lib/
-    clients.mjs           # Supabase + Tastytrade client singletons
+    clients.mjs           # Supabase + Tastytrade singletons
     market-hours.mjs      # isMarketHours, isGlobexHours, msUntilNextMinute, currentBarTime
-    dxfeed.mjs            # getQuotes, getSpxOpenPrice, getSpxQuoteMid, getEsMid,
-                          # getIndexLast, collectOhlc, withTimeout
-    bsm.mjs               # BSM pricing, IV inversion, delta/strike finding
+    dxfeed.mjs            # getQuotes, getSpxOpenPrice, getSpxQuoteMid, getEsMid, collectOhlc
+    bsm.mjs               # BSM pricing, IV inversion, delta/strike helpers
+    futures.mjs           # getFrontMonthEsSymbol() — Tastytrade-resolved, cached
   loops/
-    main.mjs              # Straddle, skew, SML fly, session_summary, weekly straddle
-    ohlc.mjs              # ES+SPX+VIX+VIX1D OHLC — wall-clock anchored
-    dealer.mjs            # QuantedOptions GEX+CEX — wall-clock anchored, 5min RTH
+    main.mjs              # Straddle every minute, skew every 5, SML fly,
+                          # session_summary, weekly straddle (Mondays)
+    ohlc.mjs              # ES + SPX + VIX + VIX1D OHLC — wall-clock anchored
 
 client/app/
-  (dashboard)/            # Route group — shared shell: TopHeader/TabNav/Ticker/Footer
-    layout.tsx            # SSR auth + shell
-    live/page.tsx         # LIVE tab — SSR initial data → LiveTab
-    positions/page.tsx    # POSITIONS tab (stub)
-    chart/page.tsx        # CHART tab (stub)
-    macro/page.tsx        # MACRO tab (stub)
+  proxy.ts                # Auth gate (matcher excludes static; redirects /login when no user)
+  (dashboard)/
+    layout.tsx            # SSR auth + shared shell (TopHeader/TabNav/SecondaryTicker/MarketStatusFooter)
+    live/page.tsx         # SSR straddle + weekly straddle → LiveTab
+    positions/page.tsx    # SSR rtm session → PositionsTab
+    chart/page.tsx        # Stub
+    macro/page.tsx        # Stub
+    analysis/             # Auth-protected, multi-session ECharts dashboard
+  tradingplan/            # Auth-protected, URL-only (no nav link)
   page.tsx                # redirect("/live")
-  globals.css             # Tailwind 4 @theme — canonical color tokens
-  types.ts                # ALL shared types — never redeclare locally
+  globals.css             # Tailwind 4 @theme tokens
+  types.ts                # Shared types — never redeclare locally
   lib/
-    supabase.ts / supabase-server.ts / supabase-middleware.ts
-    theme.ts              # THEME constants + cssVar() + withOpacity()
-    chartPalette.ts       # resolveChartPalette() — hex values for ECharts
-    sessionCharacter.ts   # computeSkewCharacter, computePriceCharacter,
-                          # classifySessionFinal, computeTags,
-                          # SESSION_TYPE_COLOR, resolveSessionTypeColors,
-                          # SKEW_STRENGTH_COLOR
-  analysis/
-    page.tsx              # Auth-protected SSR
-    AnalysisDashboard.tsx
-    components/           # ImpliedVsRealized, RatioHistogram, DecayCurve,
-                          # StraddleHistory, DayOfWeekBreakdown, MaxVsEod,
-                          # SkewVsRealized, OvernightRange, VixVsRealized, WeeklyStraddle
-  tradingplan/
-    page.tsx / TradingPlanDashboard.tsx / components/
+    supabase.ts | supabase-server.ts | supabase-middleware.ts
+    theme.ts              # THEME constants + cssVar() (effects only) + withOpacity()
+    chartPalette.ts       # resolveChartPalette() — hex values for ECharts/canvas
+    sessionCharacter.ts   # computePriceCharacter, computeSkewCharacter,
+                          # classifySessionFinal, computeTags
   hooks/
-    useStraddleData.ts / useFlyData.ts / useSkewHistory.ts
-    useEsData.ts / useLiveTick.ts / useWatchlist.ts
-    useMacroEvents.ts / useRealPositions.ts / useDealerSnapshot.ts
+    useStraddleData / useFlyData / useSkewHistory / useEsData
+    useLiveTick           # Single DXFeed WS — call once per route (LiveTab, PositionsTab)
+    useEsContract         # Resolves front-month ES symbol via /api/es-contract
+    useWatchlist / useMacroEvents / useRealPositions
+    useMarketNews / useMovers / useSectors
   components/
-    TopHeader.tsx           # Brand + 4 timezones + SPX tick-age latency + CT clock
-    TabNav.tsx              # LIVE/POSITIONS/CHART/MACRO tabs
-    SecondaryTicker.tsx     # Watchlist strip, SPX+ES auto-injected
-    MarketStatusFooter.tsx  # NYSE/CBOE/GLBX open/closed dots
-    LiveTab.tsx             # LIVE tab orchestrator
-    LiveReadPanel.tsx       # Narrative + pills + evidence line
-    InstrumentCards.tsx     # 4-up SPX/ES/VIX/VIX1D
-    MetricsGrid.tsx         # 5×2 dealer+vol metrics grid
-    IntradayCharts.tsx      # StraddleSpx (left) + SkewHistory (right)
-    PositionsSideBySide.tsx # Real Positions (left) + SML Fly (right)
-    CalendarFixedHeight.tsx # Macro calendar, 260px
-    PositionsPanel.tsx      # Real positions + SML Fly + FlyMiniChart (Lightweight Charts)
-    StraddleSpxChart.tsx    # ECharts — Straddle + SPX + 1σ + GEX wall markLines
-    SkewHistoryChart.tsx    # ECharts — multi-session skew, category axis, day separators
-    Converter.tsx           # ES/SPX basis — live via useLiveTick
+    TopHeader.tsx           # Brand + 4 timezones + SPX tick-age + CT clock + Converter
+    TabNav.tsx              # LIVE | POSITIONS | CHART | MACRO | ANALYSIS
+    SecondaryTicker.tsx     # Watchlist strip — SPX + ES auto-injected
+    MarketStatusFooter.tsx  # NYSE / CBOE / GLBX status dots
+    LiveTab.tsx             # /live orchestrator (owns the WebSocket)
+    LiveReadPanel.tsx       # Narrative + tag pills + evidence line
+    InstrumentCards.tsx     # SPX / ES / VIX / VIX1D 4-up
+    MetricsGrid.tsx         # 8-cell vol/skew/range grid (no dealer)
+    IntradayCharts.tsx      # StraddleSpx (2/3 width) + SkewHistory (1/3)
+    StraddleSpxChart.tsx    # ECharts — Straddle area + SPX line + 1σ markLines
+    SkewHistoryChart.tsx    # ECharts — multi-session skew, category axis
+    Sectors.tsx             # SPDR sector ETFs grid
+    TopMovers.tsx           # SP100 gainers/losers
+    NewsWire.tsx            # FMP market news, animated new-row flash
+    CalendarFixedHeight.tsx # Macro calendar (FMP)
+    PositionsTab.tsx        # /positions orchestrator (owns its own WebSocket)
+    PositionsSideBySide.tsx | PositionsPanel.tsx | PositionsFixedHeight.tsx
+    Converter.tsx           # ES↔SPX basis converter (compact, lives in TopHeader)
   api/
-    quotes / chain / pdhl / dxfeed-token / macro-events / watchlist / real-positions
+    quotes / chain / pdhl / dxfeed-token / es-contract / watchlist
+    real-positions / market-news / sectors / sp100-movers / macro-events
 ```
+
+---
+
+## Routes
+
+| Route | Purpose |
+| ----- | ------- |
+| `/` | redirect → `/live` |
+| `/live` | Today's straddle, skew, vol metrics, sectors, movers, news, calendar |
+| `/positions` | Real Tastytrade positions + SML fly mini chart |
+| `/chart` | Stub |
+| `/macro` | Stub |
+| `/analysis` | Multi-session analysis (auth-protected) |
+| `/tradingplan` | Pre-market plan + condition log + post-session review (URL-only) |
+| `/login` | Supabase Auth |
 
 ---
 
 ## Theme System
 
-**Single source of truth: `globals.css @theme`.**
+Single source of truth: `globals.css @theme`.
 
-| Layer                                         | Usage                                     |
-| --------------------------------------------- | ----------------------------------------- |
-| Tailwind utilities (`bg-page`, `text-text-2`) | 90% of JSX                                |
-| `THEME.xxx` from `lib/theme.ts`               | Inline styles with static semantic colors |
-| `resolveChartPalette()`                       | ECharts/canvas inside `useEffect` only    |
+| Layer | Use for |
+|-------|---------|
+| Tailwind utilities (`bg-page`, `text-text-2`) | 90% of JSX |
+| `THEME.xxx` from `lib/theme.ts` | Inline static semantic colors |
+| `resolveChartPalette()` | ECharts/canvas inside `useEffect` only |
 
-**Never hardcode hex.** Add tokens to `globals.css @theme` first.
+**Never hardcode hex.** Add tokens to `globals.css @theme` first, then export via `THEME` if reused.
 
 **Opacity**: `withOpacity(THEME.up, 0.4)` → `color-mix(...)`. Never `${THEME.up}66`.
 
-**SSR safety**: never call `cssVar()` in render — use raw `"var(--color-name)"` strings. `cssVar()` reads computed DOM style → doesn't exist on server → hydration mismatch.
+**SSR safety**: `cssVar()` reads computed DOM style → does not exist on server → hydration mismatch. In render, only use raw `"var(--color-name)"` strings; call `cssVar()` only inside `useEffect`.
 
 ### Palette
 
-**Foundation**: `page #0a0a0a` · `panel #121214` · `panel-2 #17171a` · `border #1f1f21` · `border-2 #2a2a2d`
-
-**Text**: `text #e8e6e0` → `text-2` → `text-3` → `text-4` → `text-5` → `text-6 #2f2e2c`
-
-**Semantic**: `up #7fc096` · `down #d0695e` · `amber #f5a524` · `indigo #7ea8c4`
-
-**Regime**: `regime-trend #e55a3f` · `regime-partial #e6b84f` · `regime-reversal #5bb4a0` · `regime-flat #707070`
-
-**Skew**: `skew-flat #9a9890` · `skew-moving #9b7bb3` · `skew-strong #f5a524`
-
-**SML fly widths**: 10→purple · 15→indigo · 20→amber · 25→teal · 30→coral
-
-**Dealer colors** (added Apr 22 2026):
-
-- `gex-pos: var(--color-up)` · `gex-neg: var(--color-down)`
-- `gex-pos-15` / `gex-neg-15` — 15% alpha via `color-mix`
-- `cex-pos: #4A9EFF` (blue = BEARISH charm) · `cex-neg: #E5A04A` (amber = BULLISH charm)
-- `cex-pos-15` / `cex-neg-15`
-- `wall-balance: #4A9EFF` · `wall-test: #E5A04A`
-
-**CEX sign convention**: positive CEX = dealers selling = BEARISH = blue. Negative CEX = dealers buying = BULLISH = amber. Never invert.
+- **Foundation**: `page #0d0e11` · `panel #13151a` · `panel-2 #1a1d23` · `border #22252c` · `border-2 #2d3038`
+- **Text**: 6-step warm gray (`text` → `text-6`)
+- **Accents**: `amber #f5a524` · `indigo #7ea8c4`
+- **Directional**: `up #7fc096` · `down #d0695e`
+- **Regime** (analysis): `regime-trend` · `regime-partial` · `regime-reversal` · `regime-flat`
+- **Skew character**: `skew-flat` · `skew-moving #9b7bb3` · `skew-strong`
+- **Live read tones**: `tone-quiet` · `tone-normal` · `tone-attention` · `tone-alert`
+- **Market status**: `status-open` · `status-closed`
+- **SML fly widths**: `width-10` purple · `15` indigo · `20` amber · `25` teal · `30` coral
+- **News impact**: `news-high` · `news-med` · `news-low`
+- **Vestigial dealer tokens** (`gex-pos/neg`, `cex-pos/neg`, `wall-balance/test`, plus `-15` alpha variants): the dealer pipeline was removed; tokens remain in CSS but no component currently reads them. Safe to delete in a future cleanup.
 
 ---
 
 ## Supabase Tables
 
 ```
-straddle_snapshots   id, created_at, spx_ref, atm_strike, call_bid, call_ask,
-                     put_bid, put_ask, straddle_mid, es_basis (open cycle only)
+straddle_snapshots         id, created_at, spx_ref, atm_strike,
+                           call_bid, call_ask, put_bid, put_ask,
+                           straddle_mid, es_basis (open cycle row only)
 
-rtm_sessions         id, created_at, sml_ref, sal_ref, widths (int[]), type
-sml_fly_snapshots    id, created_at, session_id, width, mid, bid, ask
+skew_snapshots             id, created_at, skew, put_iv, call_iv, atm_iv,
+                           expiration_date, put_strike, call_strike
+                           -- Only data >= 2026-04-02 valid
+                           -- skew = (put_iv - call_iv) / atm_iv
 
-skew_snapshots       id, created_at, skew, put_iv, call_iv, atm_iv,
-                     expiration_date, put_strike, call_strike
-                     -- Only >= 2026-04-02 valid
-                     -- skew = (put_iv - call_iv) / atm_iv
+rtm_sessions               id, created_at, sml_ref, sal_ref, widths int[], type
+sml_fly_snapshots          id, created_at, session_id, width, mid, bid, ask
 
-es_snapshots         id, created_at, bar_time, es_ref, open, high, low
-                     -- ~1380 rows/day (full Globex). Filter: high/low not null and > 0
-spx_snapshots / vix_snapshots / vix1d_snapshots
+es_snapshots               id, created_at, bar_time, es_ref, open, high, low
+                           -- ~1380 rows/day. Filter: high/low not null && > 0
+spx_snapshots              id, created_at, bar_time, open, high, low, close
+vix_snapshots              id, created_at, bar_time, open, high, low, close
+vix1d_snapshots            id, created_at, bar_time, open, high, low, close
 
-weekly_straddle_snapshots   -- Monday open cycle only. Needs anon+auth RLS read policies.
+weekly_straddle_snapshots  Monday open cycle only. Read by /live for weekly range.
+                           Needs anon + auth read RLS.
 
-session_summary      id, date (unique), opening_*, closing_*, realized_*, max_intraday_*,
-                     has_high_impact_macro, day_of_week, spx_closed_above_open, skew_direction
-                     -- PENDING: add overnight_range_pts, skew_change, move metrics
-                     --          to avoid recomputing in analysis page
+session_summary            id, date (unique), opening/closing/realized/max_intraday cols,
+                           has_high_impact_macro, day_of_week, etc.
+                           Upsert onConflict: "date".
 
-trading_plans        id, date (unique), skew_value, skew_pctile, vix1d_vix_ratio,
-                     gamma_regime, balance_strikes, test_strikes, overnight_es_range,
-                     regime_score, regime_bias, score_breakdown (jsonb),
-                     condition_log (jsonb[]), actual_regime, bias_was_correct,
-                     closing_skew, skew_direction, lesson, accuracy_rating
-
-dealer_strike_snapshots   id, created_at, date (ET), bar_time (HH:MM ET), metric (gex|cex),
-                          total, strikes (jsonb), spot_ref, local_total (±15pt),
-                          top_pos_strike, top_pos_value, top_neg_strike, top_neg_value
-                          -- strikes = [[strike, val, call_val, put_val, call_mid, put_mid], ...]
-                          -- Realtime MUST be enabled. RLS: anon+auth read, service insert
-
-dealer_timeline_snapshots id, created_at, date (unique), data (jsonb),
-                          open_gex, close_gex, min_gex, max_gex, regime_open
-                          -- Written once at EOD. Historical data from 2026-04-16 only.
-                          -- regime_open: "pos"|"neg"|"neutral" (±100M threshold)
+trading_plans              id, date (unique), skew_value, skew_pctile, vix1d_vix_ratio,
+                           weekly_implied_move, spx_vs_weekly_atm, has_macro, macro_events,
+                           opening_straddle, gamma_regime, balance_strikes, test_strikes,
+                           vs3d_context, overnight_es_range, regime_score, regime_bias,
+                           score_breakdown jsonb, condition_log jsonb[], actual_regime,
+                           bias_was_correct, levels_held, trade_outcome, lesson,
+                           accuracy_rating, closing_skew, skew_direction.
+                           Upsert onConflict: "date".
 ```
 
-**Supabase row cap**: max-rows = **15000** project-wide. `es_snapshots` hits this in ~10 days. All large-table analysis queries need explicit `.limit(N)`. Pending: `fetchAll()` pagination helper.
+**Removed**: `dealer_strike_snapshots` and `dealer_timeline_snapshots`. The QuantedOptions GEX/CEX pipeline (`server/loops/dealer.mjs`, `useDealerSnapshot`, dealer cells in MetricsGrid, GEX walls in StraddleSpxChart) was deleted from both server and client. Tables may still exist in Supabase but are not read or written.
 
----
-
-## Dealer Pipeline (QuantedOptions — LIVE)
-
-- API: `https://www.quantedoptions.com/api/v1?key=...`
-- 5k credits/month, 2 req/s. `/strikes` = 1 credit. `/timeline` = 1 credit.
-- SPX MM 0DTE only. GEX + CEX. Every 5min RTH.
-- Historical data available from **2026-04-16** only.
-
-**CEX units**: per-trading-day dollar notional. Divide by 78 → per-5min.
-`ES_contracts_per_5min = (local_CEX / 78) / (spot × 50)`
-Calibrated vs VS3D Apr 22: QO -$166M/78 ≈ $2.13M ≈ VS3D $2.53M ✓
-
-**Known issues / pending**:
-
-- 09:30 first bar skipped (dealer fires before straddle writes spot) → fix: 90s open-cycle delay
-- Watchdog reconnect spam after close → fix: gate on `isGlobexHours()`
-
----
-
-## MetricsGrid (5×2)
-
-```
-Row 1: STRADDLE | IMPLIED | REALIZED | OVERALL | SPOT · ±15PT
-Row 2: IV30     | SKEW    | VOL RATIO | BALANCE STRIKES | TEST STRIKES
-```
-
-OVERALL + SPOT use `dual` rendering: GEX row (green/red pill) + CEX row (blue/amber pill).
-SPOT bottom label: BULLISH CHARM (amber) or BEARISH CHARM (blue) from local CEX sign.
-BALANCE/TEST: top-3 walls stacked, colored `var(--color-wall-balance/test)`.
-
----
-
-## StraddleSpxChart (ECharts)
-
-- `useUTC: true` + `toChartMs()` pre-shift → x-axis renders as CT
-- `utcLookupRef`: shifted ms → UTC ms, for CT/ET/local tooltip
-- GEX walls: up to 5 balance + 5 test markLines, opacity-ranked, `insideStart` labels
-- 1σ levels from openingSkew, dashed markLines from opening spx_ref
-- Live SPX tick only during `isRTH()` — no post-close diagonal
-- SPX current price: transparent markLine + `position: "start"` pill label (left axis)
-- Straddle: filled pill `endLabel` (right axis)
-- Props: `balanceWalls: Wall[]` + `testWalls: Wall[]` (not dealerGex)
-
----
-
-## SkewHistoryChart (ECharts)
-
-- `type: "category"` x-axis — eliminates overnight/weekend voids
-- `indexMapRef`: ordinal index → UTC ms for all formatters
-- Session breaks (gap > 30min) → null point → `connectNulls: false`
-- Day separators: vertical markLines at session-start indices
-- `dataZoom`: inside (scroll=zoom, drag=pan) + slider
-
----
-
-## Session Character Framework
-
-### Price classification (`computePriceCharacter`)
-
-Unified thresholds — no magnitude requirement for reversal/partial:
-
-| Classification     | Condition         |
-| ------------------ | ----------------- |
-| `insufficient`     | Missing data      |
-| `flat`             | magnitude < 0.3   |
-| `trending`         | character ≥ 0.7   |
-| `partial_reversal` | character 0.4–0.7 |
-| `reversal`         | character < 0.4   |
-
-- **magnitude** = `maxMove / openingStraddle`
-- **character** = `|currentMove| / maxMove`
-- **held** (evidence line) = `magnitude × character`
-
-### Skew classification (`computeSkewCharacter`)
-
-- `flat`: maxExcursion < 0.008 · `moving`: 0.008–0.015 · `strongly_moving`: ≥ 0.015
-- Direction: netChange > +0.003 → rising, < -0.003 → falling
-
-### Post-session (`classifySessionFinal`)
-
-Still uses magnitude ≥ 1.0 threshold for historical consistency.
-Returns: `"Trend day"` · `"Trend with partial reversal"` · `"Reversal day"` · `"Flat day"`
-
----
-
-## LIVE READ Panel
-
-### Narrative vocabulary (fixed — do not add without discussion)
-
-**Price**: `AWAITING DATA` · `PRICE PINNED` · `TREND DAY ↑/↓` · `PARTIAL REVERSAL DAY` · `CHOPPY DAY`
-
-**Skew**: `FLAT SKEW` · `SKEW RISING` · `SKEW FALLING` · `SKEW RISING STRONG` · `SKEW FALLING STRONG`
-
-**Synthesis** (only for trending/reversal with non-flat skew):
-
-- price up + skew falling → `SKEW CONFIRMING`
-- price up + skew rising → `SKEW DIVERGING`
-- price down + skew rising → `SKEW CONFIRMING`
-- price down + skew falling → `SKEW DIVERGING`
-- Reversal: mirror of above
-- Flat skew → no synthesis. partial_reversal/flat → no synthesis.
-
-### Tag pills (`computeTags`)
-
-| Code                   | Fires when                    | Color           |
-| ---------------------- | ----------------------------- | --------------- |
-| `CONFIRMED-TREND`      | trending + skew active        | price direction |
-| `UNCONFIRMED-TREND`    | trending + skew flat          | amber           |
-| `CONFIRMED-REVERSAL`   | reversal + skew flat          | indigo          |
-| `UNCONFIRMED-REVERSAL` | reversal + skew active        | amber           |
-| `FLAT-DAY`             | flat + mag < 0.3 + char < 0.3 | indigo          |
-| `SKEW-RISING`          | strongly_moving + rising      | amber           |
-| `SKEW-FALLING`         | strongly_moving + falling     | indigo          |
-| `RV<IV`                | ≥ 2h + flat + mag < 0.5       | indigo          |
-
-TagContext = `{ price, skew, minutesSinceOpen }` only.
+**Supabase row cap**: project max-rows = **15000**. `es_snapshots` reaches this in ~10 days. All large analysis queries need explicit `.limit(N)`.
 
 ---
 
 ## Poller Architecture
 
-**Wall-clock anchoring**: always `msUntilNextMinute()` — never `setTimeout(fn, 60000)`.
+Wall-clock anchoring — always `msUntilNextMinute()`, never fixed 60s timeouts. `currentBarTime()` snapshots the minute boundary before collection so `bar_time` is always a clean UTC minute regardless of cycle duration.
 
-**Open cycle** (09:30:15–09:30:45 ET): DXFeed Quote mid → straddle + `writeOpenSummary()`
+### `runAndScheduleNext()` — `loops/main.mjs`
 
-**Close cycle** (16:00–16:01 ET): `writeCloseSummary()`
+- RTH only (09:30–16:00 ET, weekdays).
+- **Open cycle** (09:30:15–09:30:45 ET): DXFeed Quote mid → first `straddle_snapshots` row with `es_basis`, plus `writeOpenSummary()`.
+- **Each cycle**: chain fetch → SPX Quote mid → ATM straddle row.
+- **Skew every 5th cycle**: → `skew_snapshots`.
+- **SML fly**: if active `rtm_sessions` row exists for today, append `sml_fly_snapshots`.
+- **Close cycle** (16:00–16:01 ET): `writeCloseSummary()`.
+- **Weekly open cycle** (Mondays): `weekly_straddle_snapshots`.
 
-**Dealer loop**: 5min RTH, reads spot from `straddle_snapshots`. EOD `/timeline` call.
+### `runOhlcLoop()` — `loops/ohlc.mjs`
 
-**ES symbol**: `/ESM26:XCME` — roll Sep 2026 → `/ESU26:XCME`
+- Independent loop, parallel to main.
+- 55s of DXFeed ticks → OHLC bar tagged with `currentBarTime()`.
+- **Quote mid** (bid+ask)/2: ES (front-month, dynamic) + SPX (RTH only).
+- **Trade last**: VIX + VIX1D (any open session — bid/ask are 0 for indices).
 
-**ATM**: always DXFeed Quote mid — never Summary.openPrice
+### ES Symbol
+
+Resolved dynamically by `getFrontMonthEsSymbol()` in `server/lib/futures.mjs` (poller) and `/api/es-contract` + `useEsContract` (client). Both filter Tastytrade futures for `active=true && expiration-date > now && root-symbol === "/ES"`, sort by expiration ascending, pick `[0].streamer-symbol`. Server caches 1h or until 7 days before expiration. No hardcoded month.
+
+### ATM strike
+
+Always DXFeed Quote mid — never `Summary.openPrice`.
+
+---
+
+## LiveTab Layout
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ TopHeader: brand · 4 zones · CT clock · Converter            │
+├──────────────────────────────────────────────────────────────┤
+│ TabNav: LIVE · POSITIONS · CHART · MACRO · ANALYSIS          │
+├──────────────────────────────────────────────────────────────┤
+│ SecondaryTicker (SPX, ES, watchlist)                         │
+├──────────────────────────────────────────────────────────────┤
+│ LiveReadPanel — narrative + tag pills + evidence line        │
+│ InstrumentCards — SPX | ES | VIX | VIX1D                     │
+│ MetricsGrid (8 cells, single row)                            │
+│ IntradayCharts — StraddleSpx (2/3) | SkewHistory (1/3)       │
+│ Sectors | TopMovers gainers | TopMovers losers (3-col)       │
+│ NewsWire (2/3) | CalendarFixedHeight (1/3)                   │
+├──────────────────────────────────────────────────────────────┤
+│ MarketStatusFooter                                           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+### MetricsGrid (8 cells, no dealer)
+
+| Cell | Notes |
+|------|-------|
+| STRADDLE MID | live; context = `OPENED $X.XX` |
+| REALIZED | absolute pts; context = `XX% OF implied`; amber ≥70%, down ≥100% |
+| SKEW | absolute value; context = `XX%ILE`; amber when ≥75 |
+| IV30 · ATM | `atm_iv * 100` |
+| VOL RATIO | VIX1D / VIX; amber ≥ 1.0 |
+| VOL REGIME | VIX / VIX3M (>1 = backwardation = stress); amber ≥ 1.0 |
+| DAILY RANGE | implied 1σ up\|down: `openingSpx ± openingStraddle × (call_iv or put_iv) / atm_iv` |
+| WEEKLY RANGE | `weekly_atm ± weekly_straddle_mid` with expiry context |
+
+### StraddleSpxChart
+
+- `useUTC: true` + `toChartMs()` pre-shift → x-axis renders as CT.
+- Two series: SPX (line, dashed `text-3`) + Straddle (area, `skew-moving`).
+- Live SPX point appended only during `isRTH()` — no post-close diagonal.
+- markLines: opening 1σ up/down based on `openingSkew.call_iv/atm_iv` and `put_iv/atm_iv`.
+- Current SPX label: transparent markLine + `position: "start"` pill (left axis).
+- Straddle: filled-pill `endLabel` (right axis).
+- Props: `{ data, currentSpxPrice, openingSkew }`.
+
+### SkewHistoryChart
+
+- `type: "category"` x-axis — eliminates overnight/weekend voids.
+- `indexMapRef`: ordinal index → UTC ms map for all formatters.
+- Session breaks (gap > 30 min) → null point + `connectNulls: false`.
+- Day separators: vertical markLines at session-start indices.
+- `dataZoom`: inside (scroll=zoom, drag=pan) + slider.
+
+---
+
+## Live Read Framework
+
+### Price (`computePriceCharacter`)
+
+| Class | Condition |
+|-------|-----------|
+| `insufficient` | missing data |
+| `flat` | magnitude < 0.3 |
+| `trending` | character ≥ 0.7 |
+| `partial_reversal` | character 0.4–0.7 |
+| `reversal` | character < 0.4 |
+
+- magnitude = `maxMove / openingStraddle`
+- character = `|currentMove| / maxMove`
+- held (evidence line) = `magnitude × character`
+
+### Skew (`computeSkewCharacter`)
+
+- `flat` < 0.008 · `moving` 0.008–0.015 · `strongly_moving` ≥ 0.015 (max excursion)
+- Direction: `netChange > +0.003` → rising, `< -0.003` → falling
+
+### Post-session (`classifySessionFinal`)
+
+Magnitude ≥ 1.0 threshold for historical consistency.
+Returns `Trend day` | `Trend with partial reversal` | `Reversal day` | `Flat day`.
+
+### Narrative vocabulary (fixed — do not extend without discussion)
+
+- **Price**: `AWAITING DATA` · `PRICE PINNED` · `TREND DAY ↑/↓` · `PARTIAL REVERSAL DAY` · `CHOPPY DAY`
+- **Skew**: `FLAT SKEW` · `SKEW RISING` · `SKEW FALLING` · `SKEW RISING STRONG` · `SKEW FALLING STRONG`
+- **Synthesis** (only for trending/reversal with non-flat skew):
+  - price up + skew falling → `SKEW CONFIRMING`
+  - price up + skew rising → `SKEW DIVERGING`
+  - reversal mirrors above
+  - flat skew or partial_reversal → no synthesis
+
+### Tag pills (`computeTags`)
+
+| Code | Fires when | Color |
+|------|-----------|-------|
+| `CONFIRMED-TREND` | trending + skew active | price direction |
+| `UNCONFIRMED-TREND` | trending + skew flat | amber |
+| `CONFIRMED-REVERSAL` | reversal + skew flat | indigo |
+| `UNCONFIRMED-REVERSAL` | reversal + skew active | amber |
+| `FLAT-DAY` | flat + magnitude < 0.3 + character < 0.3 | indigo |
+| `SKEW-RISING` | strongly_moving + rising | amber |
+| `SKEW-FALLING` | strongly_moving + falling | indigo |
+| `RV<IV` | ≥ 2h + flat + magnitude < 0.5 | indigo |
+
+`TagContext = { price, skew, minutesSinceOpen }` only.
+
+---
+
+## Live Ticks — useLiveTick
+
+- One WebSocket per route, called at the top of `LiveTab` and `PositionsTab`.
+- `TickData = { bid, ask, mid, prevClose, last, delta, gamma, theta, vega, iv, lastUpdateMs }`.
+- VIX / VIX1D / VIX3M: use `tick.last` (bid/ask are 0 for indices).
+- Reconnects every 5s on close.
+- Re-subscribes when symbol set changes (effect dep is `symbols.join(",")`).
+
+---
+
+## Trading Plan
+
+URL-only route at `/tradingplan`. Pre-market section + condition log + post-session review.
+
+Regime score inputs are **manually entered** (the dealer pipeline that auto-derived `gamma_regime` / `balance_strikes` / `test_strikes` was removed; those fields remain on `trading_plans` as user-editable text). Score is computed client-side from those plus `skew_pctile`, `vix1d_vix_ratio`, `overnight_es_range`. See AGENTS.md → Trading Plan Regime Scoring.
 
 ---
 
@@ -311,71 +334,40 @@ TagContext = `{ price, skew, minutesSinceOpen }` only.
 
 Auth-protected SSR. ECharts for all charts.
 
-**Overnight range window** (EDT = UTC−4): `prev T20:00:00Z` → `date T13:30:00Z`
-Always filter ES bars: `high !== null && low !== null && high > 0 && low > 0`
+Components: `ImpliedVsRealized`, `RatioHistogram`, `DecayCurve`, `StraddleHistory`, `DayOfWeekBreakdown`, `MaxVsEod`, `SkewVsRealized`, `OvernightRange`, `VixVsRealized`, `WeeklyStraddle`.
 
-**Row cap**: Supabase max-rows = 15000. All large queries need `.limit(N)`.
-Pending: `fetchAll()` paginator + materialize derived metrics into `session_summary`.
+**Overnight range window** (EDT = UTC−4): `prev T20:00:00Z` → `date T13:30:00Z`. Always filter ES bars: `high !== null && low !== null && high > 0 && low > 0`.
 
----
-
-## Trading Plan Route
-
-Auth-protected SSR. URL-only access (no nav link).
-
-**Regime scoring (±6)**: gamma regime (±2) · skew pctile (±1) · VIX1D/VIX (±1) · overnight range (±1) · balance at price (±1)
+**Row cap**: Supabase max-rows = 15000. All large queries need `.limit(N)`. Pending: `fetchAll()` paginator + materialize derived metrics into `session_summary` so analysis stops recomputing on every visit.
 
 ---
 
 ## Key Conventions
 
-- **Always ask for current file before modifying**
-- **Timezones**: stored UTC · displayed CT · gating ET · date strings ET (`en-CA`)
-- **Hooks own data, components own UI**
-- **Hydration**: null on SSR, populate in `useEffect`. `queueMicrotask` for initial clock set (React 19)
-- **Colors in render**: raw `"var(--color-name)"` strings only — never `cssVar()` in JSX
-- **No hardcoded hex** — add to `globals.css @theme` first
-- **Session classification**: always `classifySessionFinal()` — never local thresholds
-- **ECharts scatter**: always `emphasis: { focus: "series" }` + `blur: { itemStyle: { opacity: 0.12 } }`
-- **Upserts**: `session_summary` + `trading_plans` always `onConflict: "date"`
-- **VIX/VIX1D**: always `tick.last`
-- **Skew**: only valid from 2026-04-02
-- **ES OHLC filter**: `high/low not null and > 0` (old rows have null)
-- **Overnight UTC**: `prev T20:00:00Z` → `date T13:30:00Z` (EDT). Never T21.
-- **Dealer CEX**: positive = bearish = blue. Negative = bullish = amber. Never invert.
-- **Wall extraction**: ±50pt, top-3 MetricsGrid / top-5 chart, ranked by |value|
-- **weekly_straddle_snapshots**: needs anon + auth read RLS policies
-- **QuantedOptions history**: available from 2026-04-16 only
-- **Supabase max-rows**: 15000 — all analysis queries need explicit `.limit()`
+- **Always ask for the current file before modifying** — visual tweaks happen between sessions.
+- **Timezones**: stored UTC · displayed CT · gating ET · date strings ET (`en-CA`).
+- **Hooks own data, components own UI.**
+- **Hydration**: null on SSR, populate in `useEffect`. `queueMicrotask` for first-tick clock set (React 19).
+- **Colors in render**: raw `"var(--color-name)"` strings only — never `cssVar()` in JSX.
+- **No hardcoded hex** — add token to `globals.css @theme` first.
+- **ECharts scatter**: always `emphasis: { focus: "series" }` + `blur: { itemStyle: { opacity: 0.12 } }`.
+- **Upserts**: `session_summary` + `trading_plans` always `onConflict: "date"`.
+- **VIX/VIX1D/VIX3M**: always `tick.last`.
+- **Skew**: only valid >= 2026-04-02.
+- **ES OHLC filter**: `high/low not null && > 0`.
+- **Overnight UTC window**: `prev T20:00:00Z` → `date T13:30:00Z` (EDT). Never T21.
+- **Supabase max-rows**: 15000 — all analysis queries need explicit `.limit()`.
+- **ES symbol**: `getFrontMonthEsSymbol()` (server) / `useEsContract` (client). Never hardcode.
+- **`weekly_straddle_snapshots`**: needs anon + auth read RLS policies.
 
 ---
 
 ## Pending
 
-### Near-term
-
-- Dealer 09:30 fix: 90s delay so straddle writes spot first
-- Watchdog Globex gate: stop post-close reconnect spam
-- ES hedge flow on SPOT CEX: `≈N ES/5m = local_CEX / 78 / (spot × 50)`
-- SML Fly ECharts migration (last Lightweight Charts holdout)
-- Analysis `fetchAll()` paginator + `session_summary` materialization
-
-### Analysis enrichment (needs data)
-
-- Per-session drill-down: GEX timeline, wall hit/miss, regime narrative
-- Opening GEX regime tag on session table rows
-- Charm decay overlay (local CEX magnitude, multi-session)
-- Session heatmap calendar
-- Correlation matrix: GEX sign vs session type (~20+ sessions needed)
-
-### Tabs
-
-- POSITIONS: expanded Greeks panel
-- CHART: multi-instrument series
-- MACRO: calendar + term structure
-
-### Medium term
-
-- Trading plan redesign: magnitude + character forecasts
-- `session_summary` close-cycle enrichment (overnight range, skew change, move metrics)
-- Regime score feedback loop in analysis
+- Migrate FlyMiniChart from Lightweight Charts to ECharts.
+- Build out CHART and MACRO tab content (currently stubs).
+- Fill `session_summary` close-cycle enrichment (overnight range, skew change, move metrics).
+- Analysis paginator (`fetchAll()`) + materialize derived metrics into `session_summary`.
+- Holiday calendar in `market-hours.mjs` (no holiday gating today).
+- Fix silent IV non-convergence in `bsm.mjs` `invertIV` (currently returns midpoint sigma on non-convergence — should return null and skip the row).
+- Decide whether to drop the vestigial dealer color tokens from `globals.css`.

@@ -2,7 +2,8 @@
 
 import { useMemo } from "react";
 import { useWatchlist } from "../hooks/useWatchlist";
-import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
+import { useLiveTick } from "../hooks/useLiveTick";
+import { useEsContract } from "../hooks/useEsContract";
 import { WatchlistEntry } from "../api/watchlist/route";
 import { THEME } from "../lib/theme";
 
@@ -10,13 +11,6 @@ const SPX_ENTRY: WatchlistEntry = {
   symbol: "SPX",
   streamerSymbol: "SPX",
   instrumentType: "Index",
-  marketSector: null,
-};
-
-const ES_ENTRY: WatchlistEntry = {
-  symbol: "ES",
-  streamerSymbol: ES_STREAMER_SYMBOL,
-  instrumentType: "Future",
   marketSector: null,
 };
 
@@ -62,17 +56,25 @@ function pctChange(
 
 export default function SecondaryTicker() {
   const { entries } = useWatchlist();
+  const { esSymbol } = useEsContract();
 
-  const allEntries = useMemo(
-    () => [
+  const allEntries = useMemo(() => {
+    const esEntry: WatchlistEntry | null = esSymbol
+      ? {
+          symbol: "ES",
+          streamerSymbol: esSymbol,
+          instrumentType: "Future",
+          marketSector: null,
+        }
+      : null;
+    return [
       SPX_ENTRY,
-      ES_ENTRY,
+      ...(esEntry ? [esEntry] : []),
       ...entries.filter(
-        (e) => e.symbol !== "SPX" && e.streamerSymbol !== ES_STREAMER_SYMBOL,
+        (e) => e.symbol !== "SPX" && e.streamerSymbol !== esSymbol,
       ),
-    ],
-    [entries],
-  );
+    ];
+  }, [entries, esSymbol]);
 
   const symbols = useMemo(
     () => allEntries.map((e) => e.streamerSymbol),

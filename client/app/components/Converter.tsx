@@ -2,10 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { THEME } from "../lib/theme";
-import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
-
-// Stable reference — prevents useLiveTick from reconnecting on every render
-const SYMBOLS = ["SPX", ES_STREAMER_SYMBOL];
+import { useLiveTick } from "../hooks/useLiveTick";
+import { useEsContract } from "../hooks/useEsContract";
 
 type Props = {
   initialBasis: number | null;
@@ -15,14 +13,20 @@ export default function Converter({ initialBasis }: Props) {
   const [mode, setMode] = useState<"spx-to-es" | "es-to-spx">("spx-to-es");
   const [inputValue, setInputValue] = useState<string>("");
 
-  const ticks = useLiveTick(SYMBOLS);
+  const { esSymbol } = useEsContract();
+  const symbols = useMemo(
+    () => (esSymbol ? ["SPX", esSymbol] : ["SPX"]),
+    [esSymbol],
+  );
+  const ticks = useLiveTick(symbols);
 
   const liveBasis = useMemo(() => {
+    if (!esSymbol) return null;
     const spxMid = ticks["SPX"]?.mid;
-    const esMid = ticks[ES_STREAMER_SYMBOL]?.mid;
+    const esMid = ticks[esSymbol]?.mid;
     if (!spxMid || !esMid || spxMid === 0 || esMid === 0) return null;
     return esMid - spxMid;
-  }, [ticks]);
+  }, [ticks, esSymbol]);
 
   // Live basis once WebSocket connects, SSR value until then
   const basis = liveBasis ?? initialBasis;

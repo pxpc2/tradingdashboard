@@ -8,7 +8,8 @@ import MetricsGrid from "./MetricsGrid";
 import IntradayCharts from "./IntradayCharts";
 import { useStraddleData } from "../hooks/useStraddleData";
 import { useSkewHistory } from "../hooks/useSkewHistory";
-import { useLiveTick, ES_STREAMER_SYMBOL } from "../hooks/useLiveTick";
+import { useLiveTick } from "../hooks/useLiveTick";
+import { useEsContract } from "../hooks/useEsContract";
 import { useWatchlist } from "../hooks/useWatchlist";
 import { StraddleSnapshot } from "../types";
 import {
@@ -26,7 +27,7 @@ type Props = {
   initialWeeklyStraddle: WeeklyStraddleRow | null;
 };
 
-const CORE_SYMBOLS = ["SPX", ES_STREAMER_SYMBOL, "VIX", "VIX1D", "VIX3M"];
+const CORE_SYMBOLS = ["SPX", "VIX", "VIX1D", "VIX3M"];
 
 function isSpxOpenFor(d: Date): boolean {
   const day = d.toLocaleDateString("en-US", {
@@ -96,17 +97,19 @@ export default function LiveTab({
   const { straddleData } = useStraddleData(today, initialStraddleData, 1);
   const { skewHistory, latestSkew, avgSkew } = useSkewHistory();
   const { entries: watchlistEntries } = useWatchlist();
+  const { esSymbol } = useEsContract();
 
   const allSymbols = useMemo(() => {
     const set = new Set(CORE_SYMBOLS);
+    if (esSymbol) set.add(esSymbol);
     for (const e of watchlistEntries) set.add(e.streamerSymbol);
     return Array.from(set);
-  }, [watchlistEntries]);
+  }, [watchlistEntries, esSymbol]);
 
   const ticks = useLiveTick(allSymbols);
 
   const spxTick = ticks["SPX"] ?? null;
-  const esTick = ticks[ES_STREAMER_SYMBOL] ?? null;
+  const esTick = esSymbol ? (ticks[esSymbol] ?? null) : null;
   const vixTick = ticks["VIX"] ?? null;
   const vix1dTick = ticks["VIX1D"] ?? null;
   const vix3mTick = ticks["VIX3M"] ?? null;

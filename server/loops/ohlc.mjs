@@ -7,12 +7,10 @@ import {
   currentBarTime,
 } from "../lib/market-hours.mjs";
 import { collectOhlc, withTimeout } from "../lib/dxfeed.mjs";
+import { getFrontMonthEsSymbol } from "../lib/futures.mjs";
 
-export const ES_SYMBOL = "/ESM26:XCME";
 const COLLECT_MS = 55 * 1000;
 
-// Symbols by collection method
-const QUOTE_SYMBOLS = [ES_SYMBOL, "SPX"]; // use Quote bid/ask mid
 const TRADE_SYMBOLS = ["VIX", "VIX1D"]; // use Trade last price
 
 async function insertOhlc(table, barTime, ohlcData, closeField = "close") {
@@ -45,8 +43,10 @@ export async function runOhlcLoop() {
     return;
   }
 
+  const esSymbol = esOpen ? await getFrontMonthEsSymbol() : null;
+
   const quoteSymbols = [];
-  if (esOpen) quoteSymbols.push(ES_SYMBOL);
+  if (esOpen && esSymbol) quoteSymbols.push(esSymbol);
   if (spxOpen) quoteSymbols.push("SPX");
 
   // Always collect VIX+VIX1D during any open session (globex or RTH)
@@ -58,10 +58,10 @@ export async function runOhlcLoop() {
 
     const insertions = [];
 
-    if (ohlc[ES_SYMBOL]) {
-      const { open, high, low, close } = ohlc[ES_SYMBOL];
+    if (esSymbol && ohlc[esSymbol]) {
+      const { open, high, low, close } = ohlc[esSymbol];
       insertions.push(
-        insertOhlc("es_snapshots", barTime, ohlc[ES_SYMBOL], "es_ref").then(
+        insertOhlc("es_snapshots", barTime, ohlc[esSymbol], "es_ref").then(
           (ok) => {
             if (ok)
               console.log(
