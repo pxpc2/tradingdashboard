@@ -461,6 +461,14 @@ async function computeAndStoreSkew(allOptions, spxMid) {
       atmPutMid,
       false,
     );
+
+    if (atmCallIV === null || atmPutIV === null) {
+      console.log(
+        `[${nowCT()}] Skew: ATM IV did not converge, abortando.`,
+      );
+      return;
+    }
+
     const computedAtmIV = (atmCallIV + atmPutIV) / 2;
 
     if (computedAtmIV <= 0 || computedAtmIV > 2.0) {
@@ -517,6 +525,13 @@ async function computeAndStoreSkew(allOptions, spxMid) {
     const call25Mid = (call25Q.bidPrice + call25Q.askPrice) / 2;
     const putIV = invertIV(spxMid, put25Strike, T, R, put25Mid, false);
     const callIV = invertIV(spxMid, call25Strike, T, R, call25Mid, true);
+
+    if (putIV === null || callIV === null) {
+      console.log(
+        `[${nowCT()}] Skew: 25-delta IV did not converge, abortando.`,
+      );
+      return;
+    }
 
     if (
       putIV <= 0 ||

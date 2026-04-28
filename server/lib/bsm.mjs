@@ -33,20 +33,15 @@ export function bsmDelta(S, K, T, r, sigma, isCall) {
 
 export function invertIV(S, K, T, r, marketPrice, isCall) {
   let low = 0.001,
-    high = 10.0,
-    iv = 0.5;
+    high = 10.0;
   for (let i = 0; i < 100; i++) {
     const mid = (low + high) / 2;
     const price = bsmPrice(S, K, T, r, mid, isCall);
-    if (Math.abs(price - marketPrice) < 0.0001) {
-      iv = mid;
-      break;
-    }
+    if (Math.abs(price - marketPrice) < 0.0001) return mid;
     if (price < marketPrice) low = mid;
     else high = mid;
-    iv = mid;
   }
-  return iv;
+  return null;
 }
 
 export function findDeltaStrike(
