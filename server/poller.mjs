@@ -2,6 +2,10 @@ import { client } from "./lib/clients.mjs";
 import { nowCT } from "./lib/market-hours.mjs";
 import { runAndScheduleNext } from "./loops/main.mjs";
 import { runOhlcLoop } from "./loops/ohlc.mjs";
+import {
+  startTickPublisher,
+  stopTickPublisher,
+} from "./lib/tickPublisher.mjs";
 
 console.log(`[${nowCT()}] Inicializando servidor...`);
 await client.quoteStreamer.connect();
@@ -78,12 +82,16 @@ setInterval(async () => {
   }
 }, 30 * 1000);
 
+// ─── Start tick publisher (browser ticks via Supabase Broadcast) ─────────────
+await startTickPublisher();
+
 // ─── Start loops ──────────────────────────────────────────────────────────────
 runAndScheduleNext();
 runOhlcLoop();
 
 process.on("SIGINT", async () => {
   console.log(`\n[${nowCT()}] Desligando..`);
+  await stopTickPublisher();
   await client.quoteStreamer.disconnect();
   process.exit(0);
 });
